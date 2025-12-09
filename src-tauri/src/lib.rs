@@ -165,6 +165,23 @@ async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<(), 
     session.kill().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn broadcast_line(
+    manager: State<'_, PtyManager>,
+    session_ids: Vec<String>,
+    line: String,
+) -> Result<(), String> {
+    for id in session_ids {
+        let Ok(session_id) = Uuid::parse_str(&id) else {
+            continue;
+        };
+        if let Some(session) = manager.get(&session_id) {
+            session.write(&line).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
@@ -206,7 +223,8 @@ pub fn run() {
             create_session,
             write_to_session,
             resize_session,
-            kill_session
+            kill_session,
+            broadcast_line
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
