@@ -248,16 +248,19 @@ function LayoutRenderer({
 
   return (
     <div className={`split ${direction}`}>
-      <LayoutRenderer
-        node={node.children[0]}
-        activePaneId={activePaneId}
-        onFocusPane={onFocusPane}
-      />
-      <LayoutRenderer
-        node={node.children[1]}
-        activePaneId={activePaneId}
-        onFocusPane={onFocusPane}
-      />
+      {node.children.map((child) => (
+        <div
+          key={child.id}
+          className="split-child"
+          style={{ flexGrow: countPanes(child) || 1 }}
+        >
+          <LayoutRenderer
+            node={child}
+            activePaneId={activePaneId}
+            onFocusPane={onFocusPane}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -298,7 +301,8 @@ function BroadcastBar({ broadcast, setBroadcast, layout }: BroadcastBarProps) {
     if (!broadcast.enabled || !text.trim()) return;
     const sessionIds = resolveTargetToSessionIds(broadcast.targets, layout);
     if (!sessionIds.length) return;
-    void invoke("broadcast_line", { sessionIds, line: `${text}\n` });
+    // Send carriage return only to mirror the Enter key that xterm emits in raw mode.
+    void invoke("broadcast_line", { sessionIds, line: `${text}\r\n` });
     setText("");
   }, [broadcast, layout, text]);
 
