@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -9,6 +10,9 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
+
+mod git;
+use crate::git::RepoStatusDto;
 
 #[derive(Default, Clone)]
 struct PtyManager {
@@ -100,10 +104,7 @@ async fn create_session(
         })
         .map_err(|e| e.to_string())?;
 
-    let reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|e| e.to_string())?;
+    let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     let mut command = CommandBuilder::new(shell);
     command.env("TERM", "xterm-256color");
@@ -182,6 +183,37 @@ async fn broadcast_line(
     Ok(())
 }
 
+#[tauri::command]
+async fn git_detect_repo(cwd: String) -> Result<Option<String>, String> {
+    let path = PathBuf::from(cwd);
+    git::detect_repo(&path)
+        .map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_status(cwd: String) -> Result<RepoStatusDto, String> {
+    let path = PathBuf::from(cwd);
+    git::status(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, String> {
+    let path = PathBuf::from(cwd);
+    git::diff(&path, &pathspecs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn git_commit(
+    cwd: String,
+    message: String,
+    stage_all: bool,
+    amend: bool,
+) -> Result<(), String> {
+    let path = PathBuf::from(cwd);
+    git::commit(&path, &message, stage_all, amend).map_err(|e| e.to_string())
+}
+
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
@@ -224,7 +256,11 @@ pub fn run() {
             write_to_session,
             resize_session,
             kill_session,
-            broadcast_line
+            broadcast_line,
+            git_detect_repo,
+            git_status,
+            git_diff,
+            git_commit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
