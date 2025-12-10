@@ -145,6 +145,71 @@ pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result
     Ok(())
 }
 
+pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+    let output = run_git(&repo_root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    Ok(output.stdout.trim().to_string())
+}
+
+pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+    let output = run_git(&repo_root, &["rev-parse", rev])?;
+    Ok(output.stdout.trim().to_string())
+}
+
+pub fn branch_exists(cwd: &Path, branch: &str) -> Result<bool, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+    match run_git(&repo_root, &["rev-parse", "--verify", branch]) {
+        Ok(_) => Ok(true),
+        Err(GitError::GitFailed { .. }) => Ok(false),
+        Err(err) => Err(err),
+    }
+}
+
+pub fn add_worktree(
+    repo_root: &Path,
+    worktree_path: &Path,
+    branch: &str,
+    start_point: &str,
+) -> Result<(), GitError> {
+    let path_str = worktree_path.to_string_lossy();
+    run_git(
+        repo_root,
+        &[
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            path_str.as_ref(),
+            start_point,
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn remove_worktree(
+    repo_root: &Path,
+    worktree_path: &Path,
+    force: bool,
+) -> Result<(), GitError> {
+    let path_str = worktree_path.to_string_lossy().to_string();
+    let mut args = vec!["worktree".to_string(), "remove".to_string()];
+    if force {
+        args.push("--force".to_string());
+    }
+    args.push(path_str);
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git(repo_root, &arg_refs)?;
+    Ok(())
+}
+
+pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {
+    let repo_root = ensure_repo(repo_root)?;
+    let flag = if force { "-D" } else { "-d" };
+    run_git(&repo_root, &["branch", flag, branch])?;
+    Ok(())
+}
+
 fn ensure_repo(cwd: &Path) -> Result<PathBuf, GitError> {
     detect_repo(cwd)?.ok_or_else(|| GitError::GitFailed {
         code: None,
@@ -159,9 +224,12 @@ fn canonicalize(path: PathBuf) -> PathBuf {
 pub fn latest_commit(cwd: &Path) -> Result<Option<CommitInfoDto>, GitError> {
     let repo_root = ensure_repo(cwd)?;
     let fmt = "%H\x1f%an\x1f%ar\x1f%s";
-    let output = match run_git(&repo_root, &["log", "-1", &format!("--pretty=format:{fmt}")]) {
+    let output = match run_git(
+        &repo_root,
+        &["log", "-1", &format!("--pretty=format:{fmt}")],
+    ) {
         Ok(out) => out,
-        Err(GitError::GitFailed { code, stderr })
+        Err(GitError::GitFailed { code: _, stderr })
             if stderr
                 .to_ascii_lowercase()
                 .contains("does not have any commits yet") =>

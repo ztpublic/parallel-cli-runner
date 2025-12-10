@@ -2049,6 +2049,7 @@ name = "my-mux-terminal"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "portable-pty",
  "serde",
  "serde_json",
