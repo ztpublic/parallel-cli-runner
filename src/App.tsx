@@ -28,13 +28,6 @@ type SplitNode = {
 
 type LayoutNode = PaneNode | SplitNode;
 
-type BroadcastTarget = "none" | "all" | { paneIds: string[] };
-
-type BroadcastState = {
-  enabled: boolean;
-  targets: BroadcastTarget;
-};
-
 const createId = () => crypto.randomUUID();
 
 function countPanes(node: LayoutNode | null): number {
@@ -135,12 +128,18 @@ type TerminalPaneProps = {
   pane: PaneNode;
   isActive: boolean;
   onFocused: (id: string) => void;
+  onInput?: (pane: PaneNode, data: string) => void;
 };
 
-function TerminalPane({ pane, isActive, onFocused }: TerminalPaneProps) {
+function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const onInputRef = useRef(onInput);
+
+  useEffect(() => {
+    onInputRef.current = onInput;
+  }, [onInput]);
 
   const syncSize = useCallback(async () => {
     const term = termRef.current;
@@ -174,6 +173,9 @@ function TerminalPane({ pane, isActive, onFocused }: TerminalPaneProps) {
 
     const unsubscribeData = term.onData((data) => {
       void invoke("write_to_session", { id: pane.sessionId, data });
+      if (onInputRef.current) {
+        onInputRef.current(pane, data);
+      }
     });
 
     let unlisten: (() => void) | undefined;
@@ -226,12 +228,14 @@ type LayoutRendererProps = {
   node: LayoutNode;
   activePaneId: string | null;
   onFocusPane: (id: string) => void;
+  onPaneInput?: (pane: PaneNode, data: string) => void;
 };
 
 function LayoutRenderer({
   node,
   activePaneId,
   onFocusPane,
+  onPaneInput,
 }: LayoutRendererProps) {
   if (node.type === "pane") {
     return (
@@ -239,6 +243,7 @@ function LayoutRenderer({
         pane={node}
         isActive={node.id === activePaneId}
         onFocused={onFocusPane}
+        onInput={onPaneInput}
       />
     );
   }
@@ -258,6 +263,7 @@ function LayoutRenderer({
             node={child}
             activePaneId={activePaneId}
             onFocusPane={onFocusPane}
+            onPaneInput={onPaneInput}
           />
         </div>
       ))}
@@ -265,151 +271,28 @@ function LayoutRenderer({
   );
 }
 
-type BroadcastBarProps = {
-  broadcast: BroadcastState;
-  setBroadcast: React.Dispatch<React.SetStateAction<BroadcastState>>;
-  layout: LayoutNode | null;
+type SyncBarProps = {
+  syncEnabled: boolean;
+  onToggleSync: () => void;
+  paneCount: number;
+  onSplit: () => void;
 };
 
-function resolveTargetToSessionIds(
-  target: BroadcastTarget,
-  layout: LayoutNode | null
-): string[] {
-  const panes = collectPanes(layout);
-  if (target === "none") return [];
-  if (target === "all") return panes.map((p) => p.sessionId);
-  const idSet = new Set(target.paneIds);
-  return panes.filter((p) => idSet.has(p.id)).map((p) => p.sessionId);
-}
-
-function BroadcastBar({ broadcast, setBroadcast, layout }: BroadcastBarProps) {
-  const [text, setText] = useState("");
-  const panes = useMemo(() => collectPanes(layout), [layout]);
-
-  useEffect(() => {
-    if (broadcast.targets === "none" || broadcast.targets === "all") return;
-    const allowedIds = new Set(panes.map((p) => p.id));
-    const filtered = broadcast.targets.paneIds.filter((id) =>
-      allowedIds.has(id)
-    );
-    if (filtered.length !== broadcast.targets.paneIds.length) {
-      setBroadcast((prev) => ({ ...prev, targets: { paneIds: filtered } }));
-    }
-  }, [broadcast, panes, setBroadcast]);
-
-  const send = useCallback(() => {
-    if (!broadcast.enabled || !text.trim()) return;
-    const sessionIds = resolveTargetToSessionIds(broadcast.targets, layout);
-    if (!sessionIds.length) return;
-    // Send carriage return only to mirror the Enter key that xterm emits in raw mode.
-    void invoke("broadcast_line", { sessionIds, line: `${text}\r\n` });
-    setText("");
-  }, [broadcast, layout, text]);
-
-  const togglePane = (paneId: string) => {
-    setBroadcast((prev) => {
-      const currentList =
-        prev.targets === "none"
-          ? []
-          : prev.targets === "all"
-            ? panes.map((p) => p.id)
-            : [...prev.targets.paneIds];
-      const nextList = currentList.includes(paneId)
-        ? currentList.filter((id) => id !== paneId)
-        : [...currentList, paneId];
-      return { ...prev, targets: { paneIds: nextList } };
-    });
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.altKey && e.key === "Enter") {
-      e.preventDefault();
-      send();
-    }
-  };
-
-  const selectedCount =
-    broadcast.targets === "all"
-      ? panes.length
-      : broadcast.targets === "none"
-        ? 0
-        : broadcast.targets.paneIds.length;
-
+function SyncBar({ syncEnabled, onToggleSync, paneCount, onSplit }: SyncBarProps) {
   return (
     <div className="broadcast-bar">
       <div className="broadcast-meta">
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={broadcast.enabled}
-            onChange={(e) =>
-              setBroadcast({ ...broadcast, enabled: e.target.checked })
-            }
-          />
-          <span>Broadcast</span>
-        </label>
-        <div className="broadcast-targets">
-          <button
-            className={broadcast.targets === "all" ? "chip active" : "chip"}
-            onClick={() => setBroadcast({ ...broadcast, targets: "all" })}
-          >
-            All panes
-          </button>
-          <button
-            className={
-              broadcast.targets !== "all" && broadcast.targets !== "none"
-                ? "chip active"
-                : "chip"
-            }
-            onClick={() =>
-              setBroadcast({
-                ...broadcast,
-                targets:
-                  broadcast.targets === "none"
-                    ? { paneIds: panes.map((p) => p.id) }
-                    : broadcast.targets,
-              })
-            }
-          >
-            Selected ({selectedCount})
-          </button>
-          <button
-            className={broadcast.targets === "none" ? "chip active" : "chip"}
-            onClick={() => setBroadcast({ ...broadcast, targets: "none" })}
-          >
-            None
-          </button>
-        </div>
-      </div>
-      {broadcast.targets !== "all" && (
-        <div className="pane-selector">
-          {panes.map((pane) => (
-            <label key={pane.id} className="pane-check">
-              <input
-                type="checkbox"
-                checked={
-                  broadcast.targets !== "none" &&
-                  broadcast.targets !== "all" &&
-                  broadcast.targets.paneIds.includes(pane.id)
-                }
-                onChange={() => togglePane(pane.id)}
-              />
-              <span>{pane.id.slice(0, 6)}</span>
-            </label>
-          ))}
-        </div>
-      )}
-      <div className="broadcast-input-row">
-        <input
-          type="text"
-          placeholder="Broadcast command (Alt+Enter to send)…"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <button onClick={send} disabled={!broadcast.enabled}>
-          Send
+        <button className="chip" onClick={onSplit} title="Split vertically (Ctrl+Shift+D)">
+          Split pane
         </button>
+        <button
+          className={syncEnabled ? "chip active" : "chip"}
+          onClick={onToggleSync}
+          title="Mirror keystrokes from the active pane to all other panes"
+        >
+          Sync typing to all panes
+        </button>
+        <div className="pane-count">Panes: {paneCount}</div>
       </div>
     </div>
   );
@@ -417,20 +300,14 @@ function BroadcastBar({ broadcast, setBroadcast, layout }: BroadcastBarProps) {
 function App() {
   const [layout, setLayout] = useState<LayoutNode | null>(null);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
-  const [broadcast, setBroadcast] = useState<BroadcastState>(() => ({
-    enabled: true,
-    targets: "all",
-  }));
+  const [syncTyping, setSyncTyping] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       const pane = await createPaneNode();
       setLayout(pane);
       setActivePaneId(pane.id);
-      setBroadcast((prev) => ({
-        ...prev,
-        targets: { paneIds: [pane.id] },
-      }));
+      setSyncTyping(false);
     };
     void init();
   }, []);
@@ -464,18 +341,7 @@ function App() {
         if (!next) return prev;
         const fallbackPane = getFirstPane(next);
         setActivePaneId(fallbackPane?.id ?? null);
-        setBroadcast((prevBroadcast) => {
-          if (
-            prevBroadcast.targets === "none" ||
-            prevBroadcast.targets === "all"
-          ) {
-            return prevBroadcast;
-          }
-          const remaining = prevBroadcast.targets.paneIds.filter(
-            (id) => id !== activePaneId
-          );
-          return { ...prevBroadcast, targets: { paneIds: remaining } };
-        });
+        setSyncTyping(false);
         return next;
       });
     }, [activePaneId, layout]);
@@ -486,9 +352,6 @@ function App() {
       if (event.code === "KeyD") {
         event.preventDefault();
         void splitActivePane("vertical");
-      } else if (event.code === "KeyE") {
-        event.preventDefault();
-        void splitActivePane("horizontal");
       } else if (event.code === "KeyW") {
         event.preventDefault();
         void closeActivePane();
@@ -503,21 +366,12 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Phase 3: Multi-pane PTY</p>
-          <h1>Split terminals, one PTY per pane</h1>
-          <p className="lede">
-            Ctrl+Shift+D to split vertically, Ctrl+Shift+E horizontally,
-            Ctrl+Shift+W to close a pane.
-          </p>
-        </div>
-        <div className="pane-count">Panes: {paneCount}</div>
-      </header>
-      <BroadcastBar
-        broadcast={broadcast}
-        setBroadcast={setBroadcast}
-        layout={layout}
+      <header className="app-header" />
+      <SyncBar
+        syncEnabled={syncTyping}
+        onToggleSync={() => setSyncTyping((prev) => !prev)}
+        paneCount={paneCount}
+        onSplit={() => void splitActivePane("vertical")}
       />
       <section className="terminal-card">
         {layout ? (
@@ -526,6 +380,19 @@ function App() {
               node={layout}
               activePaneId={activePaneId}
               onFocusPane={setActivePaneId}
+              onPaneInput={
+                syncTyping
+                  ? (pane, data) => {
+                      const targetSessions = collectPanes(layout)
+                        .map((p) => p.sessionId)
+                        .filter((id) => id !== pane.sessionId);
+                      if (!targetSessions.length) return;
+                      targetSessions.forEach((id) => {
+                        void invoke("write_to_session", { id, data });
+                      });
+                    }
+                  : undefined
+              }
             />
           </div>
         ) : (
