@@ -141,15 +141,6 @@ h1 {
   padding: 10px;
 }
 
-.pane-count {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
-  color: #c5d2e8;
-}
-
 .loading {
   color: #c5d2e8;
   padding: 24px;
@@ -194,6 +185,21 @@ h1 {
   padding: 6px 12px;
   color: #c5d2e8;
   cursor: pointer;
+}
+
+.chip-clear {
+  margin-left: auto;
+  background: linear-gradient(135deg, #f6d365, #fda085);
+  border: 1px solid rgba(253, 160, 133, 0.45);
+  color: #2d1a08;
+  font-weight: 700;
+}
+
+.chip-quit {
+  background: linear-gradient(135deg, #ff5f6d, #c81e2e);
+  border: 1px solid rgba(255, 99, 99, 0.4);
+  color: #ffecec;
+  font-weight: 700;
 }
 
 .chip.active {

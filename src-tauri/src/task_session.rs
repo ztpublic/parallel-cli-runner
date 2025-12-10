@@ -305,10 +305,11 @@ fn worktree_base_dir(repo_root: &Path, session_id: &str) -> PathBuf {
 }
 
 fn session_meta_path(repo_root: &Path, session_id: &str) -> PathBuf {
-    repo_root
-        .join(".parallel-cli")
-        .join("sessions")
-        .join(format!("{session_id}.json"))
+    sessions_dir(repo_root).join(format!("{session_id}.json"))
+}
+
+fn sessions_dir(repo_root: &Path) -> PathBuf {
+    repo_root.join(".parallel-cli").join("sessions")
 }
 
 fn rollback_worktrees(repo_root: &Path, agents: &[AgentWorktree]) {
@@ -316,5 +317,38 @@ fn rollback_worktrees(repo_root: &Path, agents: &[AgentWorktree]) {
         let worktree_path = PathBuf::from(&agent.worktree_path);
         let _ = git::remove_worktree(repo_root, &worktree_path, true);
         let _ = git::delete_branch(repo_root, &agent.branch_name, true);
+    }
+}
+
+impl SessionManager {
+    pub fn load_repo_sessions(&self, repo_root: &Path) -> Result<Vec<TaskSession>, SessionError> {
+        let canonical_repo =
+            fs::canonicalize(repo_root).unwrap_or_else(|_| repo_root.to_path_buf());
+        let dir = sessions_dir(&canonical_repo);
+        if !dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut loaded: Vec<TaskSession> = Vec::new();
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                continue;
+            }
+            let data = fs::read_to_string(entry.path())?;
+            let session: TaskSession = serde_json::from_str(&data)?;
+            let session_repo = fs::canonicalize(PathBuf::from(&session.repo_id))
+                .unwrap_or_else(|_| PathBuf::from(&session.repo_id));
+            if session_repo == canonical_repo {
+                loaded.push(session);
+            }
+        }
+
+        let mut guard = self.sessions.lock().expect("session map poisoned");
+        for session in &loaded {
+            guard.insert(session.id.clone(), session.clone());
+        }
+
+        Ok(loaded)
     }
 }

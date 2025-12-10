@@ -254,6 +254,15 @@ async fn cleanup_session(
     task_session::cleanup_session(&manager, &session_id, mode).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn list_sessions(
+    manager: State<'_, SessionManager>,
+    repo_root: String,
+) -> Result<Vec<TaskSession>, String> {
+    let path = PathBuf::from(repo_root);
+    manager.load_repo_sessions(&path).map_err(|e| e.to_string())
+}
+
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
@@ -306,7 +315,8 @@ pub fn run() {
             create_task_session,
             finish_agent,
             choose_winner,
-            cleanup_session
+            cleanup_session,
+            list_sessions
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

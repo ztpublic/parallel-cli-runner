@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
@@ -39,6 +40,8 @@ type PaneMeta = {
 };
 
 const createId = () => crypto.randomUUID();
+const LAST_REPO_KEY = "parallel:lastRepo";
+const lastSessionKey = (repoId: string) => `parallel:lastSession:${repoId}`;
 
 type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
 
@@ -325,25 +328,27 @@ function LayoutRenderer({
 type SyncBarProps = {
   syncEnabled: boolean;
   onToggleSync: () => void;
-  paneCount: number;
   onSplit: () => void;
   onBindRepo: () => void;
   repoStatus: RepoStatusDto | null;
   repoError: string | null;
   repoLoading: boolean;
   onStartSession: () => void;
+  onQuit: () => void;
+  onClearCachesAndQuit: () => void;
 };
 
 function SyncBar({
   syncEnabled,
   onToggleSync,
-  paneCount,
   onSplit,
   onBindRepo,
   repoStatus,
   repoError,
   repoLoading,
   onStartSession,
+  onQuit,
+  onClearCachesAndQuit,
 }: SyncBarProps) {
   const stagedCount = repoStatus
     ? repoStatus.modified_files.filter((file) => file.staged).length
@@ -371,7 +376,16 @@ function SyncBar({
         <button className="chip" onClick={onStartSession} disabled={!repoStatus}>
           Start parallel task
         </button>
-        <div className="pane-count">Panes: {paneCount}</div>
+        <button
+          className="chip chip-clear"
+          onClick={onClearCachesAndQuit}
+          title="Clear cached repo/session data and quit"
+        >
+          Clear caches &amp; quit
+        </button>
+        <button className="chip chip-quit" onClick={onQuit} title="Quit app">
+          Quit
+        </button>
       </div>
       <div className="repo-status-row">
         {repoLoading ? (
@@ -437,6 +451,30 @@ function App() {
   const [sessionBranchInput, setSessionBranchInput] = useState("");
   const [sessionAgentsInput, setSessionAgentsInput] = useState("agent-1\nagent-2");
   const [creatingSession, setCreatingSession] = useState(false);
+  const hasRestoredRepo = useRef(false);
+
+  const rememberSession = useCallback(
+    (session: TaskSession | null) => {
+      if (repoStatus && session) {
+        localStorage.setItem(lastSessionKey(repoStatus.root_path), session.id);
+      }
+      if (repoStatus && !session) {
+        localStorage.removeItem(lastSessionKey(repoStatus.root_path));
+      }
+    },
+    [repoStatus]
+  );
+
+  const pickLatestSession = useCallback((sessions: TaskSession[], repoId: string) => {
+    const storedId = localStorage.getItem(lastSessionKey(repoId));
+    const byId = storedId ? sessions.find((s) => s.id === storedId) : null;
+    if (byId) return byId;
+    return sessions
+      .slice()
+      .sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )[0];
+  }, []);
 
   const killLayoutSessions = useCallback(async (node: LayoutNode | null) => {
     const panes = collectPanes(node);
@@ -484,6 +522,70 @@ function App() {
     [buildLayoutFromPanes, killLayoutSessions, layout]
   );
 
+  const loadLastSessionForRepo = useCallback(
+    async (repoRoot: string) => {
+      try {
+        const sessions = await invoke<TaskSession[]>("list_sessions", { repoRoot });
+        if (!sessions.length) {
+          setTaskSession(null);
+          return;
+        }
+        const chosen = pickLatestSession(sessions, repoRoot);
+        if (!chosen) {
+          setTaskSession(null);
+          return;
+        }
+        setTaskSession(chosen);
+        rememberSession(chosen);
+        await launchAgentsForSession(chosen);
+      } catch (error) {
+        console.error("Failed to load sessions", error);
+      }
+    },
+    [launchAgentsForSession, pickLatestSession, rememberSession]
+  );
+
+  const bindRepoPath = useCallback(
+    async (pickedPath: string, silent?: boolean) => {
+      if (!pickedPath) return;
+      setRepoError(null);
+      setRepoLoading(true);
+      try {
+        const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
+        if (!repoRoot) {
+          setRepoStatus(null);
+          setRepoError("Selected folder is not inside a git repository.");
+          return;
+        }
+
+        if (taskSession && taskSession.repo_id !== repoRoot) {
+          setTaskSession(null);
+        }
+
+        const status = await invoke<RepoStatusDto>("git_status", { cwd: repoRoot });
+        setRepoStatus(status);
+        setRepoError(null);
+        setSessionBranchInput(status.branch);
+        localStorage.setItem(LAST_REPO_KEY, repoRoot);
+        await loadLastSessionForRepo(repoRoot);
+      } catch (error) {
+        if (!silent) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : typeof error === "string"
+                ? error
+                : "Failed to bind git repo.";
+          setRepoError(message);
+          setRepoStatus(null);
+        }
+      } finally {
+        setRepoLoading(false);
+      }
+    },
+    [loadLastSessionForRepo, taskSession]
+  );
+
   const handleBindRepo = useCallback(async () => {
     setRepoError(null);
     let pickedPath: string | null = null;
@@ -506,36 +608,8 @@ function App() {
 
     if (!pickedPath) return;
 
-    setRepoLoading(true);
-    try {
-      const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
-      if (!repoRoot) {
-        setRepoStatus(null);
-        setRepoError("Selected folder is not inside a git repository.");
-        return;
-      }
-
-      if (taskSession && taskSession.repo_id !== repoRoot) {
-        setTaskSession(null);
-      }
-
-      const status = await invoke<RepoStatusDto>("git_status", { cwd: repoRoot });
-      setRepoStatus(status);
-      setRepoError(null);
-      setSessionBranchInput(status.branch);
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : "Failed to bind git repo.";
-      setRepoError(message);
-      setRepoStatus(null);
-    } finally {
-      setRepoLoading(false);
-    }
-  }, []);
+    await bindRepoPath(pickedPath);
+  }, [bindRepoPath]);
 
   const openSessionDialog = useCallback(() => {
     if (!repoStatus) {
@@ -573,6 +647,7 @@ function App() {
       setTaskSession(session);
       await launchAgentsForSession(session);
       setSessionDialogOpen(false);
+      rememberSession(session);
     } catch (error) {
       const message =
         error instanceof Error
@@ -584,7 +659,7 @@ function App() {
     } finally {
       setCreatingSession(false);
     }
-  }, [launchAgentsForSession, repoStatus, sessionAgentsInput, sessionBranchInput]);
+  }, [launchAgentsForSession, rememberSession, repoStatus, sessionAgentsInput, sessionBranchInput]);
 
   const splitActivePane = useCallback(
     async (orientation: Orientation) => {
@@ -647,20 +722,87 @@ function App() {
     return () => window.removeEventListener("keydown", handler);
   }, [splitActivePane, closeActivePane]);
 
-  const paneCount = useMemo(() => countPanes(layout), [layout]);
+  useEffect(() => {
+    if (taskSession) {
+      rememberSession(taskSession);
+    } else if (repoStatus) {
+      localStorage.removeItem(lastSessionKey(repoStatus.root_path));
+    }
+  }, [rememberSession, repoStatus, taskSession]);
+
+  useEffect(() => {
+    if (hasRestoredRepo.current) return;
+    const storedRepo = localStorage.getItem(LAST_REPO_KEY);
+    hasRestoredRepo.current = true;
+    if (storedRepo) {
+      void bindRepoPath(storedRepo, true);
+    }
+  }, [bindRepoPath]);
+
+  const handleQuit = useCallback(() => {
+    void getCurrentWindow().close();
+  }, []);
+
+  const handleClearCachesAndQuit = useCallback(async () => {
+    const repoIds = new Set<string>();
+    const sessionKeys: string[] = [];
+
+    if (repoStatus?.root_path) {
+      repoIds.add(repoStatus.root_path);
+    }
+
+    const lastRepo = localStorage.getItem(LAST_REPO_KEY);
+    if (lastRepo) {
+      repoIds.add(lastRepo);
+    }
+
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith("parallel:lastSession:")) {
+        sessionKeys.push(key);
+        repoIds.add(key.replace("parallel:lastSession:", ""));
+      }
+    }
+
+    await Promise.all(
+      Array.from(repoIds).map(async (repoRoot) => {
+        try {
+          const sessions = await invoke<TaskSession[]>("list_sessions", { repoRoot });
+          await Promise.all(
+            sessions.map((session) =>
+              invoke("cleanup_session", {
+                sessionId: session.id,
+                mode: "keep_branches",
+              }).catch((error) => {
+                console.error("Failed to cleanup session", session.id, error);
+                return null;
+              })
+            )
+          );
+        } catch (error) {
+          console.error("Failed to cleanup repo worktrees", repoRoot, error);
+        }
+      })
+    );
+
+    localStorage.removeItem(LAST_REPO_KEY);
+    sessionKeys.forEach((key) => localStorage.removeItem(key));
+    void getCurrentWindow().close();
+  }, [repoStatus]);
 
   return (
     <main className="app-shell">
       <SyncBar
         syncEnabled={syncTyping}
         onToggleSync={() => setSyncTyping((prev) => !prev)}
-        paneCount={paneCount}
         onSplit={() => void splitActivePane("vertical")}
         onBindRepo={() => void handleBindRepo()}
         repoStatus={repoStatus}
         repoError={repoError}
         repoLoading={repoLoading}
         onStartSession={openSessionDialog}
+        onQuit={handleQuit}
+        onClearCachesAndQuit={handleClearCachesAndQuit}
       />
       <SessionOverview session={taskSession} />
       <section className="terminal-card">
