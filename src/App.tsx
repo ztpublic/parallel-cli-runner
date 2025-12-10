@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
@@ -29,6 +30,35 @@ type SplitNode = {
 type LayoutNode = PaneNode | SplitNode;
 
 const createId = () => crypto.randomUUID();
+
+type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
+
+type FileStatusDto = {
+  path: string;
+  staged: FileChangeType | null;
+  unstaged: FileChangeType | null;
+};
+
+type CommitInfoDto = {
+  id: string;
+  summary: string;
+  author: string;
+  relative_time: string;
+};
+
+type RepoStatusDto = {
+  repo_id: string;
+  root_path: string;
+  branch: string;
+  ahead: number;
+  behind: number;
+  has_untracked: boolean;
+  has_staged: boolean;
+  has_unstaged: boolean;
+  conflicted_files: number;
+  modified_files: FileStatusDto[];
+  latest_commit: CommitInfoDto | null;
+};
 
 function countPanes(node: LayoutNode | null): number {
   if (!node) return 0;
@@ -276,9 +306,33 @@ type SyncBarProps = {
   onToggleSync: () => void;
   paneCount: number;
   onSplit: () => void;
+  onBindRepo: () => void;
+  repoStatus: RepoStatusDto | null;
+  repoError: string | null;
+  repoLoading: boolean;
 };
 
-function SyncBar({ syncEnabled, onToggleSync, paneCount, onSplit }: SyncBarProps) {
+function SyncBar({
+  syncEnabled,
+  onToggleSync,
+  paneCount,
+  onSplit,
+  onBindRepo,
+  repoStatus,
+  repoError,
+  repoLoading,
+}: SyncBarProps) {
+  const stagedCount = repoStatus
+    ? repoStatus.modified_files.filter((file) => file.staged).length
+    : 0;
+  const unstagedCount = repoStatus
+    ? repoStatus.modified_files.filter((file) => file.unstaged).length
+    : 0;
+  const aheadBehind =
+    repoStatus && (repoStatus.ahead !== 0 || repoStatus.behind !== 0)
+      ? `↑${repoStatus.ahead} ↓${repoStatus.behind}`
+      : null;
+
   return (
     <div className="broadcast-bar">
       <div className="broadcast-meta">
@@ -292,7 +346,45 @@ function SyncBar({ syncEnabled, onToggleSync, paneCount, onSplit }: SyncBarProps
         >
           Sync typing to all panes
         </button>
+        <button className="chip" onClick={onBindRepo} disabled={repoLoading}>
+          {repoLoading ? "Binding..." : "Bind git repo"}
+        </button>
         <div className="pane-count">Panes: {paneCount}</div>
+      </div>
+      <div className="repo-status-row">
+        {repoLoading ? (
+          <div className="repo-status muted">Checking repository...</div>
+        ) : repoError ? (
+          <div className="repo-status repo-error">{repoError}</div>
+        ) : repoStatus ? (
+          <div className="repo-status">
+            <div className="repo-path">{repoStatus.root_path}</div>
+            <div className="repo-branch">
+              <span className="pill">Branch {repoStatus.branch}</span>
+              {aheadBehind ? <span className="pill subtle">{aheadBehind}</span> : null}
+              {repoStatus.conflicted_files > 0 ? (
+                <span className="pill warning">{repoStatus.conflicted_files} conflicted</span>
+              ) : null}
+            </div>
+            {repoStatus.latest_commit ? (
+              <div className="repo-commit">
+                Latest:{" "}
+                <span className="repo-commit-summary">{repoStatus.latest_commit.summary}</span>
+                <span className="repo-commit-meta">
+                  {repoStatus.latest_commit.author} · {repoStatus.latest_commit.relative_time}
+                </span>
+              </div>
+            ) : (
+              <div className="repo-commit muted">No commits yet.</div>
+            )}
+            <div className="repo-counts">
+              Staged {stagedCount} · Unstaged {unstagedCount} · Untracked{" "}
+              {repoStatus.has_untracked ? "yes" : "no"}
+            </div>
+          </div>
+        ) : (
+          <div className="repo-status muted">No git repo bound.</div>
+        )}
       </div>
     </div>
   );
@@ -301,6 +393,57 @@ function App() {
   const [layout, setLayout] = useState<LayoutNode | null>(null);
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [syncTyping, setSyncTyping] = useState(false);
+  const [repoStatus, setRepoStatus] = useState<RepoStatusDto | null>(null);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [repoLoading, setRepoLoading] = useState(false);
+
+  const handleBindRepo = useCallback(async () => {
+    setRepoError(null);
+    let pickedPath: string | null = null;
+    try {
+      const selection = await open({
+        directory: true,
+        multiple: false,
+      });
+      pickedPath = Array.isArray(selection) ? selection[0] : selection;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Failed to open folder picker.";
+      setRepoError(message);
+      return;
+    }
+
+    if (!pickedPath) return;
+
+    setRepoLoading(true);
+    try {
+      const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
+      if (!repoRoot) {
+        setRepoStatus(null);
+        setRepoError("Selected folder is not inside a git repository.");
+        return;
+      }
+
+      const status = await invoke<RepoStatusDto>("git_status", { cwd: repoRoot });
+      setRepoStatus(status);
+      setRepoError(null);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Failed to bind git repo.";
+      setRepoError(message);
+      setRepoStatus(null);
+    } finally {
+      setRepoLoading(false);
+    }
+  }, []);
 
   const splitActivePane = useCallback(
     async (orientation: Orientation) => {
@@ -336,16 +479,16 @@ function App() {
       await invoke("kill_session", { id: paneToRemove.sessionId });
     }
 
-      setLayout((prev) => {
-        if (!prev) return prev;
-        const next = removePane(prev, activePaneId);
-        if (!next) return prev;
-        const fallbackPane = getFirstPane(next);
-        setActivePaneId(fallbackPane?.id ?? null);
-        setSyncTyping(false);
-        return next;
-      });
-    }, [activePaneId, layout]);
+    setLayout((prev) => {
+      if (!prev) return prev;
+      const next = removePane(prev, activePaneId);
+      if (!next) return prev;
+      const fallbackPane = getFirstPane(next);
+      setActivePaneId(fallbackPane?.id ?? null);
+      setSyncTyping(false);
+      return next;
+    });
+  }, [activePaneId, layout]);
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -373,6 +516,10 @@ function App() {
         onToggleSync={() => setSyncTyping((prev) => !prev)}
         paneCount={paneCount}
         onSplit={() => void splitActivePane("vertical")}
+        onBindRepo={() => void handleBindRepo()}
+        repoStatus={repoStatus}
+        repoError={repoError}
+        repoLoading={repoLoading}
       />
       <section className="terminal-card">
         {layout ? (

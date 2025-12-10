@@ -69,6 +69,14 @@ pub struct FileStatusDto {
 }
 
 #[derive(Clone, Debug, Serialize)]
+pub struct CommitInfoDto {
+    pub id: String,
+    pub summary: String,
+    pub author: String,
+    pub relative_time: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 pub struct RepoStatusDto {
     pub repo_id: String,
     pub root_path: String,
@@ -80,6 +88,7 @@ pub struct RepoStatusDto {
     pub has_unstaged: bool,
     pub conflicted_files: usize,
     pub modified_files: Vec<FileStatusDto>,
+    pub latest_commit: Option<CommitInfoDto>,
 }
 
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
@@ -104,7 +113,9 @@ pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
 pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
     let repo_root = ensure_repo(cwd)?;
     let output = run_git(cwd, &["status", "--porcelain=v2", "-b"])?;
-    Ok(parse_status(&output.stdout, &repo_root))
+    let mut status = parse_status(&output.stdout, &repo_root);
+    status.latest_commit = latest_commit(&repo_root)?;
+    Ok(status)
 }
 
 pub fn diff(cwd: &Path, pathspecs: &[String]) -> Result<String, GitError> {
@@ -143,6 +154,44 @@ fn ensure_repo(cwd: &Path) -> Result<PathBuf, GitError> {
 
 fn canonicalize(path: PathBuf) -> PathBuf {
     fs::canonicalize(&path).unwrap_or(path)
+}
+
+pub fn latest_commit(cwd: &Path) -> Result<Option<CommitInfoDto>, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+    let fmt = "%H\x1f%an\x1f%ar\x1f%s";
+    let output = match run_git(&repo_root, &["log", "-1", &format!("--pretty=format:{fmt}")]) {
+        Ok(out) => out,
+        Err(GitError::GitFailed { code, stderr })
+            if stderr
+                .to_ascii_lowercase()
+                .contains("does not have any commits yet") =>
+        {
+            return Ok(None);
+        }
+        Err(err) => return Err(err),
+    };
+
+    let line = output.stdout.trim();
+    if line.is_empty() {
+        return Ok(None);
+    }
+
+    let parts: Vec<&str> = line.split('\u{1f}').collect();
+    let id = parts.get(0).unwrap_or(&"").to_string();
+    let author = parts.get(1).unwrap_or(&"").to_string();
+    let relative_time = parts.get(2).unwrap_or(&"").to_string();
+    let summary = parts.get(3).unwrap_or(&"").to_string();
+
+    if id.is_empty() && summary.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(CommitInfoDto {
+        id,
+        summary,
+        author,
+        relative_time,
+    }))
 }
 
 fn map_status_code(code: char) -> Option<FileChangeType> {
@@ -241,6 +290,7 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
         has_unstaged,
         conflicted_files,
         modified_files,
+        latest_commit: None,
     }
 }
 
