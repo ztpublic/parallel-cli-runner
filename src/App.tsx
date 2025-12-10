@@ -302,28 +302,29 @@ function App() {
   const [activePaneId, setActivePaneId] = useState<string | null>(null);
   const [syncTyping, setSyncTyping] = useState(false);
 
-  useEffect(() => {
-    const init = async () => {
-      const pane = await createPaneNode();
-      setLayout(pane);
-      setActivePaneId(pane.id);
-      setSyncTyping(false);
-    };
-    void init();
-  }, []);
-
   const splitActivePane = useCallback(
     async (orientation: Orientation) => {
-      if (!layout || !activePaneId) return;
       const newPane = await createPaneNode();
 
       setLayout((prev) => {
-        if (!prev) return prev;
-        return splitLayout(prev, activePaneId, newPane, orientation);
+        if (!prev) {
+          setActivePaneId(newPane.id);
+          setSyncTyping(false);
+          return newPane;
+        }
+
+        const targetPaneId = activePaneId ?? getFirstPane(prev)?.id;
+        if (!targetPaneId) {
+          setActivePaneId(newPane.id);
+          setSyncTyping(false);
+          return newPane;
+        }
+
+        setActivePaneId(newPane.id);
+        return splitLayout(prev, targetPaneId, newPane, orientation);
       });
-      setActivePaneId(newPane.id);
     },
-    [activePaneId, layout]
+    [activePaneId]
   );
 
   const closeActivePane = useCallback(async () => {
@@ -396,7 +397,9 @@ function App() {
             />
           </div>
         ) : (
-          <div className="loading">Booting PTY...</div>
+          <div className="loading">
+            No terminals yet. Click "Split pane" to start the first one.
+          </div>
         )}
       </section>
     </main>
