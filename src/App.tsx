@@ -332,7 +332,6 @@ type SyncBarProps = {
   repoError: string | null;
   repoLoading: boolean;
   onStartSession: () => void;
-  taskSession: TaskSession | null;
 };
 
 function SyncBar({
@@ -345,7 +344,6 @@ function SyncBar({
   repoError,
   repoLoading,
   onStartSession,
-  taskSession,
 }: SyncBarProps) {
   const stagedCount = repoStatus
     ? repoStatus.modified_files.filter((file) => file.staged).length
@@ -353,10 +351,6 @@ function SyncBar({
   const unstagedCount = repoStatus
     ? repoStatus.modified_files.filter((file) => file.unstaged).length
     : 0;
-  const aheadBehind =
-    repoStatus && (repoStatus.ahead !== 0 || repoStatus.behind !== 0)
-      ? `↑${repoStatus.ahead} ↓${repoStatus.behind}`
-      : null;
 
   return (
     <div className="broadcast-bar">
@@ -385,37 +379,11 @@ function SyncBar({
         ) : repoError ? (
           <div className="repo-status repo-error">{repoError}</div>
         ) : repoStatus ? (
-          <div className="repo-status">
+          <div className="repo-summary">
             <div className="repo-path">{repoStatus.root_path}</div>
-            <div className="repo-branch">
-              <span className="pill">Branch {repoStatus.branch}</span>
-              {aheadBehind ? <span className="pill subtle">{aheadBehind}</span> : null}
-              {repoStatus.conflicted_files > 0 ? (
-                <span className="pill warning">{repoStatus.conflicted_files} conflicted</span>
-              ) : null}
-            </div>
-            {repoStatus.latest_commit ? (
-              <div className="repo-commit">
-                Latest:{" "}
-                <span className="repo-commit-summary">{repoStatus.latest_commit.summary}</span>
-                <span className="repo-commit-meta">
-                  {repoStatus.latest_commit.author} · {repoStatus.latest_commit.relative_time}
-                </span>
-              </div>
-            ) : (
-              <div className="repo-commit muted">No commits yet.</div>
-            )}
             <div className="repo-counts">
-              Staged {stagedCount} · Unstaged {unstagedCount} · Untracked{" "}
-              {repoStatus.has_untracked ? "yes" : "no"}
+              Staged {stagedCount} · Unstaged {unstagedCount}
             </div>
-            {taskSession ? (
-              <div className="repo-commit">
-                <span className="pill">Session {taskSession.id}</span>
-                <span className="pill subtle">Base {taskSession.base_branch}</span>
-                <span className="pill subtle">State {taskSession.state}</span>
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="repo-status muted">No git repo bound.</div>
@@ -683,7 +651,6 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header" />
       <SyncBar
         syncEnabled={syncTyping}
         onToggleSync={() => setSyncTyping((prev) => !prev)}
@@ -694,7 +661,6 @@ function App() {
         repoError={repoError}
         repoLoading={repoLoading}
         onStartSession={openSessionDialog}
-        taskSession={taskSession}
       />
       <SessionOverview session={taskSession} />
       <section className="terminal-card">
