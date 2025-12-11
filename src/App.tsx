@@ -421,6 +421,11 @@ function App() {
   const [agentError, setAgentError] = useState<string | null>(null);
   const [creatingAgent, setCreatingAgent] = useState(false);
   const hasRestoredRepo = useRef(false);
+  const runStartCommand = useCallback(async (pane: PaneNode, command: string) => {
+    if (!command.trim()) return;
+    const commandToRun = command.endsWith("\n") ? command : `${command}\n`;
+    await invoke("write_to_session", { id: pane.sessionId, data: commandToRun });
+  }, []);
 
   const killLayoutSessions = useCallback(async (node: LayoutNode | null) => {
     const panes = collectPanes(node);
@@ -454,7 +459,7 @@ function App() {
         return;
       }
 
-      const panes: PaneNode[] = [];
+      const panesWithAgents: { pane: PaneNode; agent: Agent }[] = [];
       for (const agent of agentList) {
         const pane = await createPaneNode({
           cwd: agent.worktree_path,
@@ -465,14 +470,22 @@ function App() {
             worktreePath: agent.worktree_path,
           },
         });
-        panes.push(pane);
+        panesWithAgents.push({ pane, agent });
       }
+      const panes = panesWithAgents.map(({ pane }) => pane);
       const nextLayout = buildLayoutFromPanes(panes);
       setLayout(nextLayout);
       setActivePaneId(panes[0]?.id ?? null);
       setSyncTyping(false);
+      await Promise.all(
+        panesWithAgents.map(({ pane, agent }) =>
+          runStartCommand(pane, agent.start_command).catch((error) => {
+            console.error("Failed to run start command for agent", agent.id, error);
+          })
+        )
+      );
     },
-    [buildLayoutFromPanes, killLayoutSessions, layout]
+    [buildLayoutFromPanes, killLayoutSessions, layout, runStartCommand]
   );
 
   const loadAgentsForRepo = useCallback(
@@ -626,10 +639,7 @@ function App() {
         },
       });
       appendPaneForAgent(pane);
-      const commandToRun = agent.start_command.endsWith("\n")
-        ? agent.start_command
-        : `${agent.start_command}\n`;
-      await invoke("write_to_session", { id: pane.sessionId, data: commandToRun });
+      await runStartCommand(pane, agent.start_command);
       setAgentDialogOpen(false);
       setAgentNameInput("");
       setAgentCommandInput("");
@@ -644,7 +654,7 @@ function App() {
     } finally {
       setCreatingAgent(false);
     }
-  }, [agentCommandInput, agentNameInput, appendPaneForAgent, repoStatus]);
+  }, [agentCommandInput, agentNameInput, appendPaneForAgent, repoStatus, runStartCommand]);
 
   const closeActivePane = useCallback(async () => {
     if (!layout || !activePaneId) return;
