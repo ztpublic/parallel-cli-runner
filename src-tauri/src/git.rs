@@ -169,6 +169,21 @@ pub fn default_branch(cwd: &Path) -> Result<String, GitError> {
     current_branch(&repo_root)
 }
 
+pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
+    let worktree = ensure_repo(worktree)?;
+    let mut args: Vec<String> = vec![
+        "difftool".to_string(),
+        "-y".to_string(),
+        "--tool=opendiff".to_string(),
+    ];
+    if let Some(p) = path {
+        args.push("--".to_string());
+        args.push(p.to_string());
+    }
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git(&worktree, &arg_refs).map(|_| ())
+}
+
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
     let _repo_root = ensure_repo(cwd)?;
     if stage_all {

@@ -386,6 +386,7 @@ function AgentOverview({
   diffStats,
   openMenuId,
   onToggleMenu,
+  onShowDiff,
   onRemoveAgent,
   removingAgentId,
 }: {
@@ -393,6 +394,7 @@ function AgentOverview({
   diffStats: Record<string, AgentDiffStat | undefined>;
   openMenuId: string | null;
   onToggleMenu: (agentId: string) => void;
+  onShowDiff: (agent: Agent) => void;
   onRemoveAgent: (agent: Agent) => void;
   removingAgentId: string | null;
 }) {
@@ -439,6 +441,16 @@ function AgentOverview({
                     className="agent-menu"
                     onClick={(event) => event.stopPropagation()}
                   >
+                    <button
+                      className="agent-menu-item"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onShowDiff(agent);
+                      }}
+                      disabled={removingAgentId === agent.id}
+                    >
+                      Show diff view
+                    </button>
                     <button
                       className="agent-menu-item danger"
                       onClick={(event) => {
@@ -836,6 +848,32 @@ function App() {
     [layout, repoStatus]
   );
 
+  const handleShowDiff = useCallback(
+    async (agent: Agent) => {
+      if (!repoStatus) {
+        setRepoError("Bind a git repo before opening a diff view.");
+        return;
+      }
+
+      try {
+        await invoke("open_diff_between_refs", {
+          worktreePath: agent.worktree_path,
+          path: null,
+        });
+        setAgentMenuOpenId(null);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "Failed to open diff view.";
+        setRepoError(message);
+      }
+    },
+    [repoStatus]
+  );
+
   const closeActivePane = useCallback(async () => {
     if (!layout || !activePaneId) return;
     if (countPanes(layout) === 1) return;
@@ -943,6 +981,7 @@ function App() {
         diffStats={agentDiffStats}
         openMenuId={agentMenuOpenId}
         onToggleMenu={toggleAgentMenu}
+        onShowDiff={(agent) => void handleShowDiff(agent)}
         onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
         removingAgentId={removingAgentId}
       />

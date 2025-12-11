@@ -262,6 +262,12 @@ async fn remove_agent(
     agent::remove_agent(&manager, repo_root, agent_id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn open_diff_between_refs(worktree_path: String, path: Option<String>) -> Result<(), String> {
+    let worktree = PathBuf::from(worktree_path);
+    git::difftool(&worktree, path.as_deref()).map_err(|e| e.to_string())
+}
+
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
@@ -315,7 +321,8 @@ pub fn run() {
             list_agents,
             cleanup_agents,
             agent_diff_stats,
-            remove_agent
+            remove_agent,
+            open_diff_between_refs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
