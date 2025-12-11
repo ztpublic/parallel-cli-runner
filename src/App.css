@@ -384,6 +384,14 @@ h1 {
   gap: 8px;
 }
 
+.agent-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .agent-menu-button {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -444,22 +452,26 @@ h1 {
 
 .agent-name {
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.agent-branch {
+.agent-diff {
+  background: rgba(84, 209, 135, 0.15);
+  border: 1px solid rgba(84, 209, 135, 0.45);
+  border-radius: 999px;
+  padding: 4px 10px;
   font-size: 12px;
-  color: #c5d2e8;
+  font-weight: 700;
+  color: #c6f3dd;
+  white-space: nowrap;
 }
 
-.agent-path {
-  font-size: 11px;
-  word-break: break-all;
-}
-
-.agent-command {
-  font-size: 12px;
+.agent-diff-pending {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
   color: #9fb2d2;
-  word-break: break-all;
 }
 
 .badge {

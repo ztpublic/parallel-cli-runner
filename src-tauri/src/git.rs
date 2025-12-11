@@ -91,6 +91,13 @@ pub struct RepoStatusDto {
     pub latest_commit: Option<CommitInfoDto>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct DiffStatDto {
+    pub files_changed: usize,
+    pub insertions: i32,
+    pub deletions: i32,
+}
+
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
     match run_git(cwd, &["rev-parse", "--show-toplevel"]) {
         Ok(output) => {
@@ -128,6 +135,38 @@ pub fn diff(cwd: &Path, pathspecs: &[String]) -> Result<String, GitError> {
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
     let output = run_git(cwd, &arg_refs)?;
     Ok(output.stdout)
+}
+
+pub fn diff_stats_against_branch(
+    worktree: &Path,
+    base_branch: &str,
+) -> Result<DiffStatDto, GitError> {
+    let _ = ensure_repo(worktree)?;
+    let output = run_git(worktree, &["diff", "--numstat", base_branch])?;
+    Ok(parse_numstat_summary(&output.stdout))
+}
+
+pub fn default_branch(cwd: &Path) -> Result<String, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+
+    if let Ok(out) = run_git(&repo_root, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+    {
+        let remote_head = out.stdout.trim();
+        if !remote_head.is_empty() {
+            let local = remote_head.strip_prefix("origin/").unwrap_or(remote_head);
+            if branch_exists(&repo_root, local)? {
+                return Ok(local.to_string());
+            }
+        }
+    }
+
+    for candidate in ["main", "master"] {
+        if branch_exists(&repo_root, candidate)? {
+            return Ok(candidate.to_string());
+        }
+    }
+
+    current_branch(&repo_root)
 }
 
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
@@ -438,4 +477,34 @@ fn update_flags(
 fn parse_signed_count(raw: &str) -> i32 {
     let trimmed = raw.trim_start_matches('+').trim_start_matches('-');
     trimmed.parse::<i32>().unwrap_or(0)
+}
+
+fn parse_numstat_summary(stdout: &str) -> DiffStatDto {
+    let mut files_changed = 0usize;
+    let mut insertions = 0i32;
+    let mut deletions = 0i32;
+
+    for line in stdout.lines() {
+        let mut parts = line.split_whitespace();
+        let added = parts.next().unwrap_or_default();
+        let removed = parts.next().unwrap_or_default();
+        let file_path = parts.next().unwrap_or_default();
+        if file_path.is_empty() {
+            continue;
+        }
+
+        files_changed += 1;
+        if added != "-" {
+            insertions += added.parse::<i32>().unwrap_or(0);
+        }
+        if removed != "-" {
+            deletions += removed.parse::<i32>().unwrap_or(0);
+        }
+    }
+
+    DiffStatDto {
+        files_changed,
+        insertions,
+        deletions,
+    }
 }

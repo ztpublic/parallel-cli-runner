@@ -14,7 +14,7 @@ use uuid::Uuid;
 mod git;
 use crate::git::RepoStatusDto;
 mod agent;
-use crate::agent::{Agent, AgentManager};
+use crate::agent::{Agent, AgentDiffStat, AgentManager};
 
 #[derive(Default, Clone)]
 struct PtyManager {
@@ -246,6 +246,14 @@ async fn cleanup_agents(
 }
 
 #[tauri::command]
+async fn agent_diff_stats(
+    manager: State<'_, AgentManager>,
+    repo_root: String,
+) -> Result<Vec<AgentDiffStat>, String> {
+    agent::agent_diff_stats(&manager, repo_root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn remove_agent(
     manager: State<'_, AgentManager>,
     repo_root: String,
@@ -306,6 +314,7 @@ pub fn run() {
             create_agent,
             list_agents,
             cleanup_agents,
+            agent_diff_stats,
             remove_agent
         ])
         .run(tauri::generate_context!())

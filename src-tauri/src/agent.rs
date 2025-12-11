@@ -19,6 +19,14 @@ pub struct Agent {
     pub start_command: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct AgentDiffStat {
+    pub agent_id: String,
+    pub files_changed: usize,
+    pub insertions: i32,
+    pub deletions: i32,
+}
+
 #[derive(Error, Debug)]
 pub enum AgentError {
     #[error("not a git repository: {0}")]
@@ -186,6 +194,37 @@ pub fn remove_agent(
     }
 
     Ok(())
+}
+
+pub fn agent_diff_stats(
+    manager: &AgentManager,
+    repo_root: String,
+) -> Result<Vec<AgentDiffStat>, AgentError> {
+    let repo_root = PathBuf::from(repo_root);
+    let detected_repo = git::detect_repo(&repo_root)
+        .map_err(AgentError::from)?
+        .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
+    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let agents = manager.load_repo_agents(&canonical_repo)?;
+    if agents.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let base_branch = git::default_branch(&canonical_repo)?;
+    let mut stats: Vec<AgentDiffStat> = Vec::new();
+
+    for agent in agents {
+        let summary =
+            git::diff_stats_against_branch(Path::new(&agent.worktree_path), &base_branch)?;
+        stats.push(AgentDiffStat {
+            agent_id: agent.id,
+            files_changed: summary.files_changed,
+            insertions: summary.insertions,
+            deletions: summary.deletions,
+        });
+    }
+
+    Ok(stats)
 }
 
 fn reserve_agent_space(repo_root: &Path, slug: &str) -> Result<(String, String, PathBuf), AgentError> {

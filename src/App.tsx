@@ -7,7 +7,7 @@ import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import "./App.css";
-import { Agent } from "./types/agent";
+import { Agent, AgentDiffStat } from "./types/agent";
 
 type SessionData = {
   id: string;
@@ -383,18 +383,26 @@ function SyncBar({
 
 function AgentOverview({
   agents,
+  diffStats,
   openMenuId,
   onToggleMenu,
   onRemoveAgent,
   removingAgentId,
 }: {
   agents: Agent[];
+  diffStats: Record<string, AgentDiffStat | undefined>;
   openMenuId: string | null;
   onToggleMenu: (agentId: string) => void;
   onRemoveAgent: (agent: Agent) => void;
   removingAgentId: string | null;
 }) {
   if (!agents.length) return null;
+
+  const formatDiffStat = (stat?: AgentDiffStat) => {
+    if (!stat) return "\u2014";
+    const fileLabel = stat.files_changed === 1 ? "file" : "files";
+    return `${stat.files_changed} ${fileLabel} +${stat.insertions} -${stat.deletions}`;
+  };
 
   return (
     <div className="agent-overview">
@@ -405,40 +413,48 @@ function AgentOverview({
         <div className="agent-meta muted">Worktrees {agents.length}</div>
       </div>
       <div className="agent-grid">
-        {agents.map((agent) => (
-          <div className="agent-card" key={agent.id}>
-            <div className="agent-card-top">
-              <div className="agent-name">{agent.name}</div>
-              <button
-                className="agent-menu-button"
-                aria-label="Agent actions"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleMenu(agent.id);
-                }}
-              >
-                ...
-              </button>
-              {openMenuId === agent.id ? (
-                <div
-                  className="agent-menu"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <button
-                    className="agent-menu-item danger"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onRemoveAgent(agent);
-                    }}
-                    disabled={removingAgentId === agent.id}
-                  >
-                    {removingAgentId === agent.id ? "Removing..." : "Remove agent"}
-                  </button>
+        {agents.map((agent) => {
+          const diff = diffStats[agent.id];
+          return (
+            <div className="agent-card" key={agent.id}>
+              <div className="agent-card-top">
+                <div className="agent-card-heading">
+                  <div className="agent-name">{agent.name}</div>
+                  <div className={diff ? "agent-diff" : "agent-diff agent-diff-pending"}>
+                    {formatDiffStat(diff)}
+                  </div>
                 </div>
-              ) : null}
+                <button
+                  className="agent-menu-button"
+                  aria-label="Agent actions"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleMenu(agent.id);
+                  }}
+                >
+                  ...
+                </button>
+                {openMenuId === agent.id ? (
+                  <div
+                    className="agent-menu"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      className="agent-menu-item danger"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemoveAgent(agent);
+                      }}
+                      disabled={removingAgentId === agent.id}
+                    >
+                      {removingAgentId === agent.id ? "Removing..." : "Remove agent"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -451,6 +467,7 @@ function App() {
   const [repoError, setRepoError] = useState<string | null>(null);
   const [repoLoading, setRepoLoading] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentDiffStats, setAgentDiffStats] = useState<Record<string, AgentDiffStat>>({});
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
   const [agentNameInput, setAgentNameInput] = useState("");
   const [agentCommandInput, setAgentCommandInput] = useState("");
@@ -526,6 +543,28 @@ function App() {
     [buildLayoutFromPanes, killLayoutSessions, layout, runStartCommand]
   );
 
+  const refreshAgentDiffStats = useCallback(
+    async (repoRoot: string) => {
+      if (!repoRoot) {
+        setAgentDiffStats({});
+        return;
+      }
+
+      try {
+        const summaries = await invoke<AgentDiffStat[]>("agent_diff_stats", { repoRoot });
+        const mapped = summaries.reduce<Record<string, AgentDiffStat>>((acc, item) => {
+          acc[item.agent_id] = item;
+          return acc;
+        }, {});
+        setAgentDiffStats(mapped);
+      } catch (error) {
+        console.error("Failed to load agent diff stats", error);
+        setAgentDiffStats({});
+      }
+    },
+    []
+  );
+
   const loadAgentsForRepo = useCallback(
     async (repoRoot: string) => {
       try {
@@ -534,17 +573,23 @@ function App() {
         setAgentMenuOpenId(null);
         setRemovingAgentId(null);
         await launchAgentPanes(loaded);
+        if (loaded.length) {
+          await refreshAgentDiffStats(repoRoot);
+        } else {
+          setAgentDiffStats({});
+        }
       } catch (error) {
         console.error("Failed to load agents", error);
         setAgents([]);
         setAgentMenuOpenId(null);
         setRemovingAgentId(null);
+        setAgentDiffStats({});
         await killLayoutSessions(layout);
         setLayout(null);
         setActivePaneId(null);
       }
     },
-    [killLayoutSessions, launchAgentPanes, layout]
+    [killLayoutSessions, launchAgentPanes, layout, refreshAgentDiffStats]
   );
 
   const bindRepoPath = useCallback(
@@ -552,6 +597,7 @@ function App() {
       if (!pickedPath) return;
       setRepoError(null);
       setRepoLoading(true);
+      setAgentDiffStats({});
       try {
         const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
         if (!repoRoot) {
@@ -559,6 +605,7 @@ function App() {
           setAgents([]);
           setAgentMenuOpenId(null);
           setRemovingAgentId(null);
+          setAgentDiffStats({});
           if (!silent) {
             setRepoError("Selected folder is not inside a git repository.");
           }
@@ -586,6 +633,7 @@ function App() {
           setAgents([]);
           setAgentMenuOpenId(null);
           setRemovingAgentId(null);
+          setAgentDiffStats({});
           await killLayoutSessions(layout);
           setLayout(null);
           setActivePaneId(null);
@@ -679,6 +727,15 @@ function App() {
         baseBranch: repoStatus.branch,
       });
       setAgents((prev) => [...prev, agent]);
+      setAgentDiffStats((prev) => ({
+        ...prev,
+        [agent.id]: {
+          agent_id: agent.id,
+          files_changed: 0,
+          insertions: 0,
+          deletions: 0,
+        },
+      }));
       const pane = await createPaneNode({
         cwd: agent.worktree_path,
         meta: {
@@ -690,6 +747,7 @@ function App() {
       });
       appendPaneForAgent(pane);
       await runStartCommand(pane, agent.start_command);
+      await refreshAgentDiffStats(repoStatus.root_path);
       setAgentDialogOpen(false);
       setAgentNameInput("");
       setAgentCommandInput("");
@@ -704,7 +762,14 @@ function App() {
     } finally {
       setCreatingAgent(false);
     }
-  }, [agentCommandInput, agentNameInput, appendPaneForAgent, repoStatus, runStartCommand]);
+  }, [
+    agentCommandInput,
+    agentNameInput,
+    appendPaneForAgent,
+    refreshAgentDiffStats,
+    repoStatus,
+    runStartCommand,
+  ]);
 
   const handleRemoveAgent = useCallback(
     async (agent: Agent) => {
@@ -761,6 +826,10 @@ function App() {
         return next;
       });
       setAgents((prev) => prev.filter((item) => item.id !== agent.id));
+      setAgentDiffStats((prev) => {
+        const { [agent.id]: _removed, ...rest } = prev;
+        return rest;
+      });
       setAgentMenuOpenId((current) => (current === agent.id ? null : current));
       setRemovingAgentId(null);
     },
@@ -871,6 +940,7 @@ function App() {
     />
       <AgentOverview
         agents={agents}
+        diffStats={agentDiffStats}
         openMenuId={agentMenuOpenId}
         onToggleMenu={toggleAgentMenu}
         onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
