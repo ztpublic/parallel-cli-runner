@@ -245,6 +245,15 @@ async fn cleanup_agents(
     agent::cleanup_agents(&manager, repo_root).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn remove_agent(
+    manager: State<'_, AgentManager>,
+    repo_root: String,
+    agent_id: String,
+) -> Result<(), String> {
+    agent::remove_agent(&manager, repo_root, agent_id).map_err(|e| e.to_string())
+}
+
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
@@ -296,7 +305,8 @@ pub fn run() {
             git_commit,
             create_agent,
             list_agents,
-            cleanup_agents
+            cleanup_agents,
+            remove_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

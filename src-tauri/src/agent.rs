@@ -27,6 +27,8 @@ pub enum AgentError {
     NameRequired,
     #[error("starting command is required")]
     CommandRequired,
+    #[error("agent not found: {0}")]
+    NotFound(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -152,6 +154,34 @@ pub fn cleanup_agents(manager: &AgentManager, repo_root: String) -> Result<(), A
         let _ = git::delete_branch(&canonical_repo, &agent.branch_name, true);
         let _ = fs::remove_file(agent_meta_path(&canonical_repo, &agent.id));
         let mut guard = manager.agents.lock().expect("agent map poisoned");
+        guard.remove(&agent.id);
+    }
+
+    Ok(())
+}
+
+pub fn remove_agent(
+    manager: &AgentManager,
+    repo_root: String,
+    agent_id: String,
+) -> Result<(), AgentError> {
+    let repo_root = PathBuf::from(repo_root);
+    let detected_repo = git::detect_repo(&repo_root)
+        .map_err(AgentError::from)?
+        .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
+    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let agents = manager.load_repo_agents(&canonical_repo)?;
+    let agent = agents
+        .into_iter()
+        .find(|agent| agent.id == agent_id)
+        .ok_or_else(|| AgentError::NotFound(agent_id.clone()))?;
+
+    let worktree_path = PathBuf::from(&agent.worktree_path);
+    let _ = git::remove_worktree(&canonical_repo, &worktree_path, true);
+    let _ = git::delete_branch(&canonical_repo, &agent.branch_name, true);
+    let _ = fs::remove_file(agent_meta_path(&canonical_repo, &agent.id));
+
+    if let Ok(mut guard) = manager.agents.lock() {
         guard.remove(&agent.id);
     }
 

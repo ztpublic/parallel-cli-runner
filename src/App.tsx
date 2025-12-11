@@ -381,7 +381,19 @@ function SyncBar({
   );
 }
 
-function AgentOverview({ agents }: { agents: Agent[] }) {
+function AgentOverview({
+  agents,
+  openMenuId,
+  onToggleMenu,
+  onRemoveAgent,
+  removingAgentId,
+}: {
+  agents: Agent[];
+  openMenuId: string | null;
+  onToggleMenu: (agentId: string) => void;
+  onRemoveAgent: (agent: Agent) => void;
+  removingAgentId: string | null;
+}) {
   if (!agents.length) return null;
 
   return (
@@ -397,10 +409,34 @@ function AgentOverview({ agents }: { agents: Agent[] }) {
           <div className="agent-card" key={agent.id}>
             <div className="agent-card-top">
               <div className="agent-name">{agent.name}</div>
+              <button
+                className="agent-menu-button"
+                aria-label="Agent actions"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleMenu(agent.id);
+                }}
+              >
+                ...
+              </button>
+              {openMenuId === agent.id ? (
+                <div
+                  className="agent-menu"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    className="agent-menu-item danger"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemoveAgent(agent);
+                    }}
+                    disabled={removingAgentId === agent.id}
+                  >
+                    {removingAgentId === agent.id ? "Removing..." : "Remove agent"}
+                  </button>
+                </div>
+              ) : null}
             </div>
-            <div className="agent-branch">{agent.branch_name}</div>
-            <div className="agent-path muted">{agent.worktree_path}</div>
-            <div className="agent-command muted">Start: {agent.start_command}</div>
           </div>
         ))}
       </div>
@@ -420,6 +456,8 @@ function App() {
   const [agentCommandInput, setAgentCommandInput] = useState("");
   const [agentError, setAgentError] = useState<string | null>(null);
   const [creatingAgent, setCreatingAgent] = useState(false);
+  const [agentMenuOpenId, setAgentMenuOpenId] = useState<string | null>(null);
+  const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
   const hasRestoredRepo = useRef(false);
   const runStartCommand = useCallback(async (pane: PaneNode, command: string) => {
     if (!command.trim()) return;
@@ -493,10 +531,14 @@ function App() {
       try {
         const loaded = await invoke<Agent[]>("list_agents", { repoRoot });
         setAgents(loaded);
+        setAgentMenuOpenId(null);
+        setRemovingAgentId(null);
         await launchAgentPanes(loaded);
       } catch (error) {
         console.error("Failed to load agents", error);
         setAgents([]);
+        setAgentMenuOpenId(null);
+        setRemovingAgentId(null);
         await killLayoutSessions(layout);
         setLayout(null);
         setActivePaneId(null);
@@ -515,6 +557,8 @@ function App() {
         if (!repoRoot) {
           setRepoStatus(null);
           setAgents([]);
+          setAgentMenuOpenId(null);
+          setRemovingAgentId(null);
           if (!silent) {
             setRepoError("Selected folder is not inside a git repository.");
           }
@@ -540,6 +584,8 @@ function App() {
           setRepoError(message);
           setRepoStatus(null);
           setAgents([]);
+          setAgentMenuOpenId(null);
+          setRemovingAgentId(null);
           await killLayoutSessions(layout);
           setLayout(null);
           setActivePaneId(null);
@@ -587,6 +633,10 @@ function App() {
     },
     [buildLayoutFromPanes]
   );
+
+  const toggleAgentMenu = useCallback((agentId: string) => {
+    setAgentMenuOpenId((prev) => (prev === agentId ? null : agentId));
+  }, []);
 
   const openAgentDialog = useCallback(() => {
     if (!repoStatus) {
@@ -656,6 +706,67 @@ function App() {
     }
   }, [agentCommandInput, agentNameInput, appendPaneForAgent, repoStatus, runStartCommand]);
 
+  const handleRemoveAgent = useCallback(
+    async (agent: Agent) => {
+      if (!repoStatus) {
+        setRepoError("Bind a git repo before removing an agent.");
+        return;
+      }
+
+      setRemovingAgentId(agent.id);
+      setRepoError(null);
+      const panesForAgent = collectPanes(layout).filter(
+        (pane) => pane.meta?.agentId === agent.id
+      );
+
+      try {
+        await invoke("remove_agent", {
+          repoRoot: repoStatus.root_path,
+          agentId: agent.id,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : typeof error === "string"
+              ? error
+              : "Failed to remove agent.";
+        setRepoError(message);
+        setRemovingAgentId(null);
+        return;
+      }
+
+      await Promise.all(
+        panesForAgent.map((pane) =>
+          invoke("kill_session", { id: pane.sessionId }).catch(() => undefined)
+        )
+      );
+
+      setLayout((prev) => {
+        if (!prev) return prev;
+        let next: LayoutNode | null = prev;
+        for (const pane of panesForAgent) {
+          if (!next) break;
+          next = removePane(next, pane.id);
+        }
+        const fallbackPane = getFirstPane(next);
+        setActivePaneId((currentActive) => {
+          if (!currentActive) return fallbackPane?.id ?? null;
+          if (panesForAgent.some((pane) => pane.id === currentActive)) {
+            return fallbackPane?.id ?? null;
+          }
+          return currentActive;
+        });
+        setSyncTyping(false);
+        return next;
+      });
+      setAgents((prev) => prev.filter((item) => item.id !== agent.id));
+      setAgentMenuOpenId((current) => (current === agent.id ? null : current));
+      setRemovingAgentId(null);
+    },
+    [layout, repoStatus]
+  );
+
   const closeActivePane = useCallback(async () => {
     if (!layout || !activePaneId) return;
     if (countPanes(layout) === 1) return;
@@ -688,6 +799,22 @@ function App() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [closeActivePane]);
+
+  useEffect(() => {
+    const handleWindowClick = () => setAgentMenuOpenId(null);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAgentMenuOpenId(null);
+      }
+    };
+
+    window.addEventListener("click", handleWindowClick);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("click", handleWindowClick);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
 
   useEffect(() => {
     if (hasRestoredRepo.current) return;
@@ -738,11 +865,17 @@ function App() {
         repoStatus={repoStatus}
         repoError={repoError}
         repoLoading={repoLoading}
-        onCreateAgent={openAgentDialog}
-        onQuit={handleQuit}
-        onClearCachesAndQuit={handleClearCachesAndQuit}
+      onCreateAgent={openAgentDialog}
+      onQuit={handleQuit}
+      onClearCachesAndQuit={handleClearCachesAndQuit}
+    />
+      <AgentOverview
+        agents={agents}
+        openMenuId={agentMenuOpenId}
+        onToggleMenu={toggleAgentMenu}
+        onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
+        removingAgentId={removingAgentId}
       />
-      <AgentOverview agents={agents} />
       <section className="terminal-card">
         {layout ? (
           <div className="layout-root">
