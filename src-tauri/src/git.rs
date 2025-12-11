@@ -151,12 +151,6 @@ pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
     Ok(output.stdout.trim().to_string())
 }
 
-pub fn rev_parse(cwd: &Path, rev: &str) -> Result<String, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    let output = run_git(&repo_root, &["rev-parse", rev])?;
-    Ok(output.stdout.trim().to_string())
-}
-
 pub fn branch_exists(cwd: &Path, branch: &str) -> Result<bool, GitError> {
     let repo_root = ensure_repo(cwd)?;
     match run_git(&repo_root, &["rev-parse", "--verify", branch]) {

@@ -7,7 +7,7 @@ import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import "./App.css";
-import { TaskSession } from "./types/taskSession";
+import { Agent } from "./types/agent";
 
 type SessionData = {
   id: string;
@@ -34,14 +34,13 @@ type LayoutNode = PaneNode | SplitNode;
 
 type PaneMeta = {
   agentId?: string;
+  agentName?: string;
   branchName?: string;
   worktreePath?: string;
-  taskSessionId?: string;
 };
 
 const createId = () => crypto.randomUUID();
 const LAST_REPO_KEY = "parallel:lastRepo";
-const lastSessionKey = (repoId: string) => `parallel:lastSession:${repoId}`;
 
 type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
 
@@ -102,35 +101,6 @@ function collectPanes(node: LayoutNode | null, acc: PaneNode[] = []): PaneNode[]
   collectPanes(node.children[0], acc);
   collectPanes(node.children[1], acc);
   return acc;
-}
-
-function splitLayout(
-  node: LayoutNode,
-  targetPaneId: string,
-  newPane: PaneNode,
-  orientation: Orientation
-): LayoutNode {
-  if (node.type === "pane" && node.id === targetPaneId) {
-    return {
-      type: "split",
-      id: createId(),
-      orientation,
-      children: [node, newPane],
-    };
-  }
-
-  if (node.type === "split") {
-    const [left, right] = node.children;
-    return {
-      ...node,
-      children: [
-        splitLayout(left, targetPaneId, newPane, orientation),
-        splitLayout(right, targetPaneId, newPane, orientation),
-      ],
-    };
-  }
-
-  return node;
 }
 
 function removePane(
@@ -269,9 +239,13 @@ function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPaneProps)
       onClick={() => onFocused(pane.id)}
     >
       <div className="pane-label" aria-hidden>
-        <div className="pane-label-primary">{pane.meta?.agentId ?? "Pane"}</div>
+        <div className="pane-label-primary">
+          {pane.meta?.agentName ?? pane.meta?.agentId ?? "Pane"}
+        </div>
         {pane.meta?.branchName ? (
           <div className="pane-label-sub">{pane.meta.branchName}</div>
+        ) : pane.meta?.worktreePath ? (
+          <div className="pane-label-sub">{pane.meta.worktreePath}</div>
         ) : null}
       </div>
     </div>
@@ -328,12 +302,11 @@ function LayoutRenderer({
 type SyncBarProps = {
   syncEnabled: boolean;
   onToggleSync: () => void;
-  onSplit: () => void;
   onBindRepo: () => void;
   repoStatus: RepoStatusDto | null;
   repoError: string | null;
   repoLoading: boolean;
-  onStartSession: () => void;
+  onCreateAgent: () => void;
   onQuit: () => void;
   onClearCachesAndQuit: () => void;
 };
@@ -341,12 +314,11 @@ type SyncBarProps = {
 function SyncBar({
   syncEnabled,
   onToggleSync,
-  onSplit,
   onBindRepo,
   repoStatus,
   repoError,
   repoLoading,
-  onStartSession,
+  onCreateAgent,
   onQuit,
   onClearCachesAndQuit,
 }: SyncBarProps) {
@@ -360,9 +332,6 @@ function SyncBar({
   return (
     <div className="broadcast-bar">
       <div className="broadcast-meta">
-        <button className="chip" onClick={onSplit} title="Split vertically (Ctrl+Shift+D)">
-          Split pane
-        </button>
         <button
           className={syncEnabled ? "chip active" : "chip"}
           onClick={onToggleSync}
@@ -373,13 +342,18 @@ function SyncBar({
         <button className="chip" onClick={onBindRepo} disabled={repoLoading}>
           {repoLoading ? "Binding..." : "Bind git repo"}
         </button>
-        <button className="chip" onClick={onStartSession} disabled={!repoStatus}>
-          Start parallel task
+        <button
+          className="chip"
+          onClick={onCreateAgent}
+          disabled={!repoStatus || repoLoading}
+          title="Create a new agent worktree and run its start command"
+        >
+          Create new agent
         </button>
         <button
           className="chip chip-clear"
           onClick={onClearCachesAndQuit}
-          title="Clear cached repo/session data and quit"
+          title="Clear cached repo/agent data and quit"
         >
           Clear caches &amp; quit
         </button>
@@ -407,31 +381,26 @@ function SyncBar({
   );
 }
 
-function SessionOverview({ session }: { session: TaskSession | null }) {
-  if (!session) return null;
+function AgentOverview({ agents }: { agents: Agent[] }) {
+  if (!agents.length) return null;
 
   return (
-    <div className="session-overview">
-      <div className="session-head">
-        <div className="session-pills">
-          <span className="pill">Session {session.id}</span>
-          <span className="pill subtle">Base {session.base_branch}</span>
-          <span className="pill subtle">Commit {session.base_commit.slice(0, 7)}</span>
-          <span className={`pill ${session.state === "active" ? "success" : "subtle"}`}>
-            State {session.state}
-          </span>
+    <div className="agent-overview">
+      <div className="agent-head">
+        <div className="agent-pills">
+          <span className="pill">Agents {agents.length}</span>
         </div>
-        <div className="session-meta muted">Agents {session.agents.length}</div>
+        <div className="agent-meta muted">Worktrees {agents.length}</div>
       </div>
       <div className="agent-grid">
-        {session.agents.map((agent) => (
-          <div className="agent-card" key={agent.agent_id}>
+        {agents.map((agent) => (
+          <div className="agent-card" key={agent.id}>
             <div className="agent-card-top">
-              <div className="agent-name">{agent.agent_id}</div>
-              <span className={`badge status-${agent.status}`}>{agent.status}</span>
+              <div className="agent-name">{agent.name}</div>
             </div>
             <div className="agent-branch">{agent.branch_name}</div>
             <div className="agent-path muted">{agent.worktree_path}</div>
+            <div className="agent-command muted">Start: {agent.start_command}</div>
           </div>
         ))}
       </div>
@@ -445,36 +414,13 @@ function App() {
   const [repoStatus, setRepoStatus] = useState<RepoStatusDto | null>(null);
   const [repoError, setRepoError] = useState<string | null>(null);
   const [repoLoading, setRepoLoading] = useState(false);
-  const [taskSession, setTaskSession] = useState<TaskSession | null>(null);
-  const [sessionError, setSessionError] = useState<string | null>(null);
-  const [sessionDialogOpen, setSessionDialogOpen] = useState(false);
-  const [sessionBranchInput, setSessionBranchInput] = useState("");
-  const [sessionAgentsInput, setSessionAgentsInput] = useState("agent-1\nagent-2");
-  const [creatingSession, setCreatingSession] = useState(false);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false);
+  const [agentNameInput, setAgentNameInput] = useState("");
+  const [agentCommandInput, setAgentCommandInput] = useState("");
+  const [agentError, setAgentError] = useState<string | null>(null);
+  const [creatingAgent, setCreatingAgent] = useState(false);
   const hasRestoredRepo = useRef(false);
-
-  const rememberSession = useCallback(
-    (session: TaskSession | null) => {
-      if (repoStatus && session) {
-        localStorage.setItem(lastSessionKey(repoStatus.root_path), session.id);
-      }
-      if (repoStatus && !session) {
-        localStorage.removeItem(lastSessionKey(repoStatus.root_path));
-      }
-    },
-    [repoStatus]
-  );
-
-  const pickLatestSession = useCallback((sessions: TaskSession[], repoId: string) => {
-    const storedId = localStorage.getItem(lastSessionKey(repoId));
-    const byId = storedId ? sessions.find((s) => s.id === storedId) : null;
-    if (byId) return byId;
-    return sessions
-      .slice()
-      .sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      )[0];
-  }, []);
 
   const killLayoutSessions = useCallback(async (node: LayoutNode | null) => {
     const panes = collectPanes(node);
@@ -483,7 +429,7 @@ function App() {
         invoke("kill_session", { id: pane.sessionId }).catch(() => undefined)
       )
     );
-  }, [taskSession]);
+  }, []);
 
   const buildLayoutFromPanes = useCallback((panes: PaneNode[]): LayoutNode | null => {
     if (!panes.length) return null;
@@ -498,18 +444,25 @@ function App() {
     }, null);
   }, []);
 
-  const launchAgentsForSession = useCallback(
-    async (session: TaskSession) => {
+  const launchAgentPanes = useCallback(
+    async (agentList: Agent[]) => {
       await killLayoutSessions(layout);
+      if (!agentList.length) {
+        setLayout(null);
+        setActivePaneId(null);
+        setSyncTyping(false);
+        return;
+      }
+
       const panes: PaneNode[] = [];
-      for (const agent of session.agents) {
+      for (const agent of agentList) {
         const pane = await createPaneNode({
           cwd: agent.worktree_path,
           meta: {
-            agentId: agent.agent_id,
+            agentId: agent.id,
+            agentName: agent.name,
             branchName: agent.branch_name,
             worktreePath: agent.worktree_path,
-            taskSessionId: session.id,
           },
         });
         panes.push(pane);
@@ -522,27 +475,21 @@ function App() {
     [buildLayoutFromPanes, killLayoutSessions, layout]
   );
 
-  const loadLastSessionForRepo = useCallback(
+  const loadAgentsForRepo = useCallback(
     async (repoRoot: string) => {
       try {
-        const sessions = await invoke<TaskSession[]>("list_sessions", { repoRoot });
-        if (!sessions.length) {
-          setTaskSession(null);
-          return;
-        }
-        const chosen = pickLatestSession(sessions, repoRoot);
-        if (!chosen) {
-          setTaskSession(null);
-          return;
-        }
-        setTaskSession(chosen);
-        rememberSession(chosen);
-        await launchAgentsForSession(chosen);
+        const loaded = await invoke<Agent[]>("list_agents", { repoRoot });
+        setAgents(loaded);
+        await launchAgentPanes(loaded);
       } catch (error) {
-        console.error("Failed to load sessions", error);
+        console.error("Failed to load agents", error);
+        setAgents([]);
+        await killLayoutSessions(layout);
+        setLayout(null);
+        setActivePaneId(null);
       }
     },
-    [launchAgentsForSession, pickLatestSession, rememberSession]
+    [killLayoutSessions, launchAgentPanes, layout]
   );
 
   const bindRepoPath = useCallback(
@@ -554,20 +501,21 @@ function App() {
         const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
         if (!repoRoot) {
           setRepoStatus(null);
-          setRepoError("Selected folder is not inside a git repository.");
+          setAgents([]);
+          if (!silent) {
+            setRepoError("Selected folder is not inside a git repository.");
+          }
+          await killLayoutSessions(layout);
+          setLayout(null);
+          setActivePaneId(null);
           return;
-        }
-
-        if (taskSession && taskSession.repo_id !== repoRoot) {
-          setTaskSession(null);
         }
 
         const status = await invoke<RepoStatusDto>("git_status", { cwd: repoRoot });
         setRepoStatus(status);
         setRepoError(null);
-        setSessionBranchInput(status.branch);
         localStorage.setItem(LAST_REPO_KEY, repoRoot);
-        await loadLastSessionForRepo(repoRoot);
+        await loadAgentsForRepo(repoRoot);
       } catch (error) {
         if (!silent) {
           const message =
@@ -578,12 +526,16 @@ function App() {
                 : "Failed to bind git repo.";
           setRepoError(message);
           setRepoStatus(null);
+          setAgents([]);
+          await killLayoutSessions(layout);
+          setLayout(null);
+          setActivePaneId(null);
         }
       } finally {
         setRepoLoading(false);
       }
     },
-    [loadLastSessionForRepo, taskSession]
+    [killLayoutSessions, layout, loadAgentsForRepo]
   );
 
   const handleBindRepo = useCallback(async () => {
@@ -611,80 +563,88 @@ function App() {
     await bindRepoPath(pickedPath);
   }, [bindRepoPath]);
 
-  const openSessionDialog = useCallback(() => {
-    if (!repoStatus) {
-      setRepoError("Bind a git repo before starting a parallel task.");
-      return;
-    }
-    setSessionBranchInput(repoStatus.branch);
-    setSessionDialogOpen(true);
-    setSessionError(null);
-  }, [repoStatus]);
-
-  const handleCreateSession = useCallback(async () => {
-    if (!repoStatus) {
-      setSessionError("Bind a git repo before starting a session.");
-      return;
-    }
-
-    const agentNames = sessionAgentsInput
-      .split(/\r?\n|,/)
-      .map((name) => name.trim())
-      .filter(Boolean);
-    if (!agentNames.length) {
-      setSessionError("Add at least one agent name.");
-      return;
-    }
-
-    setCreatingSession(true);
-    setSessionError(null);
-    try {
-      const session = await invoke<TaskSession>("create_task_session", {
-        repoRoot: repoStatus.root_path,
-        baseBranch: sessionBranchInput || repoStatus.branch,
-        agents: agentNames.map((agent_id) => ({ agent_id, panel_id: null })),
+  const appendPaneForAgent = useCallback(
+    (pane: PaneNode) => {
+      setLayout((prev) => {
+        const panes = collectPanes(prev);
+        return buildLayoutFromPanes([...panes, pane]);
       });
-      setTaskSession(session);
-      await launchAgentsForSession(session);
-      setSessionDialogOpen(false);
-      rememberSession(session);
+      setActivePaneId(pane.id);
+      setSyncTyping(false);
+    },
+    [buildLayoutFromPanes]
+  );
+
+  const openAgentDialog = useCallback(() => {
+    if (!repoStatus) {
+      setRepoError("Bind a git repo before creating an agent.");
+      return;
+    }
+    if (!agentNameInput) {
+      setAgentNameInput(`agent-${agents.length + 1}`);
+    }
+    setAgentDialogOpen(true);
+    setAgentError(null);
+  }, [agentNameInput, agents.length, repoStatus]);
+
+  const handleCreateAgent = useCallback(async () => {
+    if (!repoStatus) {
+      setAgentError("Bind a git repo before creating an agent.");
+      return;
+    }
+
+    const name = agentNameInput.trim();
+    const startCommand = agentCommandInput.trim();
+
+    if (!name) {
+      setAgentError("Add an agent name.");
+      return;
+    }
+
+    if (!startCommand) {
+      setAgentError("Add a starting command.");
+      return;
+    }
+
+    setCreatingAgent(true);
+    setAgentError(null);
+    try {
+      const agent = await invoke<Agent>("create_agent", {
+        repoRoot: repoStatus.root_path,
+        name,
+        startCommand,
+        baseBranch: repoStatus.branch,
+      });
+      setAgents((prev) => [...prev, agent]);
+      const pane = await createPaneNode({
+        cwd: agent.worktree_path,
+        meta: {
+          agentId: agent.id,
+          agentName: agent.name,
+          branchName: agent.branch_name,
+          worktreePath: agent.worktree_path,
+        },
+      });
+      appendPaneForAgent(pane);
+      const commandToRun = agent.start_command.endsWith("\n")
+        ? agent.start_command
+        : `${agent.start_command}\n`;
+      await invoke("write_to_session", { id: pane.sessionId, data: commandToRun });
+      setAgentDialogOpen(false);
+      setAgentNameInput("");
+      setAgentCommandInput("");
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
           : typeof error === "string"
             ? error
-            : "Failed to start task session.";
-      setSessionError(message);
+            : "Failed to create agent.";
+      setAgentError(message);
     } finally {
-      setCreatingSession(false);
+      setCreatingAgent(false);
     }
-  }, [launchAgentsForSession, rememberSession, repoStatus, sessionAgentsInput, sessionBranchInput]);
-
-  const splitActivePane = useCallback(
-    async (orientation: Orientation) => {
-      const newPane = await createPaneNode();
-
-      setLayout((prev) => {
-        if (!prev) {
-          setActivePaneId(newPane.id);
-          setSyncTyping(false);
-          return newPane;
-        }
-
-        const targetPaneId = activePaneId ?? getFirstPane(prev)?.id;
-        if (!targetPaneId) {
-          setActivePaneId(newPane.id);
-          setSyncTyping(false);
-          return newPane;
-        }
-
-        setActivePaneId(newPane.id);
-        return splitLayout(prev, targetPaneId, newPane, orientation);
-      });
-    },
-    [activePaneId]
-  );
+  }, [agentCommandInput, agentNameInput, appendPaneForAgent, repoStatus]);
 
   const closeActivePane = useCallback(async () => {
     if (!layout || !activePaneId) return;
@@ -709,10 +669,7 @@ function App() {
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (!event.ctrlKey || !event.shiftKey) return;
-      if (event.code === "KeyD") {
-        event.preventDefault();
-        void splitActivePane("vertical");
-      } else if (event.code === "KeyW") {
+      if (event.code === "KeyW") {
         event.preventDefault();
         void closeActivePane();
       }
@@ -720,15 +677,7 @@ function App() {
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [splitActivePane, closeActivePane]);
-
-  useEffect(() => {
-    if (taskSession) {
-      rememberSession(taskSession);
-    } else if (repoStatus) {
-      localStorage.removeItem(lastSessionKey(repoStatus.root_path));
-    }
-  }, [rememberSession, repoStatus, taskSession]);
+  }, [closeActivePane]);
 
   useEffect(() => {
     if (hasRestoredRepo.current) return;
@@ -745,7 +694,6 @@ function App() {
 
   const handleClearCachesAndQuit = useCallback(async () => {
     const repoIds = new Set<string>();
-    const sessionKeys: string[] = [];
 
     if (repoStatus?.root_path) {
       repoIds.add(repoStatus.root_path);
@@ -756,55 +704,35 @@ function App() {
       repoIds.add(lastRepo);
     }
 
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith("parallel:lastSession:")) {
-        sessionKeys.push(key);
-        repoIds.add(key.replace("parallel:lastSession:", ""));
-      }
-    }
-
     await Promise.all(
       Array.from(repoIds).map(async (repoRoot) => {
         try {
-          const sessions = await invoke<TaskSession[]>("list_sessions", { repoRoot });
-          await Promise.all(
-            sessions.map((session) =>
-              invoke("cleanup_session", {
-                sessionId: session.id,
-                mode: "keep_branches",
-              }).catch((error) => {
-                console.error("Failed to cleanup session", session.id, error);
-                return null;
-              })
-            )
-          );
+          await invoke("cleanup_agents", { repoRoot });
         } catch (error) {
-          console.error("Failed to cleanup repo worktrees", repoRoot, error);
+          console.error("Failed to cleanup agents for repo", repoRoot, error);
         }
       })
     );
 
+    await killLayoutSessions(layout);
     localStorage.removeItem(LAST_REPO_KEY);
-    sessionKeys.forEach((key) => localStorage.removeItem(key));
     void getCurrentWindow().close();
-  }, [repoStatus]);
+  }, [killLayoutSessions, layout, repoStatus]);
 
   return (
     <main className="app-shell">
       <SyncBar
         syncEnabled={syncTyping}
         onToggleSync={() => setSyncTyping((prev) => !prev)}
-        onSplit={() => void splitActivePane("vertical")}
         onBindRepo={() => void handleBindRepo()}
         repoStatus={repoStatus}
         repoError={repoError}
         repoLoading={repoLoading}
-        onStartSession={openSessionDialog}
+        onCreateAgent={openAgentDialog}
         onQuit={handleQuit}
         onClearCachesAndQuit={handleClearCachesAndQuit}
       />
-      <SessionOverview session={taskSession} />
+      <AgentOverview agents={agents} />
       <section className="terminal-card">
         {layout ? (
           <div className="layout-root">
@@ -828,59 +756,57 @@ function App() {
             />
           </div>
         ) : (
-          <div className="loading">
-            No terminals yet. Click "Split pane" to start the first one.
-          </div>
+          <div className="loading">No terminals yet. Create an agent to start.</div>
         )}
       </section>
-      {sessionDialogOpen ? (
+      {agentDialogOpen ? (
         <div
-          className="session-dialog-backdrop"
+          className="agent-dialog-backdrop"
           onClick={() => {
-            if (!creatingSession) setSessionDialogOpen(false);
+            if (!creatingAgent) setAgentDialogOpen(false);
           }}
         >
           <div
-            className="session-dialog"
+            className="agent-dialog"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="session-dialog-header">
-              <h3>Start parallel task</h3>
+            <div className="agent-dialog-header">
+              <h3>Create new agent</h3>
               <p className="muted">
-                Creates one worktree per agent from {repoStatus?.root_path ?? "your repo"}.
+                Creates a worktree in {repoStatus?.root_path ?? "your repo"} and runs the start command.
               </p>
             </div>
             <label className="field">
-              <span>Base branch</span>
+              <span>Agent name</span>
               <input
-                value={sessionBranchInput}
-                onChange={(e) => setSessionBranchInput(e.target.value)}
-                placeholder={repoStatus?.branch ?? "main"}
+                value={agentNameInput}
+                onChange={(e) => setAgentNameInput(e.target.value)}
+                placeholder={`agent-${agents.length + 1}`}
               />
             </label>
             <label className="field">
-              <span>Agents (one per line)</span>
-              <textarea
-                value={sessionAgentsInput}
-                onChange={(e) => setSessionAgentsInput(e.target.value)}
-                rows={4}
+              <span>Starting command</span>
+              <input
+                value={agentCommandInput}
+                onChange={(e) => setAgentCommandInput(e.target.value)}
+                placeholder="npm start"
               />
             </label>
-            {sessionError ? <div className="session-error">{sessionError}</div> : null}
+            {agentError ? <div className="agent-error">{agentError}</div> : null}
             <div className="dialog-actions">
               <button
                 className="chip"
-                onClick={() => setSessionDialogOpen(false)}
-                disabled={creatingSession}
+                onClick={() => setAgentDialogOpen(false)}
+                disabled={creatingAgent}
               >
                 Cancel
               </button>
               <button
                 className="chip primary"
-                onClick={() => void handleCreateSession()}
-                disabled={creatingSession}
+                onClick={() => void handleCreateAgent()}
+                disabled={creatingAgent}
               >
-                {creatingSession ? "Creating..." : "Create session"}
+                {creatingAgent ? "Creating..." : "Create agent"}
               </button>
             </div>
           </div>

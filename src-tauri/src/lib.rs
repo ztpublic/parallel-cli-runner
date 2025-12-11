@@ -13,8 +13,8 @@ use uuid::Uuid;
 
 mod git;
 use crate::git::RepoStatusDto;
-mod task_session;
-use crate::task_session::{AgentDescriptor, CleanupMode, SessionManager, TaskSession};
+mod agent;
+use crate::agent::{Agent, AgentManager};
 
 #[derive(Default, Clone)]
 struct PtyManager {
@@ -217,50 +217,32 @@ async fn git_commit(
 }
 
 #[tauri::command]
-async fn create_task_session(
-    manager: State<'_, SessionManager>,
+async fn create_agent(
+    manager: State<'_, AgentManager>,
     repo_root: String,
+    name: String,
+    start_command: String,
     base_branch: Option<String>,
-    agents: Vec<AgentDescriptor>,
-) -> Result<TaskSession, String> {
-    task_session::create_task_session(&manager, repo_root, base_branch, agents)
+) -> Result<Agent, String> {
+    agent::create_agent(&manager, repo_root, name, start_command, base_branch)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn finish_agent(
-    manager: State<'_, SessionManager>,
-    session_id: String,
-    agent_id: String,
-) -> Result<TaskSession, String> {
-    task_session::finish_agent(&manager, &session_id, &agent_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn choose_winner(
-    manager: State<'_, SessionManager>,
-    session_id: String,
-    agent_id: String,
-) -> Result<TaskSession, String> {
-    task_session::choose_winner(&manager, &session_id, &agent_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn cleanup_session(
-    manager: State<'_, SessionManager>,
-    session_id: String,
-    mode: CleanupMode,
-) -> Result<TaskSession, String> {
-    task_session::cleanup_session(&manager, &session_id, mode).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn list_sessions(
-    manager: State<'_, SessionManager>,
+async fn list_agents(
+    manager: State<'_, AgentManager>,
     repo_root: String,
-) -> Result<Vec<TaskSession>, String> {
+) -> Result<Vec<Agent>, String> {
     let path = PathBuf::from(repo_root);
-    manager.load_repo_sessions(&path).map_err(|e| e.to_string())
+    manager.load_repo_agents(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn cleanup_agents(
+    manager: State<'_, AgentManager>,
+    repo_root: String,
+) -> Result<(), String> {
+    agent::cleanup_agents(&manager, repo_root).map_err(|e| e.to_string())
 }
 
 fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
@@ -301,7 +283,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::default())
-        .manage(SessionManager::default())
+        .manage(AgentManager::default())
         .invoke_handler(tauri::generate_handler![
             create_session,
             write_to_session,
@@ -312,11 +294,9 @@ pub fn run() {
             git_status,
             git_diff,
             git_commit,
-            create_task_session,
-            finish_agent,
-            choose_winner,
-            cleanup_session,
-            list_sessions
+            create_agent,
+            list_agents,
+            cleanup_agents
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
