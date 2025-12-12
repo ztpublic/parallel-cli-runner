@@ -11,6 +11,9 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
+mod command_error;
+use crate::command_error::CommandError;
+
 mod git;
 use crate::git::RepoStatusDto;
 mod agent;
@@ -94,7 +97,7 @@ async fn create_session(
     app: AppHandle,
     cmd: Option<String>,
     cwd: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, CommandError> {
     let shell = cmd.unwrap_or_else(default_shell);
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -104,10 +107,13 @@ async fn create_session(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(CommandError::internal)?;
 
-    let reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
-    let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
+    let reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(CommandError::internal)?;
+    let writer = pair.master.take_writer().map_err(CommandError::internal)?;
     let mut command = CommandBuilder::new(shell);
     command.env("TERM", "xterm-256color");
     if let Some(dir) = cwd {
@@ -117,14 +123,15 @@ async fn create_session(
     let child = pair
         .slave
         .spawn_command(command)
-        .map_err(|e| e.to_string())?;
+        .map_err(CommandError::internal)?;
 
     let session_id = Uuid::new_v4();
     manager.insert(
         session_id,
         Arc::new(PtySession::new(pair.master, writer, child)),
     );
-    spawn_reader_loop(app, session_id, reader);
+    let manager_clone = manager.inner().clone();
+    spawn_reader_loop(manager_clone, app, session_id, reader);
 
     Ok(session_id.to_string())
 }
@@ -134,13 +141,14 @@ async fn write_to_session(
     manager: State<'_, PtyManager>,
     id: String,
     data: String,
-) -> Result<(), String> {
-    let session_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+) -> Result<(), CommandError> {
+    let session_id = Uuid::parse_str(&id)
+        .map_err(|_| CommandError::new("invalid_argument", "invalid session id"))?;
     let Some(session) = manager.get(&session_id) else {
-        return Err("session not found".into());
+        return Err(CommandError::new("not_found", "session not found"));
     };
 
-    session.write(&data).map_err(|e| e.to_string())
+    session.write(&data).map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -149,23 +157,25 @@ async fn resize_session(
     id: String,
     cols: u16,
     rows: u16,
-) -> Result<(), String> {
-    let session_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+) -> Result<(), CommandError> {
+    let session_id = Uuid::parse_str(&id)
+        .map_err(|_| CommandError::new("invalid_argument", "invalid session id"))?;
     let Some(session) = manager.get(&session_id) else {
-        return Err("session not found".into());
+        return Err(CommandError::new("not_found", "session not found"));
     };
 
-    session.resize(cols, rows).map_err(|e| e.to_string())
+    session.resize(cols, rows).map_err(CommandError::internal)
 }
 
 #[tauri::command]
-async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<(), String> {
-    let session_id = Uuid::parse_str(&id).map_err(|e| e.to_string())?;
+async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<(), CommandError> {
+    let session_id = Uuid::parse_str(&id)
+        .map_err(|_| CommandError::new("invalid_argument", "invalid session id"))?;
     let Some(session) = manager.remove(&session_id) else {
-        return Err("session not found".into());
+        return Err(CommandError::new("not_found", "session not found"));
     };
 
-    session.kill().map_err(|e| e.to_string())
+    session.kill().map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -173,42 +183,42 @@ async fn broadcast_line(
     manager: State<'_, PtyManager>,
     session_ids: Vec<String>,
     line: String,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     for id in session_ids {
         let Ok(session_id) = Uuid::parse_str(&id) else {
             continue;
         };
         if let Some(session) = manager.get(&session_id) {
-            session.write(&line).map_err(|e| e.to_string())?;
+            session.write(&line).map_err(CommandError::internal)?;
         }
     }
     Ok(())
 }
 
 #[tauri::command]
-async fn git_detect_repo(cwd: String) -> Result<Option<String>, String> {
+async fn git_detect_repo(cwd: String) -> Result<Option<String>, CommandError> {
     let path = PathBuf::from(cwd);
     git::detect_repo(&path)
         .map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
-async fn git_status(cwd: String) -> Result<RepoStatusDto, String> {
+async fn git_status(cwd: String) -> Result<RepoStatusDto, CommandError> {
     let path = PathBuf::from(cwd);
-    git::status(&path).map_err(|e| e.to_string())
+    git::status(&path).map_err(CommandError::from)
 }
 
 #[tauri::command]
-async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, String> {
+async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, CommandError> {
     let path = PathBuf::from(cwd);
-    git::diff(&path, &pathspecs).map_err(|e| e.to_string())
+    git::diff(&path, &pathspecs).map_err(CommandError::from)
 }
 
 #[tauri::command]
-async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, String> {
+async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, CommandError> {
     let path = PathBuf::from(cwd);
-    git::list_branches(&path).map_err(|e| e.to_string())
+    git::list_branches(&path).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -217,9 +227,9 @@ async fn git_commit(
     message: String,
     stage_all: bool,
     amend: bool,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
-    git::commit(&path, &message, stage_all, amend).map_err(|e| e.to_string())
+    git::commit(&path, &message, stage_all, amend).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -229,34 +239,34 @@ async fn create_agent(
     name: String,
     start_command: String,
     base_branch: Option<String>,
-) -> Result<Agent, String> {
+) -> Result<Agent, CommandError> {
     agent::create_agent(&manager, repo_root, name, start_command, base_branch)
-        .map_err(|e| e.to_string())
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
 async fn list_agents(
     manager: State<'_, AgentManager>,
     repo_root: String,
-) -> Result<Vec<Agent>, String> {
+) -> Result<Vec<Agent>, CommandError> {
     let path = PathBuf::from(repo_root);
-    manager.load_repo_agents(&path).map_err(|e| e.to_string())
+    manager.load_repo_agents(&path).map_err(CommandError::from)
 }
 
 #[tauri::command]
 async fn cleanup_agents(
     manager: State<'_, AgentManager>,
     repo_root: String,
-) -> Result<(), String> {
-    agent::cleanup_agents(&manager, repo_root).map_err(|e| e.to_string())
+) -> Result<(), CommandError> {
+    agent::cleanup_agents(&manager, repo_root).map_err(CommandError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn agent_diff_stats(
     manager: State<'_, AgentManager>,
     repo_root: String,
-) -> Result<Vec<AgentDiffStat>, String> {
-    agent::agent_diff_stats(&manager, repo_root).map_err(|e| e.to_string())
+) -> Result<Vec<AgentDiffStat>, CommandError> {
+    agent::agent_diff_stats(&manager, repo_root).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -264,20 +274,25 @@ async fn remove_agent(
     manager: State<'_, AgentManager>,
     repo_root: String,
     agent_id: String,
-) -> Result<(), String> {
-    agent::remove_agent(&manager, repo_root, agent_id).map_err(|e| e.to_string())
+) -> Result<(), CommandError> {
+    agent::remove_agent(&manager, repo_root, agent_id).map_err(CommandError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn open_diff_between_refs(
     worktree_path: String,
     path: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), CommandError> {
     let worktree = PathBuf::from(worktree_path);
-    git::difftool(&worktree, path.as_deref()).map_err(|e| e.to_string())
+    git::difftool(&worktree, path.as_deref()).map_err(CommandError::from)
 }
 
-fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read + Send>) {
+fn spawn_reader_loop(
+    manager: PtyManager,
+    app: AppHandle,
+    session_id: Uuid,
+    mut reader: Box<dyn Read + Send>,
+) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
         loop {
@@ -294,6 +309,9 @@ fn spawn_reader_loop(app: AppHandle, session_id: Uuid, mut reader: Box<dyn Read 
                 Err(_) => break,
             }
         }
+
+        // Ensure sessions don't leak when the underlying process exits.
+        let _ = manager.remove(&session_id);
     });
 }
 

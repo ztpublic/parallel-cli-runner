@@ -30,3 +30,7 @@ src-tauri/target
 src-tauri/.cargo
 src-tauri/gen
 src-tauri/tauri-build
+
+# App caches / worktrees
+.parallel-cli
+.parallel-worktrees

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    my_mux_terminal_lib::run()
+    parallel_cli_runner_lib::run()
 }

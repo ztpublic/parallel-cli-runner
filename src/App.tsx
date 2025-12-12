@@ -1,131 +1,38 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import "xterm/css/xterm.css";
 import "./App.css";
 import { Agent, AgentDiffStat, BranchInfo } from "./types/agent";
-
-type SessionData = {
-  id: string;
-  data: string;
-};
-
-type Orientation = "vertical" | "horizontal";
-
-type PaneNode = {
-  type: "pane";
-  id: string;
-  sessionId: string;
-  meta?: PaneMeta;
-};
-
-type SplitNode = {
-  type: "split";
-  id: string;
-  orientation: Orientation;
-  children: [LayoutNode, LayoutNode];
-};
-
-type LayoutNode = PaneNode | SplitNode;
-
-type PaneMeta = {
-  agentId?: string;
-  agentName?: string;
-  branchName?: string;
-  worktreePath?: string;
-};
-
-const createId = () => crypto.randomUUID();
+import { RepoStatusDto } from "./types/git";
+import {
+  PaneNode,
+  PaneMeta,
+  LayoutNode,
+  collectPanes,
+  countPanes,
+  findPane,
+  getFirstPane,
+  removePane,
+  buildLayoutFromPanes,
+  createId,
+} from "./types/layout";
+import { LayoutRenderer } from "./components/LayoutRenderer";
+import { SyncBar } from "./components/SyncBar";
+import { AgentOverview } from "./components/AgentOverview";
 const LAST_REPO_KEY = "parallel:lastRepo";
 const LAST_BRANCH_KEY = "parallel:lastBranch";
 
-type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
-
-type FileStatusDto = {
-  path: string;
-  staged: FileChangeType | null;
-  unstaged: FileChangeType | null;
-};
-
-type CommitInfoDto = {
-  id: string;
-  summary: string;
-  author: string;
-  relative_time: string;
-};
-
-type RepoStatusDto = {
-  repo_id: string;
-  root_path: string;
-  branch: string;
-  ahead: number;
-  behind: number;
-  has_untracked: boolean;
-  has_staged: boolean;
-  has_unstaged: boolean;
-  conflicted_files: number;
-  modified_files: FileStatusDto[];
-  latest_commit: CommitInfoDto | null;
-};
-
-function countPanes(node: LayoutNode | null): number {
-  if (!node) return 0;
-  if (node.type === "pane") return 1;
-  return countPanes(node.children[0]) + countPanes(node.children[1]);
-}
-
-function findPane(node: LayoutNode | null, paneId: string): PaneNode | null {
-  if (!node) return null;
-  if (node.type === "pane") return node.id === paneId ? node : null;
-  return (
-    findPane(node.children[0], paneId) ||
-    findPane(node.children[1], paneId)
-  );
-}
-
-function getFirstPane(node: LayoutNode | null): PaneNode | null {
-  if (!node) return null;
-  if (node.type === "pane") return node;
-  return getFirstPane(node.children[0]) ?? getFirstPane(node.children[1]);
-}
-
-function collectPanes(node: LayoutNode | null, acc: PaneNode[] = []): PaneNode[] {
-  if (!node) return acc;
-  if (node.type === "pane") {
-    acc.push(node);
-    return acc;
+function formatInvokeError(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    const maybeMessage = (error as { message?: unknown }).message;
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) return maybeMessage;
+    const maybeError = (error as { error?: unknown }).error;
+    if (typeof maybeError === "string" && maybeError.trim()) return maybeError;
   }
-  collectPanes(node.children[0], acc);
-  collectPanes(node.children[1], acc);
-  return acc;
-}
-
-function removePane(
-  node: LayoutNode,
-  targetPaneId: string
-): LayoutNode | null {
-  if (node.type === "pane") {
-    return node.id === targetPaneId ? null : node;
-  }
-
-  const nextLeft = removePane(node.children[0], targetPaneId);
-  const nextRight = removePane(node.children[1], targetPaneId);
-
-  if (!nextLeft && !nextRight) {
-    return null;
-  }
-  if (!nextLeft) {
-    return nextRight;
-  }
-  if (!nextRight) {
-    return nextLeft;
-  }
-
-  return { ...node, children: [nextLeft, nextRight] };
+  return "Unexpected error.";
 }
 
 async function createPaneNode(
@@ -140,337 +47,6 @@ async function createPaneNode(
     sessionId,
     meta: opts?.meta,
   };
-}
-
-type TerminalPaneProps = {
-  pane: PaneNode;
-  isActive: boolean;
-  onFocused: (id: string) => void;
-  onInput?: (pane: PaneNode, data: string) => void;
-};
-
-function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPaneProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const onInputRef = useRef(onInput);
-
-  useEffect(() => {
-    onInputRef.current = onInput;
-  }, [onInput]);
-
-  const syncSize = useCallback(async () => {
-    const term = termRef.current;
-    const fitAddon = fitAddonRef.current;
-    if (!term || !fitAddon) return;
-
-    fitAddon.fit();
-    const cols = term.cols;
-    const rows = term.rows;
-    await invoke("resize_session", { id: pane.sessionId, cols, rows });
-  }, [pane.sessionId]);
-
-  useEffect(() => {
-    const term = new Terminal({
-      convertEol: true,
-      cursorBlink: true,
-      fontSize: 14,
-      disableStdin: false,
-      theme: {
-        background: "#0b1021",
-      },
-    });
-    const fitAddon = new FitAddon();
-    termRef.current = term;
-    fitAddonRef.current = fitAddon;
-    term.loadAddon(fitAddon);
-
-    if (containerRef.current) {
-      term.open(containerRef.current);
-    }
-
-    const unsubscribeData = term.onData((data) => {
-      void invoke("write_to_session", { id: pane.sessionId, data });
-      if (onInputRef.current) {
-        onInputRef.current(pane, data);
-      }
-    });
-
-    let unlisten: (() => void) | undefined;
-    listen<SessionData>("session-data", (event) => {
-      if (event.payload.id === pane.sessionId) {
-        term.write(event.payload.data);
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    void syncSize();
-
-    const resizeObserver = new ResizeObserver(() => {
-      void syncSize();
-    });
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
-    window.addEventListener("resize", syncSize);
-
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", syncSize);
-      unsubscribeData.dispose();
-      term.dispose();
-      if (unlisten) {
-        unlisten();
-      }
-    };
-  }, [pane.sessionId, syncSize]);
-
-  useEffect(() => {
-    if (isActive && termRef.current) {
-      termRef.current.focus();
-    }
-  }, [isActive]);
-
-  return (
-    <div
-      className={`pane ${isActive ? "pane-active" : ""}`}
-      ref={containerRef}
-      tabIndex={0}
-      onClick={() => onFocused(pane.id)}
-    >
-      <div className="pane-label" aria-hidden>
-        <div className="pane-label-primary">
-          {pane.meta?.agentName ?? pane.meta?.agentId ?? "Pane"}
-        </div>
-        {pane.meta?.branchName ? (
-          <div className="pane-label-sub">{pane.meta.branchName}</div>
-        ) : pane.meta?.worktreePath ? (
-          <div className="pane-label-sub">{pane.meta.worktreePath}</div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-type LayoutRendererProps = {
-  node: LayoutNode;
-  activePaneId: string | null;
-  onFocusPane: (id: string) => void;
-  onPaneInput?: (pane: PaneNode, data: string) => void;
-};
-
-function LayoutRenderer({
-  node,
-  activePaneId,
-  onFocusPane,
-  onPaneInput,
-}: LayoutRendererProps) {
-  if (node.type === "pane") {
-    return (
-      <TerminalPane
-        pane={node}
-        isActive={node.id === activePaneId}
-        onFocused={onFocusPane}
-        onInput={onPaneInput}
-      />
-    );
-  }
-
-  const direction =
-    node.orientation === "vertical" ? "split-vertical" : "split-horizontal";
-
-  return (
-    <div className={`split ${direction}`}>
-      {node.children.map((child) => (
-        <div
-          key={child.id}
-          className="split-child"
-          style={{ flexGrow: countPanes(child) || 1 }}
-        >
-          <LayoutRenderer
-            node={child}
-            activePaneId={activePaneId}
-            onFocusPane={onFocusPane}
-            onPaneInput={onPaneInput}
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-type SyncBarProps = {
-  syncEnabled: boolean;
-  onToggleSync: () => void;
-  onBindRepo: () => void;
-  repoStatus: RepoStatusDto | null;
-  repoError: string | null;
-  repoLoading: boolean;
-  onCreateAgent: () => void;
-  onQuit: () => void;
-  onClearCachesAndQuit: () => void;
-};
-
-function SyncBar({
-  syncEnabled,
-  onToggleSync,
-  onBindRepo,
-  repoStatus,
-  repoError,
-  repoLoading,
-  onCreateAgent,
-  onQuit,
-  onClearCachesAndQuit,
-}: SyncBarProps) {
-  const stagedCount = repoStatus
-    ? repoStatus.modified_files.filter((file) => file.staged).length
-    : 0;
-  const unstagedCount = repoStatus
-    ? repoStatus.modified_files.filter((file) => file.unstaged).length
-    : 0;
-
-  return (
-    <div className="broadcast-bar">
-      <div className="broadcast-meta">
-        <button
-          className={syncEnabled ? "chip active" : "chip"}
-          onClick={onToggleSync}
-          title="Mirror keystrokes from the active pane to all other panes"
-        >
-          Sync typing to all panes
-        </button>
-        <button className="chip" onClick={onBindRepo} disabled={repoLoading}>
-          {repoLoading ? "Binding..." : "Bind git repo"}
-        </button>
-        <button
-          className="chip"
-          onClick={onCreateAgent}
-          disabled={!repoStatus || repoLoading}
-          title="Create a new agent worktree and run its start command"
-        >
-          Create new agent
-        </button>
-        <button
-          className="chip chip-clear"
-          onClick={onClearCachesAndQuit}
-          title="Clear cached repo/agent data and quit"
-        >
-          Clear caches &amp; quit
-        </button>
-        <button className="chip chip-quit" onClick={onQuit} title="Quit app">
-          Quit
-        </button>
-      </div>
-      <div className="repo-status-row">
-        {repoLoading ? (
-          <div className="repo-status muted">Checking repository...</div>
-        ) : repoError ? (
-          <div className="repo-status repo-error">{repoError}</div>
-        ) : repoStatus ? (
-          <div className="repo-summary">
-            <div className="repo-path">{repoStatus.root_path}</div>
-            <div className="repo-counts">
-              Staged {stagedCount} · Unstaged {unstagedCount}
-            </div>
-          </div>
-        ) : (
-          <div className="repo-status muted">No git repo bound.</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AgentOverview({
-  agents,
-  diffStats,
-  openMenuId,
-  onToggleMenu,
-  onShowDiff,
-  onRemoveAgent,
-  removingAgentId,
-}: {
-  agents: Agent[];
-  diffStats: Record<string, AgentDiffStat | undefined>;
-  openMenuId: string | null;
-  onToggleMenu: (agentId: string) => void;
-  onShowDiff: (agent: Agent) => void;
-  onRemoveAgent: (agent: Agent) => void;
-  removingAgentId: string | null;
-}) {
-  if (!agents.length) return null;
-
-  const formatDiffStat = (stat?: AgentDiffStat) => {
-    if (!stat) return "\u2014";
-    const fileLabel = stat.files_changed === 1 ? "file" : "files";
-    return `${stat.files_changed} ${fileLabel} +${stat.insertions} -${stat.deletions}`;
-  };
-
-  return (
-    <div className="agent-overview">
-      <div className="agent-head">
-        <div className="agent-pills">
-          <span className="pill">Agents {agents.length}</span>
-        </div>
-        <div className="agent-meta muted">Worktrees {agents.length}</div>
-      </div>
-      <div className="agent-grid">
-        {agents.map((agent) => {
-          const diff = diffStats[agent.id];
-          return (
-            <div className="agent-card" key={agent.id}>
-              <div className="agent-card-top">
-                <div className="agent-card-heading">
-                  <div className="agent-name">{agent.name}</div>
-                  <div className={diff ? "agent-diff" : "agent-diff agent-diff-pending"}>
-                    {formatDiffStat(diff)}
-                  </div>
-                </div>
-                <button
-                  className="agent-menu-button"
-                  aria-label="Agent actions"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggleMenu(agent.id);
-                  }}
-                >
-                  ...
-                </button>
-                {openMenuId === agent.id ? (
-                  <div
-                    className="agent-menu"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <button
-                      className="agent-menu-item"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onShowDiff(agent);
-                      }}
-                      disabled={removingAgentId === agent.id}
-                    >
-                      Show diff view
-                    </button>
-                    <button
-                      className="agent-menu-item danger"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onRemoveAgent(agent);
-                      }}
-                      disabled={removingAgentId === agent.id}
-                    >
-                      {removingAgentId === agent.id ? "Removing..." : "Remove agent"}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 function App() {
   const [layout, setLayout] = useState<LayoutNode | null>(null);
@@ -494,6 +70,25 @@ function App() {
   const [branchSelection, setBranchSelection] = useState<string>("");
   const [pendingRepoPath, setPendingRepoPath] = useState<string | null>(null);
   const hasRestoredRepo = useRef(false);
+
+  const resetLayoutState = useCallback(() => {
+    setLayout(null);
+    setActivePaneId(null);
+    setSyncTyping(false);
+  }, []);
+
+  const resetAgentsState = useCallback(() => {
+    setAgents([]);
+    setAgentMenuOpenId(null);
+    setRemovingAgentId(null);
+    setAgentDiffStats({});
+  }, []);
+
+  const resetRepoState = useCallback(() => {
+    setRepoStatus(null);
+    setBaseBranch(null);
+  }, []);
+
   const runStartCommand = useCallback(async (pane: PaneNode, command: string) => {
     if (!command.trim()) return;
     const commandToRun = command.endsWith("\n") ? command : `${command}\n`;
@@ -509,26 +104,11 @@ function App() {
     );
   }, []);
 
-  const buildLayoutFromPanes = useCallback((panes: PaneNode[]): LayoutNode | null => {
-    if (!panes.length) return null;
-    return panes.reduce<LayoutNode | null>((acc, pane) => {
-      if (!acc) return pane;
-      return {
-        type: "split",
-        id: createId(),
-        orientation: "vertical",
-        children: [acc, pane],
-      };
-    }, null);
-  }, []);
-
   const launchAgentPanes = useCallback(
     async (agentList: Agent[]) => {
       await killLayoutSessions(layout);
       if (!agentList.length) {
-        setLayout(null);
-        setActivePaneId(null);
-        setSyncTyping(false);
+        resetLayoutState();
         return;
       }
 
@@ -558,7 +138,7 @@ function App() {
         )
       );
     },
-    [buildLayoutFromPanes, killLayoutSessions, layout, runStartCommand]
+    [killLayoutSessions, layout, runStartCommand]
   );
 
   const refreshAgentDiffStats = useCallback(async (repoRoot: string) => {
@@ -591,16 +171,12 @@ function App() {
         await refreshAgentDiffStats(repoRoot);
       } catch (error) {
         console.error("Failed to load agents", error);
-        setAgents([]);
-        setAgentMenuOpenId(null);
-        setRemovingAgentId(null);
-        setAgentDiffStats({});
+        resetAgentsState();
         await killLayoutSessions(layout);
-        setLayout(null);
-        setActivePaneId(null);
+        resetLayoutState();
       }
     },
-    [killLayoutSessions, launchAgentPanes, layout, refreshAgentDiffStats]
+    [killLayoutSessions, launchAgentPanes, layout, refreshAgentDiffStats, resetAgentsState, resetLayoutState]
   );
 
   const bindRepoPath = useCallback(
@@ -612,18 +188,13 @@ function App() {
       try {
         const detected = await invoke<string | null>("git_detect_repo", { cwd: repoRoot });
         if (!detected) {
-          setRepoStatus(null);
-          setAgents([]);
-          setAgentMenuOpenId(null);
-          setRemovingAgentId(null);
-          setAgentDiffStats({});
-          setBaseBranch(null);
+          resetRepoState();
+          resetAgentsState();
           if (!silent) {
             setRepoError("Selected folder is not inside a git repository.");
           }
           await killLayoutSessions(layout);
-          setLayout(null);
-          setActivePaneId(null);
+          resetLayoutState();
           return;
         }
 
@@ -637,28 +208,17 @@ function App() {
         await loadAgentsForRepo(detected);
       } catch (error) {
         if (!silent) {
-          const message =
-            error instanceof Error
-              ? error.message
-              : typeof error === "string"
-                ? error
-                : "Failed to bind git repo.";
-          setRepoError(message);
-          setRepoStatus(null);
-          setAgents([]);
-          setAgentMenuOpenId(null);
-          setRemovingAgentId(null);
-          setAgentDiffStats({});
-          setBaseBranch(null);
+          setRepoError(formatInvokeError(error) || "Failed to bind git repo.");
+          resetRepoState();
+          resetAgentsState();
           await killLayoutSessions(layout);
-          setLayout(null);
-          setActivePaneId(null);
+          resetLayoutState();
         }
       } finally {
         setRepoLoading(false);
       }
     },
-    [killLayoutSessions, layout, loadAgentsForRepo]
+    [killLayoutSessions, layout, loadAgentsForRepo, resetAgentsState, resetLayoutState, resetRepoState]
   );
 
   const handleBindRepo = useCallback(async () => {
@@ -674,13 +234,7 @@ function App() {
       });
       pickedPath = Array.isArray(selection) ? selection[0] : selection;
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : "Failed to open folder picker.";
-      setRepoError(message);
+      setRepoError(formatInvokeError(error) || "Failed to open folder picker.");
       return;
     }
 
@@ -703,13 +257,7 @@ function App() {
       setPendingRepoPath(repoRoot);
       setBranchDialogOpen(true);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : "Failed to prepare branch selection.";
-      setRepoError(message);
+      setRepoError(formatInvokeError(error) || "Failed to prepare branch selection.");
     }
   }, []);
 
@@ -732,7 +280,7 @@ function App() {
       setActivePaneId(pane.id);
       setSyncTyping(false);
     },
-    [buildLayoutFromPanes]
+    []
   );
 
   const toggleAgentMenu = useCallback((agentId: string) => {
@@ -806,13 +354,7 @@ function App() {
       setAgentNameInput("");
       setAgentCommandInput("");
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === "string"
-            ? error
-            : "Failed to create agent.";
-      setAgentError(message);
+      setAgentError(formatInvokeError(error) || "Failed to create agent.");
     } finally {
       setCreatingAgent(false);
     }
@@ -845,13 +387,7 @@ function App() {
           agentId: agent.id,
         });
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : typeof error === "string"
-              ? error
-              : "Failed to remove agent.";
-        setRepoError(message);
+        setRepoError(formatInvokeError(error) || "Failed to remove agent.");
         setRemovingAgentId(null);
         return;
       }
@@ -905,13 +441,7 @@ function App() {
         });
         setAgentMenuOpenId(null);
       } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : typeof error === "string"
-              ? error
-              : "Failed to open diff view.";
-        setRepoError(message);
+        setRepoError(formatInvokeError(error) || "Failed to open diff view.");
       }
     },
     [repoStatus]

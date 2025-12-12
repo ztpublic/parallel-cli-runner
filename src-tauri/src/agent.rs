@@ -59,8 +59,7 @@ impl AgentManager {
     }
 
     pub fn load_repo_agents(&self, repo_root: &Path) -> Result<Vec<Agent>, AgentError> {
-        let canonical_repo =
-            fs::canonicalize(repo_root).unwrap_or_else(|_| repo_root.to_path_buf());
+        let canonical_repo = git::canonicalize_path(repo_root);
         let dir = agents_dir(&canonical_repo);
         if !dir.exists() {
             return Ok(Vec::new());
@@ -74,8 +73,7 @@ impl AgentManager {
             }
             let data = fs::read_to_string(entry.path())?;
             let agent: Agent = serde_json::from_str(&data)?;
-            let agent_repo = fs::canonicalize(PathBuf::from(&agent.repo_id))
-                .unwrap_or_else(|_| PathBuf::from(&agent.repo_id));
+            let agent_repo = git::canonicalize_path(Path::new(&agent.repo_id));
             if agent_repo == canonical_repo {
                 loaded.push(agent);
             }
@@ -121,7 +119,7 @@ pub fn create_agent(
     let detected_repo = git::detect_repo(&repo_root)
         .map_err(AgentError::from)?
         .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
-    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let canonical_repo = git::canonicalize_path(&detected_repo);
     let branch_start = match base_branch {
         Some(branch) if !branch.trim().is_empty() => branch,
         _ => git::current_branch(&canonical_repo)?,
@@ -153,15 +151,15 @@ pub fn cleanup_agents(manager: &AgentManager, repo_root: String) -> Result<(), A
     let detected_repo = git::detect_repo(&repo_root)
         .map_err(AgentError::from)?
         .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
-    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let canonical_repo = git::canonicalize_path(&detected_repo);
     let agents = manager.load_repo_agents(&canonical_repo)?;
 
+    let mut guard = manager.agents.lock().expect("agent map poisoned");
     for agent in &agents {
         let worktree_path = PathBuf::from(&agent.worktree_path);
         let _ = git::remove_worktree(&canonical_repo, &worktree_path, true);
         let _ = git::delete_branch(&canonical_repo, &agent.branch_name, true);
         let _ = fs::remove_file(agent_meta_path(&canonical_repo, &agent.id));
-        let mut guard = manager.agents.lock().expect("agent map poisoned");
         guard.remove(&agent.id);
     }
 
@@ -177,7 +175,7 @@ pub fn remove_agent(
     let detected_repo = git::detect_repo(&repo_root)
         .map_err(AgentError::from)?
         .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
-    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let canonical_repo = git::canonicalize_path(&detected_repo);
     let agents = manager.load_repo_agents(&canonical_repo)?;
     let agent = agents
         .into_iter()
@@ -204,7 +202,7 @@ pub fn agent_diff_stats(
     let detected_repo = git::detect_repo(&repo_root)
         .map_err(AgentError::from)?
         .ok_or_else(|| AgentError::NotGitRepo(repo_root.display().to_string()))?;
-    let canonical_repo = fs::canonicalize(detected_repo.clone()).unwrap_or(detected_repo);
+    let canonical_repo = git::canonicalize_path(&detected_repo);
     let agents = manager.load_repo_agents(&canonical_repo)?;
     if agents.is_empty() {
         return Ok(Vec::new());

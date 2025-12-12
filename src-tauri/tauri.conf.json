@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "my-mux-terminal",
+  "productName": "parallel-cli-runner",
   "version": "0.1.0",
-  "identifier": "com.zt.my-mux-terminal",
+  "identifier": "com.zt.parallel-cli-runner",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "my-mux-terminal",
+        "title": "parallel-cli-runner",
         "width": 800,
         "height": 600,
         "fullscreen": true

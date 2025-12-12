@@ -113,7 +113,7 @@ pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
                 return Ok(None);
             }
             let root_path = PathBuf::from(root);
-            Ok(Some(canonicalize(root_path)))
+            Ok(Some(canonicalize_path(&root_path)))
         }
         Err(GitError::GitFailed { stderr, .. })
             if stderr.to_ascii_lowercase().contains("not a git repository") =>
@@ -126,8 +126,8 @@ pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
 
 pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
     let repo_root = ensure_repo(cwd)?;
-    let output = run_git(cwd, &["status", "--porcelain=v2", "-b"])?;
-    let mut status = parse_status(&output.stdout, &repo_root);
+    let output = run_git(cwd, &["status", "--porcelain=v2", "-z", "-b"])?;
+    let mut status = parse_status_z(&output.stdout, &repo_root);
     status.latest_commit = latest_commit(&repo_root)?;
     Ok(status)
 }
@@ -266,15 +266,16 @@ pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
 
 pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
     let worktree = ensure_repo(worktree)?;
+    let tool = resolve_difftool_tool();
+
     // If a specific path is requested, run difftool for that path.
     if let Some(p) = path {
-        let args: Vec<String> = vec![
-            "difftool".to_string(),
-            "-y".to_string(),
-            "--tool=opendiff".to_string(),
-            "--".to_string(),
-            p.to_string(),
-        ];
+        let mut args: Vec<String> = vec!["difftool".to_string(), "-y".to_string()];
+        if let Some(tool) = &tool {
+            args.push(format!("--tool={tool}"));
+        }
+        args.push("--".to_string());
+        args.push(p.to_string());
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         return run_git(&worktree, &arg_refs).map(|_| ());
     }
@@ -288,11 +289,10 @@ pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
         .unwrap_or_default();
 
     if !tracked.trim().is_empty() || !tracked_cached.trim().is_empty() {
-        let args: Vec<String> = vec![
-            "difftool".to_string(),
-            "-y".to_string(),
-            "--tool=opendiff".to_string(),
-        ];
+        let mut args: Vec<String> = vec!["difftool".to_string(), "-y".to_string()];
+        if let Some(tool) = &tool {
+            args.push(format!("--tool={tool}"));
+        }
         let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
         return run_git(&worktree, &arg_refs).map(|_| ());
     }
@@ -300,14 +300,17 @@ pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
     // Fall back to showing untracked file(s) against /dev/null.
     if let Ok(out) = run_git(&worktree, &["ls-files", "--others", "--exclude-standard"]) {
         if let Some(first) = out.stdout.lines().find(|l| !l.trim().is_empty()) {
-            let args: Vec<String> = vec![
+            let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
+            let mut args: Vec<String> = vec![
                 "difftool".to_string(),
                 "-y".to_string(),
-                "--tool=opendiff".to_string(),
-                "--no-index".to_string(),
-                "/dev/null".to_string(),
-                first.trim().to_string(),
             ];
+            if let Some(tool) = &tool {
+                args.push(format!("--tool={tool}"));
+            }
+            args.push("--no-index".to_string());
+            args.push(null_path.to_string());
+            args.push(first.trim().to_string());
             let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             return run_git(&worktree, &arg_refs).map(|_| ());
         }
@@ -397,8 +400,8 @@ fn ensure_repo(cwd: &Path) -> Result<PathBuf, GitError> {
     })
 }
 
-fn canonicalize(path: PathBuf) -> PathBuf {
-    fs::canonicalize(&path).unwrap_or(path)
+pub fn canonicalize_path(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 pub fn latest_commit(cwd: &Path) -> Result<Option<CommitInfoDto>, GitError> {
@@ -453,7 +456,7 @@ fn map_status_code(code: char) -> Option<FileChangeType> {
     }
 }
 
-fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
+fn parse_status_z(stdout: &str, repo_root: &Path) -> RepoStatusDto {
     let mut branch = "HEAD".to_string();
     let mut ahead = 0;
     let mut behind = 0;
@@ -463,8 +466,17 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
     let mut conflicted_files = 0usize;
     let mut modified_files: Vec<FileStatusDto> = Vec::new();
 
-    for line in stdout.lines() {
-        if let Some(meta) = line.strip_prefix("# ") {
+    let tokens: Vec<&str> = stdout.split('\0').collect();
+    let mut i = 0usize;
+
+    while i < tokens.len() {
+        let record = tokens[i];
+        if record.is_empty() {
+            i += 1;
+            continue;
+        }
+
+        if let Some(meta) = record.strip_prefix("# ") {
             if let Some(value) = meta.strip_prefix("branch.head ") {
                 branch = value.trim().to_string();
             } else if let Some(value) = meta.strip_prefix("branch.ab ") {
@@ -472,11 +484,12 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
                 ahead = parts.next().map(parse_signed_count).unwrap_or_default();
                 behind = parts.next().map(parse_signed_count).unwrap_or_default();
             }
+            i += 1;
             continue;
         }
 
-        if line.starts_with("1 ") {
-            if let Some(file) = parse_regular_line(line) {
+        if record.starts_with("1 ") {
+            if let Some(file) = parse_record_file(record) {
                 update_flags(
                     &file,
                     &mut has_staged,
@@ -485,11 +498,12 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
                 );
                 modified_files.push(file);
             }
+            i += 1;
             continue;
         }
 
-        if line.starts_with("2 ") {
-            if let Some(file) = parse_rename_line(line) {
+        if record.starts_with("2 ") {
+            if let Some(file) = parse_record_file(record) {
                 update_flags(
                     &file,
                     &mut has_staged,
@@ -498,11 +512,13 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
                 );
                 modified_files.push(file);
             }
+            // porcelain v2 -z provides old path as next NUL token
+            i += 2;
             continue;
         }
 
-        if line.starts_with("u ") {
-            if let Some(file) = parse_unmerged_line(line) {
+        if record.starts_with("u ") {
+            if let Some(file) = parse_record_file(record) {
                 update_flags(
                     &file,
                     &mut has_staged,
@@ -511,22 +527,30 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
                 );
                 modified_files.push(file);
             }
+            i += 1;
             continue;
         }
 
-        if let Some(path) = line.strip_prefix("? ") {
-            has_untracked = true;
-            has_unstaged = true;
-            let file = FileStatusDto {
-                path: path.to_string(),
-                staged: None,
-                unstaged: Some(FileChangeType::Added),
-            };
-            modified_files.push(file);
+        if let Some(path) = record.strip_prefix("? ") {
+            let path = path.trim();
+            if !path.is_empty() {
+                has_untracked = true;
+                has_unstaged = true;
+                let file = FileStatusDto {
+                    path: path.to_string(),
+                    staged: None,
+                    unstaged: Some(FileChangeType::Added),
+                };
+                modified_files.push(file);
+            }
+            i += 1;
+            continue;
         }
+
+        i += 1;
     }
 
-    let repo_id = canonicalize(repo_root.to_path_buf());
+    let repo_id = canonicalize_path(repo_root);
     RepoStatusDto {
         repo_id: repo_id.to_string_lossy().to_string(),
         root_path: repo_id.to_string_lossy().to_string(),
@@ -542,63 +566,74 @@ fn parse_status(stdout: &str, repo_root: &Path) -> RepoStatusDto {
     }
 }
 
-fn parse_regular_line(line: &str) -> Option<FileStatusDto> {
-    let parts: Vec<&str> = line.splitn(9, ' ').collect();
-    if parts.len() < 9 {
-        return None;
-    }
-    let xy = parts.get(1)?.chars().collect::<Vec<_>>();
-    if xy.len() < 2 {
+fn parse_record_file(record: &str) -> Option<FileStatusDto> {
+    // With `git status --porcelain=v2 -z`, records are NUL-delimited but paths are
+    // unquoted "as-is" and may contain spaces. Use splitn() with the exact field
+    // count so the final field preserves spaces in the path.
+    let kind = record.chars().next()?;
+
+    let (xy, path) = match kind {
+        '1' => {
+            // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+            let parts: Vec<&str> = record.splitn(9, ' ').collect();
+            if parts.len() < 9 {
+                return None;
+            }
+            (parts[1], parts[8])
+        }
+        '2' => {
+            // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>
+            // With -z, <origPath> is in the next NUL token and is handled by the caller.
+            let parts: Vec<&str> = record.splitn(10, ' ').collect();
+            if parts.len() < 10 {
+                return None;
+            }
+            (parts[1], parts[9])
+        }
+        'u' => {
+            // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+            let parts: Vec<&str> = record.splitn(11, ' ').collect();
+            if parts.len() < 11 {
+                return None;
+            }
+            (parts[1], parts[10])
+        }
+        _ => return None,
+    };
+
+    let xy_chars = xy.chars().collect::<Vec<_>>();
+    if xy_chars.len() < 2 {
         return None;
     }
 
-    let staged = map_status_code(xy[0]);
-    let unstaged = map_status_code(xy[1]);
+    let path = path.trim();
+    if path.is_empty() {
+        return None;
+    }
+
+    let staged = map_status_code(xy_chars[0]);
+    let unstaged = map_status_code(xy_chars[1]);
+
     Some(FileStatusDto {
-        path: parts[8].to_string(),
+        path: path.to_string(),
         staged,
         unstaged,
     })
 }
 
-fn parse_rename_line(line: &str) -> Option<FileStatusDto> {
-    let parts: Vec<&str> = line.splitn(10, ' ').collect();
-    if parts.len() < 10 {
-        return None;
-    }
-    let xy = parts.get(1)?.chars().collect::<Vec<_>>();
-    if xy.len() < 2 {
-        return None;
+fn resolve_difftool_tool() -> Option<String> {
+    if let Ok(tool) = std::env::var("PARALLEL_DIFFTOOL") {
+        let trimmed = tool.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
     }
 
-    let staged = map_status_code(xy[0]);
-    let unstaged = map_status_code(xy[1]);
-    // For renames we surface the new path.
-    Some(FileStatusDto {
-        path: parts[8].to_string(),
-        staged,
-        unstaged,
-    })
-}
-
-fn parse_unmerged_line(line: &str) -> Option<FileStatusDto> {
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() < 3 {
-        return None;
+    if cfg!(target_os = "macos") {
+        Some("opendiff".to_string())
+    } else {
+        None
     }
-    let xy = parts.get(1)?.chars().collect::<Vec<_>>();
-    if xy.len() < 2 {
-        return None;
-    }
-
-    let staged = map_status_code(xy[0]);
-    let unstaged = map_status_code(xy[1]);
-    let path = parts.last()?.to_string();
-    Some(FileStatusDto {
-        path,
-        staged,
-        unstaged,
-    })
 }
 
 fn update_flags(
@@ -656,5 +691,75 @@ fn parse_numstat_summary(stdout: &str) -> DiffStatDto {
         files_changed,
         insertions,
         deletions,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn parse_numstat_summary_counts_unique_files_but_sums_changes() {
+        let out = [
+            "1\t0\tfile-a.txt",
+            "2\t1\tfile-b.txt",
+            // Same file repeated (e.g. staged + unstaged diffs combined)
+            "3\t4\tfile-a.txt",
+            // Binary change uses '-' which should be ignored for counts
+            "-\t-\tbin.dat",
+        ]
+        .join("\n");
+
+        let summary = parse_numstat_summary(&out);
+        assert_eq!(summary.files_changed, 3); // file-a, file-b, bin.dat
+        assert_eq!(summary.insertions, 1 + 2 + 3);
+        assert_eq!(summary.deletions, 0 + 1 + 4);
+    }
+
+    #[test]
+    fn parse_status_z_handles_spaces_and_rename_separator() {
+        let status = concat!(
+            "# branch.head main\0",
+            "# branch.ab +2 -1\0",
+            "1 M. N... 100644 100644 100644 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb src/with space.txt\0",
+            "2 R. N... 100644 100644 100644 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb R100 renamed to.txt\0",
+            "renamed from.txt\0",
+            "? untracked file.txt\0",
+            "u UU N... 100644 100644 100644 100644 cccccccccccccccccccccccccccccccccccccccc dddddddddddddddddddddddddddddddddddddddd eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee conflicted file.txt\0"
+        );
+
+        let repo_root = Path::new("fake-repo-root");
+        let parsed = parse_status_z(status, repo_root);
+
+        assert_eq!(parsed.branch, "main");
+        assert_eq!(parsed.ahead, 2);
+        assert_eq!(parsed.behind, 1);
+        assert!(parsed.has_staged);
+        assert!(parsed.has_unstaged);
+        assert!(parsed.has_untracked);
+        assert_eq!(parsed.conflicted_files, 1);
+
+        let paths: Vec<&str> = parsed.modified_files.iter().map(|f| f.path.as_str()).collect();
+        assert!(paths.contains(&"src/with space.txt"));
+        assert!(paths.contains(&"renamed to.txt"));
+        assert!(paths.contains(&"untracked file.txt"));
+        assert!(paths.contains(&"conflicted file.txt"));
+
+        let renamed = parsed
+            .modified_files
+            .iter()
+            .find(|f| f.path == "renamed to.txt")
+            .expect("rename record missing");
+        assert!(matches!(renamed.staged, Some(FileChangeType::Renamed)));
+        assert!(renamed.unstaged.is_none());
+
+        let conflicted = parsed
+            .modified_files
+            .iter()
+            .find(|f| f.path == "conflicted file.txt")
+            .expect("conflict record missing");
+        assert!(matches!(conflicted.staged, Some(FileChangeType::Unmerged)));
+        assert!(matches!(conflicted.unstaged, Some(FileChangeType::Unmerged)));
     }
 }
