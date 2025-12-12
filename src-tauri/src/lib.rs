@@ -206,6 +206,12 @@ async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, String>
 }
 
 #[tauri::command]
+async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, String> {
+    let path = PathBuf::from(cwd);
+    git::list_branches(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn git_commit(
     cwd: String,
     message: String,
@@ -245,7 +251,7 @@ async fn cleanup_agents(
     agent::cleanup_agents(&manager, repo_root).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn agent_diff_stats(
     manager: State<'_, AgentManager>,
     repo_root: String,
@@ -262,8 +268,11 @@ async fn remove_agent(
     agent::remove_agent(&manager, repo_root, agent_id).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-async fn open_diff_between_refs(worktree_path: String, path: Option<String>) -> Result<(), String> {
+#[tauri::command(rename_all = "camelCase")]
+async fn open_diff_between_refs(
+    worktree_path: String,
+    path: Option<String>,
+) -> Result<(), String> {
     let worktree = PathBuf::from(worktree_path);
     git::difftool(&worktree, path.as_deref()).map_err(|e| e.to_string())
 }
@@ -316,6 +325,7 @@ pub fn run() {
             git_detect_repo,
             git_status,
             git_diff,
+            git_list_branches,
             git_commit,
             create_agent,
             list_agents,

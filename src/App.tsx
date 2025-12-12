@@ -7,7 +7,7 @@ import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import "./App.css";
-import { Agent, AgentDiffStat } from "./types/agent";
+import { Agent, AgentDiffStat, BranchInfo } from "./types/agent";
 
 type SessionData = {
   id: string;
@@ -41,6 +41,7 @@ type PaneMeta = {
 
 const createId = () => crypto.randomUUID();
 const LAST_REPO_KEY = "parallel:lastRepo";
+const LAST_BRANCH_KEY = "parallel:lastBranch";
 
 type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
 
@@ -480,6 +481,7 @@ function App() {
   const [repoLoading, setRepoLoading] = useState(false);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentDiffStats, setAgentDiffStats] = useState<Record<string, AgentDiffStat>>({});
+  const [baseBranch, setBaseBranch] = useState<string | null>(null);
   const [agentDialogOpen, setAgentDialogOpen] = useState(false);
   const [agentNameInput, setAgentNameInput] = useState("");
   const [agentCommandInput, setAgentCommandInput] = useState("");
@@ -487,6 +489,10 @@ function App() {
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [agentMenuOpenId, setAgentMenuOpenId] = useState<string | null>(null);
   const [removingAgentId, setRemovingAgentId] = useState<string | null>(null);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
+  const [branchOptions, setBranchOptions] = useState<BranchInfo[]>([]);
+  const [branchSelection, setBranchSelection] = useState<string>("");
+  const [pendingRepoPath, setPendingRepoPath] = useState<string | null>(null);
   const hasRestoredRepo = useRef(false);
   const runStartCommand = useCallback(async (pane: PaneNode, command: string) => {
     if (!command.trim()) return;
@@ -555,27 +561,24 @@ function App() {
     [buildLayoutFromPanes, killLayoutSessions, layout, runStartCommand]
   );
 
-  const refreshAgentDiffStats = useCallback(
-    async (repoRoot: string) => {
-      if (!repoRoot) {
-        setAgentDiffStats({});
-        return;
-      }
+  const refreshAgentDiffStats = useCallback(async (repoRoot: string) => {
+    if (!repoRoot) {
+      setAgentDiffStats({});
+      return;
+    }
 
-      try {
-        const summaries = await invoke<AgentDiffStat[]>("agent_diff_stats", { repoRoot });
-        const mapped = summaries.reduce<Record<string, AgentDiffStat>>((acc, item) => {
-          acc[item.agent_id] = item;
-          return acc;
-        }, {});
-        setAgentDiffStats(mapped);
-      } catch (error) {
-        console.error("Failed to load agent diff stats", error);
-        setAgentDiffStats({});
-      }
-    },
-    []
-  );
+    try {
+      const summaries = await invoke<AgentDiffStat[]>("agent_diff_stats", { repoRoot });
+      const mapped = summaries.reduce<Record<string, AgentDiffStat>>((acc, item) => {
+        acc[item.agent_id] = item;
+        return acc;
+      }, {});
+      setAgentDiffStats(mapped);
+    } catch (error) {
+      console.error("Failed to load agent diff stats", error);
+      setAgentDiffStats({});
+    }
+  }, []);
 
   const loadAgentsForRepo = useCallback(
     async (repoRoot: string) => {
@@ -585,11 +588,7 @@ function App() {
         setAgentMenuOpenId(null);
         setRemovingAgentId(null);
         await launchAgentPanes(loaded);
-        if (loaded.length) {
-          await refreshAgentDiffStats(repoRoot);
-        } else {
-          setAgentDiffStats({});
-        }
+        await refreshAgentDiffStats(repoRoot);
       } catch (error) {
         console.error("Failed to load agents", error);
         setAgents([]);
@@ -605,19 +604,20 @@ function App() {
   );
 
   const bindRepoPath = useCallback(
-    async (pickedPath: string, silent?: boolean) => {
-      if (!pickedPath) return;
+    async (repoRoot: string, branchName: string, silent?: boolean) => {
+      if (!repoRoot || !branchName) return;
       setRepoError(null);
       setRepoLoading(true);
       setAgentDiffStats({});
       try {
-        const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
-        if (!repoRoot) {
+        const detected = await invoke<string | null>("git_detect_repo", { cwd: repoRoot });
+        if (!detected) {
           setRepoStatus(null);
           setAgents([]);
           setAgentMenuOpenId(null);
           setRemovingAgentId(null);
           setAgentDiffStats({});
+          setBaseBranch(null);
           if (!silent) {
             setRepoError("Selected folder is not inside a git repository.");
           }
@@ -627,11 +627,14 @@ function App() {
           return;
         }
 
-        const status = await invoke<RepoStatusDto>("git_status", { cwd: repoRoot });
-        setRepoStatus(status);
+        const status = await invoke<RepoStatusDto>("git_status", { cwd: detected });
+        const statusWithBranch = { ...status, branch: branchName };
+        setRepoStatus(statusWithBranch);
+        setBaseBranch(branchName);
         setRepoError(null);
-        localStorage.setItem(LAST_REPO_KEY, repoRoot);
-        await loadAgentsForRepo(repoRoot);
+        localStorage.setItem(LAST_REPO_KEY, detected);
+        localStorage.setItem(LAST_BRANCH_KEY, branchName);
+        await loadAgentsForRepo(detected);
       } catch (error) {
         if (!silent) {
           const message =
@@ -646,6 +649,7 @@ function App() {
           setAgentMenuOpenId(null);
           setRemovingAgentId(null);
           setAgentDiffStats({});
+          setBaseBranch(null);
           await killLayoutSessions(layout);
           setLayout(null);
           setActivePaneId(null);
@@ -659,6 +663,9 @@ function App() {
 
   const handleBindRepo = useCallback(async () => {
     setRepoError(null);
+    setBranchOptions([]);
+    setBranchSelection("");
+    setPendingRepoPath(null);
     let pickedPath: string | null = null;
     try {
       const selection = await open({
@@ -679,8 +686,42 @@ function App() {
 
     if (!pickedPath) return;
 
-    await bindRepoPath(pickedPath);
-  }, [bindRepoPath]);
+    try {
+      const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: pickedPath });
+      if (!repoRoot) {
+        setRepoError("Selected folder is not inside a git repository.");
+        return;
+      }
+      const branches = await invoke<BranchInfo[]>("git_list_branches", { cwd: repoRoot });
+      if (!branches.length) {
+        setRepoError("No branches found in repository.");
+        return;
+      }
+      setBranchOptions(branches);
+      const current = branches.find((b) => b.current) ?? branches[0];
+      setBranchSelection(current?.name ?? "");
+      setPendingRepoPath(repoRoot);
+      setBranchDialogOpen(true);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Failed to prepare branch selection.";
+      setRepoError(message);
+    }
+  }, []);
+
+  const handleConfirmBranch = useCallback(async () => {
+    if (!pendingRepoPath || !branchSelection) {
+      setRepoError("Select a branch to bind.");
+      return;
+    }
+    setBranchDialogOpen(false);
+    await bindRepoPath(pendingRepoPath, branchSelection);
+    setPendingRepoPath(null);
+  }, [bindRepoPath, branchSelection, pendingRepoPath]);
 
   const appendPaneForAgent = useCallback(
     (pane: PaneNode) => {
@@ -732,11 +773,12 @@ function App() {
     setCreatingAgent(true);
     setAgentError(null);
     try {
+      const branchForAgent = baseBranch ?? repoStatus.branch;
       const agent = await invoke<Agent>("create_agent", {
         repoRoot: repoStatus.root_path,
         name,
         startCommand,
-        baseBranch: repoStatus.branch,
+        baseBranch: branchForAgent,
       });
       setAgents((prev) => [...prev, agent]);
       setAgentDiffStats((prev) => ({
@@ -777,6 +819,7 @@ function App() {
   }, [
     agentCommandInput,
     agentNameInput,
+    baseBranch,
     appendPaneForAgent,
     refreshAgentDiffStats,
     repoStatus,
@@ -926,9 +969,27 @@ function App() {
   useEffect(() => {
     if (hasRestoredRepo.current) return;
     const storedRepo = localStorage.getItem(LAST_REPO_KEY);
+    const storedBranch = localStorage.getItem(LAST_BRANCH_KEY);
     hasRestoredRepo.current = true;
     if (storedRepo) {
-      void bindRepoPath(storedRepo, true);
+      const restore = async () => {
+        try {
+          const repoRoot = await invoke<string | null>("git_detect_repo", { cwd: storedRepo });
+          if (!repoRoot) return;
+          let branch = storedBranch;
+          if (!branch) {
+            const branches = await invoke<BranchInfo[]>("git_list_branches", { cwd: repoRoot });
+            const current = branches.find((b) => b.current) ?? branches[0];
+            branch = current?.name ?? null;
+          }
+          if (branch) {
+            await bindRepoPath(repoRoot, branch, true);
+          }
+        } catch (error) {
+          console.error("Failed to restore repo binding", error);
+        }
+      };
+      void restore();
     }
   }, [bindRepoPath]);
 
@@ -960,6 +1021,8 @@ function App() {
 
     await killLayoutSessions(layout);
     localStorage.removeItem(LAST_REPO_KEY);
+    localStorage.removeItem(LAST_BRANCH_KEY);
+    setBaseBranch(null);
     void getCurrentWindow().close();
   }, [killLayoutSessions, layout, repoStatus]);
 
@@ -1011,6 +1074,63 @@ function App() {
           <div className="loading">No terminals yet. Create an agent to start.</div>
         )}
       </section>
+      {branchDialogOpen ? (
+        <div
+          className="agent-dialog-backdrop"
+          onClick={() => {
+            if (!repoLoading) {
+              setBranchDialogOpen(false);
+              setPendingRepoPath(null);
+            }
+          }}
+        >
+          <div
+            className="agent-dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="agent-dialog-header">
+              <h3>Select branch to bind</h3>
+              <p className="muted">
+                Bind to a branch; agent worktrees will merge back into this branch.
+              </p>
+            </div>
+            <label className="field">
+              <span>Branch</span>
+              <select
+                value={branchSelection}
+                onChange={(event) => setBranchSelection(event.target.value)}
+                disabled={repoLoading}
+              >
+                {branchOptions.map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}
+                    {branch.current ? " (current)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="dialog-actions">
+              <button
+                className="chip"
+                onClick={() => {
+                  setBranchDialogOpen(false);
+                  setPendingRepoPath(null);
+                }}
+                disabled={repoLoading}
+              >
+                Cancel
+              </button>
+              <button
+                className="chip primary"
+                onClick={() => void handleConfirmBranch()}
+                disabled={repoLoading || !branchSelection || !pendingRepoPath}
+              >
+                Bind repo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {agentDialogOpen ? (
         <div
           className="agent-dialog-backdrop"

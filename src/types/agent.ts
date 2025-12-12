@@ -13,3 +13,8 @@ export interface AgentDiffStat {
   insertions: number;
   deletions: number;
 }
+
+export interface BranchInfo {
+  name: string;
+  current: boolean;
+}

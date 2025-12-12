@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     process::Command,
@@ -98,6 +99,12 @@ pub struct DiffStatDto {
     pub deletions: i32,
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct BranchInfoDto {
+    pub name: String,
+    pub current: bool,
+}
+
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
     match run_git(cwd, &["rev-parse", "--show-toplevel"]) {
         Ok(output) => {
@@ -146,6 +153,76 @@ pub fn diff_stats_against_branch(
     Ok(parse_numstat_summary(&output.stdout))
 }
 
+pub fn diff_stats_worktree(worktree: &Path) -> Result<DiffStatDto, GitError> {
+    let worktree = ensure_repo(worktree)?;
+    let mut combined = String::new();
+    let mut errors: Vec<GitError> = Vec::new();
+    let mut untracked_files: Vec<String> = Vec::new();
+    let mut untracked_insertions = 0i32;
+
+    match run_git(&worktree, &["diff", "--numstat"]) {
+        Ok(out) => {
+            combined.push_str(&out.stdout);
+        }
+        Err(err) => errors.push(err),
+    }
+
+    match run_git(&worktree, &["diff", "--numstat", "--cached"]) {
+        Ok(out) => {
+            if !combined.is_empty() && !out.stdout.is_empty() {
+                combined.push('\n');
+            }
+            combined.push_str(&out.stdout);
+        }
+        Err(err) => errors.push(err),
+    }
+
+    if let Ok(out) = run_git(&worktree, &["ls-files", "--others", "--exclude-standard"]) {
+        for line in out.stdout.lines() {
+            let path = line.trim();
+            if path.is_empty() {
+                continue;
+            }
+            untracked_files.push(path.to_string());
+            let full_path = worktree.join(path);
+            if let Ok(contents) = fs::read_to_string(&full_path) {
+                // Count lines in a simple, cross-platform way.
+                let count = if contents.is_empty() {
+                    0
+                } else {
+                    contents.lines().count()
+                };
+                untracked_insertions += count as i32;
+            }
+        }
+    }
+
+    if combined.trim().is_empty() {
+        if let Some(err) = errors.into_iter().next() {
+            return Err(err);
+        }
+        if !untracked_files.is_empty() {
+            return Ok(DiffStatDto {
+                files_changed: untracked_files.len(),
+                insertions: untracked_insertions,
+                deletions: 0,
+            });
+        }
+        return Ok(DiffStatDto {
+            files_changed: 0,
+            insertions: 0,
+            deletions: 0,
+        });
+    }
+
+    let mut summary = parse_numstat_summary(&combined);
+    if !untracked_files.is_empty() {
+        summary.files_changed += untracked_files.len();
+        summary.insertions += untracked_insertions;
+    }
+    Ok(summary)
+}
+
 pub fn default_branch(cwd: &Path) -> Result<String, GitError> {
     let repo_root = ensure_repo(cwd)?;
 
@@ -169,19 +246,74 @@ pub fn default_branch(cwd: &Path) -> Result<String, GitError> {
     current_branch(&repo_root)
 }
 
+pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
+    let repo_root = ensure_repo(cwd)?;
+    let output = run_git(&repo_root, &["branch", "--list"])?;
+    let mut branches = Vec::new();
+    for line in output.stdout.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let current = trimmed.starts_with('*');
+        let name = trimmed.trim_start_matches('*').trim().to_string();
+        if !name.is_empty() {
+            branches.push(BranchInfoDto { name, current });
+        }
+    }
+    Ok(branches)
+}
+
 pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
     let worktree = ensure_repo(worktree)?;
-    let mut args: Vec<String> = vec![
-        "difftool".to_string(),
-        "-y".to_string(),
-        "--tool=opendiff".to_string(),
-    ];
+    // If a specific path is requested, run difftool for that path.
     if let Some(p) = path {
-        args.push("--".to_string());
-        args.push(p.to_string());
+        let args: Vec<String> = vec![
+            "difftool".to_string(),
+            "-y".to_string(),
+            "--tool=opendiff".to_string(),
+            "--".to_string(),
+            p.to_string(),
+        ];
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        return run_git(&worktree, &arg_refs).map(|_| ());
     }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_git(&worktree, &arg_refs).map(|_| ())
+
+    // Otherwise, only launch difftool when there is something to diff.
+    let tracked = run_git(&worktree, &["diff", "--name-only"])
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+    let tracked_cached = run_git(&worktree, &["diff", "--name-only", "--cached"])
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+
+    if !tracked.trim().is_empty() || !tracked_cached.trim().is_empty() {
+        let args: Vec<String> = vec![
+            "difftool".to_string(),
+            "-y".to_string(),
+            "--tool=opendiff".to_string(),
+        ];
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        return run_git(&worktree, &arg_refs).map(|_| ());
+    }
+
+    // Fall back to showing untracked file(s) against /dev/null.
+    if let Ok(out) = run_git(&worktree, &["ls-files", "--others", "--exclude-standard"]) {
+        if let Some(first) = out.stdout.lines().find(|l| !l.trim().is_empty()) {
+            let args: Vec<String> = vec![
+                "difftool".to_string(),
+                "-y".to_string(),
+                "--tool=opendiff".to_string(),
+                "--no-index".to_string(),
+                "/dev/null".to_string(),
+                first.trim().to_string(),
+            ];
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+            return run_git(&worktree, &arg_refs).map(|_| ());
+        }
+    }
+
+    Ok(())
 }
 
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
@@ -498,6 +630,7 @@ fn parse_numstat_summary(stdout: &str) -> DiffStatDto {
     let mut files_changed = 0usize;
     let mut insertions = 0i32;
     let mut deletions = 0i32;
+    let mut seen: HashSet<String> = HashSet::new();
 
     for line in stdout.lines() {
         let mut parts = line.split_whitespace();
@@ -508,7 +641,9 @@ fn parse_numstat_summary(stdout: &str) -> DiffStatDto {
             continue;
         }
 
-        files_changed += 1;
+        if seen.insert(file_path.to_string()) {
+            files_changed += 1;
+        }
         if added != "-" {
             insertions += added.parse::<i32>().unwrap_or(0);
         }

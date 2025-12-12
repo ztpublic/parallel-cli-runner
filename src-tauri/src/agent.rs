@@ -210,12 +210,10 @@ pub fn agent_diff_stats(
         return Ok(Vec::new());
     }
 
-    let base_branch = git::default_branch(&canonical_repo)?;
     let mut stats: Vec<AgentDiffStat> = Vec::new();
 
     for agent in agents {
-        let summary =
-            git::diff_stats_against_branch(Path::new(&agent.worktree_path), &base_branch)?;
+        let summary = git::diff_stats_worktree(Path::new(&agent.worktree_path))?;
         stats.push(AgentDiffStat {
             agent_id: agent.id,
             files_changed: summary.files_changed,
