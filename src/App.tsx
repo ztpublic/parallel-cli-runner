@@ -28,7 +28,9 @@ import { LayoutRenderer } from "./components/LayoutRenderer";
 import { SyncBar } from "./components/SyncBar";
 import { AgentOverview } from "./components/AgentOverview";
 import { BranchBindDialog } from "./components/dialogs/BranchBindDialog";
+import { CommitAndMergeDialog } from "./components/dialogs/CommitAndMergeDialog";
 import { CreateAgentDialog } from "./components/dialogs/CreateAgentDialog";
+import { gitCommit, gitMergeIntoBranch } from "./services/tauri";
 function App() {
   const {
     layout,
@@ -43,6 +45,11 @@ function App() {
   } = useLayoutState();
   const [syncTyping, setSyncTyping] = useState(false);
   const agentsApi = useAgents();
+  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
+  const [commitDialogAgent, setCommitDialogAgent] = useState<Agent | null>(null);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [commitBusy, setCommitBusy] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
 
   useClosePaneHotkey(closeActivePane);
   useDismissOnWindowClickOrEscape(agentsApi.closeAgentMenu);
@@ -213,6 +220,74 @@ function App() {
     [agentsApi, repoStatus, setRepoError]
   );
 
+  const closeCommitDialog = useCallback(() => {
+    if (commitBusy) return;
+    setCommitDialogOpen(false);
+    setCommitDialogAgent(null);
+    setCommitMessage("");
+    setCommitError(null);
+  }, [commitBusy]);
+
+  const openCommitDialog = useCallback(
+    (agent: Agent) => {
+      agentsApi.closeAgentMenu();
+      setCommitDialogAgent(agent);
+      setCommitMessage("");
+      setCommitError(null);
+      setCommitDialogOpen(true);
+    },
+    [agentsApi]
+  );
+
+  const confirmCommitAndMerge = useCallback(async () => {
+    if (!repoStatus) {
+      setCommitError("Bind a git repo before committing.");
+      return;
+    }
+    if (!commitDialogAgent) return;
+
+    const message = commitMessage.trim();
+    if (!message) {
+      setCommitError("Commit message is required.");
+      return;
+    }
+
+    const bindingBranch = baseBranch ?? repoStatus.branch;
+    if (!bindingBranch) {
+      setCommitError("Bind to a branch before merging.");
+      return;
+    }
+
+    setCommitBusy(true);
+    setCommitError(null);
+    try {
+      await gitCommit({
+        cwd: commitDialogAgent.worktree_path,
+        message,
+        stageAll: true,
+        amend: false,
+      });
+      await gitMergeIntoBranch({
+        repoRoot: repoStatus.root_path,
+        targetBranch: bindingBranch,
+        sourceBranch: commitDialogAgent.branch_name,
+      });
+      await agentsApi.refreshDiffStats(repoStatus.root_path);
+      closeCommitDialog();
+    } catch (error) {
+      setCommitError(formatInvokeError(error) || "Failed to commit and merge.");
+    } finally {
+      setCommitBusy(false);
+    }
+  }, [
+    agentsApi,
+    baseBranch,
+    closeCommitDialog,
+    commitDialogAgent,
+    commitMessage,
+    repoStatus,
+  ]);
+
   const handleQuit = useCallback(() => {
     void getCurrentWindow().close();
   }, []);
@@ -262,6 +337,7 @@ function App() {
         openMenuId={agentsApi.agentMenuOpenId}
         onToggleMenu={agentsApi.toggleAgentMenu}
         onShowDiff={(agent) => void handleShowDiff(agent)}
+        onCommitAndMerge={openCommitDialog}
         onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
         removingAgentId={agentsApi.removingAgentId}
       />
@@ -305,6 +381,17 @@ function App() {
         placeholderAgentName={`agent-${agentsApi.agents.length + 1}`}
         onCancel={createDialog.closeDialog}
         onConfirm={() => void createDialog.confirmCreate()}
+      />
+      <CommitAndMergeDialog
+        open={commitDialogOpen}
+        agent={commitDialogAgent}
+        baseBranch={baseBranch ?? repoStatus?.branch ?? null}
+        commitMessage={commitMessage}
+        onChangeCommitMessage={setCommitMessage}
+        busy={commitBusy}
+        error={commitError}
+        onCancel={closeCommitDialog}
+        onConfirm={() => void confirmCommitAndMerge()}
       />
     </main>
   );

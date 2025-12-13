@@ -221,7 +221,7 @@ async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, Comma
     git::list_branches(&path).map_err(CommandError::from)
 }
 
-#[tauri::command]
+#[tauri::command(rename_all = "camelCase")]
 async fn git_commit(
     cwd: String,
     message: String,
@@ -230,6 +230,16 @@ async fn git_commit(
 ) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
     git::commit(&path, &message, stage_all, amend).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn git_merge_into_branch(
+    repo_root: String,
+    target_branch: String,
+    source_branch: String,
+) -> Result<(), CommandError> {
+    let path = PathBuf::from(repo_root);
+    git::merge_into_branch(&path, &target_branch, &source_branch).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -345,6 +355,7 @@ pub fn run() {
             git_diff,
             git_list_branches,
             git_commit,
+            git_merge_into_branch,
             create_agent,
             list_agents,
             cleanup_agents,

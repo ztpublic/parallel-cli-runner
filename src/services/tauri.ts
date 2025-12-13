@@ -26,6 +26,23 @@ export function gitListBranches(params: { cwd: string }): Promise<BranchInfo[]> 
   return invoke<BranchInfo[]>("git_list_branches", params);
 }
 
+export function gitCommit(params: {
+  cwd: string;
+  message: string;
+  stageAll: boolean;
+  amend: boolean;
+}): Promise<void> {
+  return invoke("git_commit", params);
+}
+
+export function gitMergeIntoBranch(params: {
+  repoRoot: string;
+  targetBranch: string;
+  sourceBranch: string;
+}): Promise<void> {
+  return invoke("git_merge_into_branch", params);
+}
+
 export function listAgents(params: { repoRoot: string }): Promise<Agent[]> {
   return invoke<Agent[]>("list_agents", params);
 }
@@ -57,4 +74,3 @@ export function openDiffBetweenRefs(params: {
 }): Promise<void> {
   return invoke("open_diff_between_refs", params);
 }
-

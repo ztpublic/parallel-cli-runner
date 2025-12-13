@@ -334,6 +334,71 @@ pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result
     Ok(())
 }
 
+pub fn merge_into_branch(
+    repo_root: &Path,
+    target_branch: &str,
+    source_branch: &str,
+) -> Result<(), GitError> {
+    let repo_root = ensure_repo(repo_root)?;
+
+    if target_branch.trim().is_empty() || source_branch.trim().is_empty() {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "targetBranch and sourceBranch are required".to_string(),
+        });
+    }
+
+    // Ensure both refs exist up-front for clearer errors.
+    run_git(&repo_root, &["rev-parse", "--verify", target_branch])?;
+    run_git(&repo_root, &["rev-parse", "--verify", source_branch])?;
+
+    let original_branch = current_branch(&repo_root)?;
+    let switched = original_branch != target_branch;
+    if switched {
+        // NOTE: This will fail if the branch is checked out in another worktree.
+        run_git(&repo_root, &["switch", target_branch])?;
+    }
+
+    // If the target worktree is dirty, stash it before merging, then restore after.
+    let mut created_stash = false;
+    match run_git(&repo_root, &["status", "--porcelain"]) {
+        Ok(status) if !status.stdout.trim().is_empty() => {
+            let msg = "parallel-cli-runner: auto-stash before merge";
+            run_git(&repo_root, &["stash", "push", "-u", "-m", msg])?;
+            created_stash = true;
+        }
+        Ok(_) => {}
+        Err(err) => return Err(err),
+    }
+
+    match run_git(&repo_root, &["merge", "--no-edit", source_branch]) {
+        Ok(_) => {
+            if created_stash {
+                // Re-apply stashed local changes onto the target branch.
+                if let Err(err) = run_git(&repo_root, &["stash", "pop"]) {
+                    // Don't try to switch branches if the worktree is now conflicted.
+                    return Err(GitError::GitFailed {
+                        code: None,
+                        stderr: format!(
+                            "merge succeeded, but failed to re-apply stashed changes; resolve manually (git stash list / git stash pop): {err}"
+                        ),
+                    });
+                }
+            }
+            if switched {
+                // Best-effort: don't fail the whole operation just because restoring fails.
+                let _ = run_git(&repo_root, &["switch", &original_branch]);
+            }
+            Ok(())
+        }
+        Err(err) => {
+            // If the merge failed (e.g., conflicts), don't attempt to pop the stash.
+            // Keep it so the user can restore once the merge is resolved/aborted.
+            Err(err)
+        }
+    }
+}
+
 pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
     let repo_root = ensure_repo(cwd)?;
     let output = run_git(&repo_root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
