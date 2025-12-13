@@ -305,16 +305,51 @@ fn spawn_reader_loop(
 ) {
     tauri::async_runtime::spawn_blocking(move || {
         let mut buf = [0u8; 2048];
+        let mut persistent_buf = Vec::new();
         loop {
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    let chunk = String::from_utf8_lossy(&buf[..n]).to_string();
-                    let payload = SessionData {
-                        id: session_id.to_string(),
-                        data: chunk,
-                    };
-                    let _ = app.emit("session-data", payload);
+                    persistent_buf.extend_from_slice(&buf[..n]);
+                    loop {
+                        match std::str::from_utf8(&persistent_buf) {
+                            Ok(s) => {
+                                if !s.is_empty() {
+                                    let payload = SessionData {
+                                        id: session_id.to_string(),
+                                        data: s.to_string(),
+                                    };
+                                    let _ = app.emit("session-data", payload);
+                                }
+                                persistent_buf.clear();
+                                break;
+                            }
+                            Err(e) => {
+                                let valid_len = e.valid_up_to();
+                                if valid_len > 0 {
+                                    let s = std::str::from_utf8(&persistent_buf[..valid_len])
+                                        .unwrap()
+                                        .to_string();
+                                    let payload = SessionData {
+                                        id: session_id.to_string(),
+                                        data: s,
+                                    };
+                                    let _ = app.emit("session-data", payload);
+                                }
+                                if let Some(error_len) = e.error_len() {
+                                    let payload = SessionData {
+                                        id: session_id.to_string(),
+                                        data: "".to_string(),
+                                    };
+                                    let _ = app.emit("session-data", payload);
+                                    persistent_buf.drain(0..valid_len + error_len);
+                                } else {
+                                    persistent_buf.drain(0..valid_len);
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(_) => break,
             }
