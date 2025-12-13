@@ -26,12 +26,49 @@ pub enum GitError {
     Utf8(#[from] std::string::FromUtf8Error),
 }
 
-pub fn run_git(cwd: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
-    let output = Command::new("git")
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .map_err(|e| {
+pub struct GitCommandBuilder<'a> {
+    cwd: &'a Path,
+    args: Vec<String>,
+    env: Vec<(String, String)>,
+}
+
+impl<'a> GitCommandBuilder<'a> {
+    pub fn new(cwd: &'a Path) -> Self {
+        Self {
+            cwd,
+            args: Vec::new(),
+            env: vec![("LC_ALL".to_string(), "C".to_string())],
+        }
+    }
+
+    pub fn arg(mut self, arg: impl Into<String>) -> Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.args.extend(args.into_iter().map(Into::into));
+        self
+    }
+
+    pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn run(self) -> Result<GitOutput, GitError> {
+        let mut cmd = Command::new("git");
+        cmd.current_dir(self.cwd);
+        cmd.args(&self.args);
+        for (k, v) in self.env {
+            cmd.env(k, v);
+        }
+
+        let output = cmd.output().map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 GitError::GitNotFound
             } else {
@@ -39,17 +76,22 @@ pub fn run_git(cwd: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
             }
         })?;
 
-    if output.status.success() {
-        Ok(GitOutput {
-            stdout: String::from_utf8(output.stdout)?,
-            stderr: String::from_utf8(output.stderr)?,
-        })
-    } else {
-        Err(GitError::GitFailed {
-            code: output.status.code(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        if output.status.success() {
+            Ok(GitOutput {
+                stdout: String::from_utf8(output.stdout)?,
+                stderr: String::from_utf8(output.stderr)?,
+            })
+        } else {
+            Err(GitError::GitFailed {
+                code: output.status.code(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            })
+        }
     }
+}
+
+pub fn run_git(cwd: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
+    GitCommandBuilder::new(cwd).args(args).run()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -106,6 +148,10 @@ pub struct BranchInfoDto {
 }
 
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
+    if cwd.join(".git").exists() {
+        return Ok(Some(canonicalize_path(cwd)));
+    }
+
     match run_git(cwd, &["rev-parse", "--show-toplevel"]) {
         Ok(output) => {
             let root = output.stdout.trim();

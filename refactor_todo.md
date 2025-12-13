@@ -14,14 +14,14 @@
 
 ## Medium Priority (Architecture & Performance)
 
-- [ ] **Modularize `lib.rs`**
+- [x] **Modularize `lib.rs`**
     - **Location:** `src-tauri/src/lib.rs`
     - **Issue:** The file contains the `PtyManager`, `PtySession`, `spawn_reader_loop`, and all Tauri commands.
     - **Refactor:**
         - Move `PtyManager` and `PtySession` to a new module `src-tauri/src/pty.rs`.
         - Keep `lib.rs` focused on Tauri command registration and app setup.
 
-- [ ] **Optimize Git Repository Detection**
+- [x] **Optimize Git Repository Detection**
     - **Location:** `src-tauri/src/git.rs` -> `ensure_repo`
     - **Issue:** Almost every git command calls `detect_repo` (which runs `git rev-parse`) to verify the cwd is a repo. This doubles the process spawning for every operation.
     - **Refactor:** Pass the known `repo_root` from the frontend where possible, or cache valid repo paths (with invalidation).
@@ -31,7 +31,7 @@
     - **Issue:** Reads directory and parses JSON files on every call.
     - **Refactor:** Implement a caching mechanism in `AgentManager` that only re-reads from disk if the directory mtime changes or via an explicit refresh command.
 
-- [ ] **Consolidate Git Command Execution**
+- [x] **Consolidate Git Command Execution**
     - **Location:** `src-tauri/src/git.rs`
     - **Issue:** `run_git` manually handles `Command` creation.
     - **Refactor:** Create a `GitCommandBuilder` to standardize `cwd`, `env` (e.g., `LC_ALL=C`), and error mapping.
