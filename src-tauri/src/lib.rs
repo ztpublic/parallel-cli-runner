@@ -26,17 +26,17 @@ struct PtyManager {
 
 impl PtyManager {
     fn insert(&self, id: Uuid, session: Arc<PtySession>) {
-        let mut guard = self.sessions.lock().expect("sessions poisoned");
+        let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         guard.insert(id, session);
     }
 
     fn remove(&self, id: &Uuid) -> Option<Arc<PtySession>> {
-        let mut guard = self.sessions.lock().expect("sessions poisoned");
+        let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         guard.remove(id)
     }
 
     fn get(&self, id: &Uuid) -> Option<Arc<PtySession>> {
-        let guard = self.sessions.lock().expect("sessions poisoned");
+        let guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         guard.get(id).cloned()
     }
 }
@@ -61,14 +61,14 @@ impl PtySession {
     }
 
     fn write(&self, data: &str) -> anyhow::Result<()> {
-        let mut writer = self.writer.lock().expect("writer poisoned");
+        let mut writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
         writer.write_all(data.as_bytes())?;
         writer.flush()?;
         Ok(())
     }
 
     fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
-        let master = self.master.lock().expect("master poisoned");
+        let master = self.master.lock().unwrap_or_else(|e| e.into_inner());
         let size = PtySize {
             rows,
             cols,
@@ -80,7 +80,7 @@ impl PtySession {
     }
 
     fn kill(&self) -> anyhow::Result<()> {
-        let mut child = self.child.lock().expect("child poisoned");
+        let mut child = self.child.lock().unwrap_or_else(|e| e.into_inner());
         child.kill().context("failed to kill child")
     }
 }

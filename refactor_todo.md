@@ -7,7 +7,7 @@
     - **Issue:** Reading into a fixed-size buffer (`[0u8; 2048]`) and immediately converting with `String::from_utf8_lossy` will corrupt multi-byte characters that happen to be split across two buffer reads.
     - **Fix:** Use a streaming UTF-8 decoder (e.g., `termwiz`, `utf8parse`, or manually buffering incomplete bytes).
 
-- [ ] **Robust Error Handling in `PtyManager`**
+- [x] **Robust Error Handling in `PtyManager`**
     - **Location:** `src-tauri/src/lib.rs`
     - **Issue:** Uses `expect("poisoned")` on Mutex locks. While standard for simple apps, a panic in one thread (e.g., during a resize) could poison the lock and crash the whole app.
     - **Fix:** Handle `PoisonError` gracefully or use `parking_lot` Mutexes which don't poison (if appropriate for the consistency model), or ensure all critical sections are panic-free.

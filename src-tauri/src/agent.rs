@@ -53,7 +53,7 @@ pub struct AgentManager {
 impl AgentManager {
     pub fn insert(&self, agent: Agent) -> Result<Agent, AgentError> {
         self.persist(&agent)?;
-        let mut guard = self.agents.lock().expect("agent map poisoned");
+        let mut guard = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         guard.insert(agent.id.clone(), agent.clone());
         Ok(agent)
     }
@@ -79,7 +79,7 @@ impl AgentManager {
             }
         }
 
-        let mut guard = self.agents.lock().expect("agent map poisoned");
+        let mut guard = self.agents.lock().unwrap_or_else(|e| e.into_inner());
         for agent in &loaded {
             guard.insert(agent.id.clone(), agent.clone());
         }
@@ -154,7 +154,7 @@ pub fn cleanup_agents(manager: &AgentManager, repo_root: String) -> Result<(), A
     let canonical_repo = git::canonicalize_path(&detected_repo);
     let agents = manager.load_repo_agents(&canonical_repo)?;
 
-    let mut guard = manager.agents.lock().expect("agent map poisoned");
+    let mut guard = manager.agents.lock().unwrap_or_else(|e| e.into_inner());
     for agent in &agents {
         let worktree_path = PathBuf::from(&agent.worktree_path);
         let _ = git::remove_worktree(&canonical_repo, &worktree_path, true);
@@ -187,7 +187,8 @@ pub fn remove_agent(
     let _ = git::delete_branch(&canonical_repo, &agent.branch_name, true);
     let _ = fs::remove_file(agent_meta_path(&canonical_repo, &agent.id));
 
-    if let Ok(mut guard) = manager.agents.lock() {
+    {
+        let mut guard = manager.agents.lock().unwrap_or_else(|e| e.into_inner());
         guard.remove(&agent.id);
     }
 
