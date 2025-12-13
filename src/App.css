@@ -585,3 +585,29 @@ h1 {
   border-radius: 8px;
   padding: 8px 10px;
 }
+
+.error-boundary {
+  padding: 2rem;
+  background: #2b2b2b;
+  color: #ff6b6b;
+  height: 100vh;
+  overflow: auto;
+  font-family: monospace;
+}
+
+.error-boundary h1 {
+  margin-top: 0;
+}
+
+.error-boundary button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: #444;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.error-boundary button:hover {
+  background: #555;
+}

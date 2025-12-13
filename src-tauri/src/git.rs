@@ -6,6 +6,7 @@ use std::{
     process::Command,
 };
 use thiserror::Error;
+use ts_rs::TS;
 
 #[derive(Debug)]
 pub struct GitOutput {
@@ -91,10 +92,12 @@ impl<'a> GitCommandBuilder<'a> {
 }
 
 pub fn run_git(cwd: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
-    GitCommandBuilder::new(cwd).args(args).run()
+    GitCommandBuilder::new(cwd)
+        .args(args.iter().copied())
+        .run()
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum FileChangeType {
     Added,
@@ -104,14 +107,14 @@ pub enum FileChangeType {
     Unmerged,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct FileStatusDto {
     pub path: String,
     pub staged: Option<FileChangeType>,
     pub unstaged: Option<FileChangeType>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct CommitInfoDto {
     pub id: String,
     pub summary: String,
@@ -119,7 +122,7 @@ pub struct CommitInfoDto {
     pub relative_time: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct RepoStatusDto {
     pub repo_id: String,
     pub root_path: String,
@@ -134,14 +137,14 @@ pub struct RepoStatusDto {
     pub latest_commit: Option<CommitInfoDto>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct DiffStatDto {
     pub files_changed: usize,
     pub insertions: i32,
     pub deletions: i32,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct BranchInfoDto {
     pub name: String,
     pub current: bool,

@@ -7,9 +7,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 use thiserror::Error;
+use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct Agent {
     pub id: String,
     pub repo_id: String,
@@ -19,7 +20,7 @@ pub struct Agent {
     pub start_command: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, TS)]
 pub struct AgentDiffStat {
     pub agent_id: String,
     pub files_changed: usize,

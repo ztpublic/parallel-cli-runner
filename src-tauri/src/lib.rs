@@ -14,6 +14,9 @@ use crate::agent::{Agent, AgentDiffStat, AgentManager};
 mod pty;
 use crate::pty::PtyManager;
 
+#[cfg(test)]
+mod export_types;
+
 // Re-export commands from pty module so tauri::generate_handler! can find them
 // Note: In a larger app we might register them directly from the module or use a macro
 // but for now re-exporting or wrapping them is fine. The generate_handler macro needs
