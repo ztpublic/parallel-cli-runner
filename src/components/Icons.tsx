@@ -5,19 +5,25 @@ export type IconName =
   | "bell"
   | "bolt"
   | "branch"
+  | "check"
   | "chevronDown"
   | "chevronRight"
   | "close"
   | "cloud"
   | "commit"
+  | "fileAdd"
+  | "fileEdit"
+  | "fileRemove"
   | "folder"
   | "menu"
   | "merge"
+  | "minus"
   | "play"
   | "plus"
   | "pull"
   | "refresh"
   | "settings"
+  | "sparkle"
   | "split"
   | "terminal"
   | "trash";
@@ -53,6 +59,7 @@ const iconPaths: Record<IconName, JSX.Element> = {
       <path d="M9 6h6" />
     </>
   ),
+  check: <polyline points="5 13 9 17 19 7" />,
   chevronDown: <polyline points="6 9 12 15 18 9" />,
   chevronRight: <polyline points="9 6 15 12 9 18" />,
   close: (
@@ -68,6 +75,28 @@ const iconPaths: Record<IconName, JSX.Element> = {
     <>
       <line x1="3" y1="12" x2="21" y2="12" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  fileAdd: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <polyline points="14 3 14 9 20 9" />
+      <line x1="12" y1="13" x2="12" y2="17" />
+      <line x1="10" y1="15" x2="14" y2="15" />
+    </>
+  ),
+  fileEdit: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <polyline points="14 3 14 9 20 9" />
+      <path d="M10 14l4-4 2 2-4 4H10z" />
+    </>
+  ),
+  fileRemove: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <polyline points="14 3 14 9 20 9" />
+      <line x1="10" y1="15" x2="14" y2="15" />
     </>
   ),
   folder: (
@@ -89,6 +118,7 @@ const iconPaths: Record<IconName, JSX.Element> = {
       <circle cx="18" cy="12" r="3" />
     </>
   ),
+  minus: <line x1="5" y1="12" x2="19" y2="12" />,
   play: <polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none" />,
   plus: (
     <>
@@ -121,6 +151,12 @@ const iconPaths: Record<IconName, JSX.Element> = {
       <line x1="17.2" y1="17.2" x2="19.4" y2="19.4" />
       <line x1="17.2" y1="6.8" x2="19.4" y2="4.6" />
       <line x1="4.6" y1="19.4" x2="6.8" y2="17.2" />
+    </>
+  ),
+  sparkle: (
+    <>
+      <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6L12 3z" />
+      <path d="M5 15l0.8 2.2L8 18l-2.2 0.8L5 21l-0.8-2.2L2 18l2.2-0.8L5 15z" />
     </>
   ),
   split: (

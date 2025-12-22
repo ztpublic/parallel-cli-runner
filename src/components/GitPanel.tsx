@@ -14,6 +14,14 @@ type CommitItem = {
   date: string;
 };
 
+type ChangeStatus = "modified" | "added" | "deleted";
+
+type ChangedFile = {
+  path: string;
+  status: ChangeStatus;
+  staged: boolean;
+};
+
 const localBranches: BranchItem[] = [
   { name: "main", current: true, lastCommit: "Fix: Update dependencies" },
   { name: "feature/new-ui", lastCommit: "Add workspace overview" },
@@ -40,14 +48,89 @@ const remotes = [
   },
 ];
 
+const initialChangedFiles: ChangedFile[] = [
+  { path: "src/App.tsx", status: "modified", staged: true },
+  { path: "src/components/GitPanel.tsx", status: "modified", staged: true },
+  { path: "src/components/TopBar.tsx", status: "added", staged: false },
+  { path: "src/services/tauri.ts", status: "modified", staged: false },
+  { path: "README.md", status: "deleted", staged: false },
+];
+
 export function GitPanel() {
-  const [activeTab, setActiveTab] = useState<"branches" | "commits" | "worktrees" | "remotes">(
-    "branches"
-  );
+  const [activeTab, setActiveTab] = useState<
+    "branches" | "commits" | "commit" | "worktrees" | "remotes"
+  >("branches");
   const [expanded, setExpanded] = useState<{ local: boolean; remote: boolean }>({
     local: true,
     remote: true,
   });
+  const [commitMessage, setCommitMessage] = useState("");
+  const [changedFiles, setChangedFiles] = useState<ChangedFile[]>(initialChangedFiles);
+
+  const stagedFiles = changedFiles.filter((file) => file.staged);
+  const unstagedFiles = changedFiles.filter((file) => !file.staged);
+
+  const toggleFileStage = (path: string) => {
+    setChangedFiles((files) =>
+      files.map((file) => (file.path === path ? { ...file, staged: !file.staged } : file))
+    );
+  };
+
+  const stageAllFiles = () => {
+    setChangedFiles((files) => files.map((file) => ({ ...file, staged: true })));
+  };
+
+  const unstageAllFiles = () => {
+    setChangedFiles((files) => files.map((file) => ({ ...file, staged: false })));
+  };
+
+  const generateCommitMessage = () => {
+    if (!stagedFiles.length) return;
+    const added = stagedFiles.filter((file) => file.status === "added").length;
+    const modified = stagedFiles.filter((file) => file.status === "modified").length;
+    const deleted = stagedFiles.filter((file) => file.status === "deleted").length;
+
+    const parts: string[] = [];
+    if (added) parts.push(`Add ${added} file${added === 1 ? "" : "s"}`);
+    if (modified) parts.push(`Update ${modified} file${modified === 1 ? "" : "s"}`);
+    if (deleted) parts.push(`Delete ${deleted} file${deleted === 1 ? "" : "s"}`);
+
+    let message = parts.join(", ");
+    if (stagedFiles.length <= 3) {
+      const fileList = stagedFiles
+        .map((file) => file.path.split("/").pop() || file.path)
+        .map((name) => `- ${name}`)
+        .join("\n");
+      message = `${message}\n\n${fileList}`;
+    }
+
+    setCommitMessage(message);
+  };
+
+  const commitDisabled = !commitMessage.trim() || stagedFiles.length === 0;
+  const magicDisabled = stagedFiles.length === 0;
+
+  const getStatusLabel = (status: ChangeStatus) => {
+    switch (status) {
+      case "added":
+        return "A";
+      case "deleted":
+        return "D";
+      default:
+        return "M";
+    }
+  };
+
+  const getStatusIcon = (status: ChangeStatus) => {
+    switch (status) {
+      case "added":
+        return "fileAdd";
+      case "deleted":
+        return "fileRemove";
+      default:
+        return "fileEdit";
+    }
+  };
 
   return (
     <aside className="git-panel">
@@ -81,6 +164,16 @@ export function GitPanel() {
         >
           <Icon name="commit" size={14} />
           <span>Commits</span>
+        </button>
+        <button
+          type="button"
+          className={`git-tab ${activeTab === "commit" ? "is-active" : ""}`}
+          role="tab"
+          aria-selected={activeTab === "commit"}
+          onClick={() => setActiveTab("commit")}
+        >
+          <Icon name="commit" size={14} />
+          <span>Commit</span>
         </button>
         <button
           type="button"
@@ -211,6 +304,119 @@ export function GitPanel() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {activeTab === "commit" ? (
+          <div className="commit-panel">
+            <div className="commit-message">
+              <div className="commit-textarea-wrap">
+                <textarea
+                  id="commit-message"
+                  className="commit-textarea"
+                  placeholder="Describe your changes..."
+                  rows={4}
+                  value={commitMessage}
+                  onChange={(event) => setCommitMessage(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="commit-magic"
+                  onClick={generateCommitMessage}
+                  disabled={magicDisabled}
+                  title="Generate commit message"
+                >
+                  <Icon name="sparkle" size={12} />
+                </button>
+              </div>
+              <button type="button" className="commit-button" disabled={commitDisabled}>
+                <Icon name="check" size={14} />
+                Commit Changes
+              </button>
+            </div>
+
+            <div className="commit-files">
+              {stagedFiles.length ? (
+                <div className="commit-section">
+                  <div className="commit-section-header">
+                    <div className="commit-section-title commit-section-title--staged">Staged</div>
+                    <div className="commit-section-count">{stagedFiles.length}</div>
+                    <button type="button" className="commit-section-action" onClick={unstageAllFiles}>
+                      Unstage All
+                    </button>
+                  </div>
+                  <div className="commit-file-list">
+                    {stagedFiles.map((file) => (
+                      <div key={file.path} className="commit-file">
+                        <Icon
+                          name={getStatusIcon(file.status)}
+                          size={14}
+                          className={`commit-file-icon commit-file-icon--${file.status}`}
+                        />
+                        <span
+                          className={`commit-file-status commit-file-status--${file.status}`}
+                        >
+                          {getStatusLabel(file.status)}
+                        </span>
+                        <span className="commit-file-path">{file.path}</span>
+                        <button
+                          type="button"
+                          className="icon-button icon-button--tiny commit-file-action commit-file-action--unstage"
+                          title="Unstage file"
+                          onClick={() => toggleFileStage(file.path)}
+                        >
+                          <Icon name="minus" size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {unstagedFiles.length ? (
+                <div className="commit-section">
+                  <div className="commit-section-header">
+                    <div className="commit-section-title">Unstaged</div>
+                    <div className="commit-section-count">{unstagedFiles.length}</div>
+                    <button type="button" className="commit-section-action" onClick={stageAllFiles}>
+                      Stage All
+                    </button>
+                  </div>
+                  <div className="commit-file-list">
+                    {unstagedFiles.map((file) => (
+                      <div key={file.path} className="commit-file">
+                        <Icon
+                          name={getStatusIcon(file.status)}
+                          size={14}
+                          className={`commit-file-icon commit-file-icon--${file.status}`}
+                        />
+                        <span
+                          className={`commit-file-status commit-file-status--${file.status}`}
+                        >
+                          {getStatusLabel(file.status)}
+                        </span>
+                        <span className="commit-file-path">{file.path}</span>
+                        <button
+                          type="button"
+                          className="icon-button icon-button--tiny commit-file-action commit-file-action--stage"
+                          title="Stage file"
+                          onClick={() => toggleFileStage(file.path)}
+                        >
+                          <Icon name="plus" size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {!stagedFiles.length && !unstagedFiles.length ? (
+                <div className="commit-empty">
+                  <Icon name="commit" size={22} />
+                  <p>Working tree clean.</p>
+                </div>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
