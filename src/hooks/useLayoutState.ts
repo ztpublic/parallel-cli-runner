@@ -39,26 +39,33 @@ export function useLayoutState() {
     setActivePaneId(pane.id);
   }, []);
 
-  const closeActivePane = useCallback(async () => {
+  const closePane = useCallback(async (paneId: string) => {
     const currentLayout = layoutRef.current;
-    const currentActivePaneId = activePaneIdRef.current;
-    if (!currentLayout || !currentActivePaneId) return;
+    if (!currentLayout) return;
     if (countPanes(currentLayout) === 1) return;
 
-    const paneToRemove = findPane(currentLayout, currentActivePaneId);
+    const paneToRemove = findPane(currentLayout, paneId);
     if (paneToRemove) {
       await killSession({ id: paneToRemove.sessionId });
     }
 
     setLayout((prev) => {
       if (!prev) return prev;
-      const next = removePane(prev, currentActivePaneId);
+      const next = removePane(prev, paneId);
       if (!next) return prev;
-      const fallbackPane = getFirstPane(next);
-      setActivePaneId(fallbackPane?.id ?? null);
+      if (activePaneIdRef.current === paneId) {
+        const fallbackPane = getFirstPane(next);
+        setActivePaneId(fallbackPane?.id ?? null);
+      }
       return next;
     });
   }, []);
+
+  const closeActivePane = useCallback(async () => {
+    const currentActivePaneId = activePaneIdRef.current;
+    if (!currentActivePaneId) return;
+    await closePane(currentActivePaneId);
+  }, [closePane]);
 
   const broadcastPaneInput = useCallback((pane: PaneNode, data: string) => {
     const currentLayout = layoutRef.current;
@@ -80,6 +87,7 @@ export function useLayoutState() {
     resetLayoutState,
     getLayoutSnapshot,
     appendPane,
+    closePane,
     closeActivePane,
     broadcastPaneInput,
   };

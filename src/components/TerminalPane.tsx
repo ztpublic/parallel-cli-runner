@@ -44,9 +44,10 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
       convertEol: true,
       cursorBlink: true,
       fontSize: 14,
+      fontFamily: "IBM Plex Mono, JetBrains Mono, Menlo, monospace",
       disableStdin: false,
       theme: {
-        background: "#090d12",
+        background: "#1e1e1e",
       },
     });
     const fitAddon = new FitAddon();
