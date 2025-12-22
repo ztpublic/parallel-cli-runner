@@ -1,10 +1,8 @@
 export type Orientation = "vertical" | "horizontal";
 
 export type PaneMeta = {
-  agentId?: string;
-  agentName?: string;
-  branchName?: string;
-  worktreePath?: string;
+  title?: string;
+  subtitle?: string;
 };
 
 export type PaneNode = {
@@ -93,4 +91,3 @@ export function buildLayoutFromPanes(panes: PaneNode[]): LayoutNode | null {
     };
   }, null);
 }
-

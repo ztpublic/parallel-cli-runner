@@ -46,7 +46,7 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
       fontSize: 14,
       disableStdin: false,
       theme: {
-        background: "#0b1021",
+        background: "#090d12",
       },
     });
     const fitAddon = new FitAddon();
@@ -109,16 +109,11 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
       onClick={() => onFocused(pane.id)}
     >
       <div className="pane-label" aria-hidden>
-        <div className="pane-label-primary">
-          {pane.meta?.agentName ?? pane.meta?.agentId ?? "Pane"}
-        </div>
-        {pane.meta?.branchName ? (
-          <div className="pane-label-sub">{pane.meta.branchName}</div>
-        ) : pane.meta?.worktreePath ? (
-          <div className="pane-label-sub">{pane.meta.worktreePath}</div>
+        <div className="pane-label-primary">{pane.meta?.title ?? "Terminal"}</div>
+        {pane.meta?.subtitle ? (
+          <div className="pane-label-sub">{pane.meta.subtitle}</div>
         ) : null}
       </div>
     </div>
   );
 }
-

@@ -1,381 +1,53 @@
-import { useCallback, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect, useState } from "react";
 import "./App.css";
-import { Agent } from "./types/agent";
-import { formatInvokeError } from "./services/errors";
-import { getString } from "./services/storage";
-import { LAST_REPO_KEY } from "./services/storageKeys";
-import { createPaneNode, killLayoutSessions, runStartCommand } from "./services/sessions";
-import {
-  cleanupAgents,
-  killSession,
-} from "./services/tauri";
-import { useLayoutState } from "./hooks/useLayoutState";
-import { useRepoBinding } from "./hooks/useRepoBinding";
-import { useAgents } from "./hooks/useAgents";
-import { useCreateAgentDialog } from "./hooks/useCreateAgentDialog";
-import { useClosePaneHotkey } from "./hooks/useHotkeys";
-import { useDismissOnWindowClickOrEscape } from "./hooks/useDismiss";
-import {
-  PaneNode,
-  LayoutNode,
-  collectPanes,
-  getFirstPane,
-  removePane,
-  buildLayoutFromPanes,
-} from "./types/layout";
-import { LayoutRenderer } from "./components/LayoutRenderer";
-import { SyncBar } from "./components/SyncBar";
-import { AgentOverview } from "./components/AgentOverview";
-import { BranchBindDialog } from "./components/dialogs/BranchBindDialog";
-import { CommitAndMergeDialog } from "./components/dialogs/CommitAndMergeDialog";
-import { CreateAgentDialog } from "./components/dialogs/CreateAgentDialog";
-import { gitCommit, gitMergeIntoBranch } from "./services/tauri";
+import { createPaneNode } from "./services/sessions";
+import { killSession } from "./services/tauri";
+import { PaneNode } from "./types/layout";
+import { TerminalPane } from "./components/TerminalPane";
 function App() {
-  const {
-    layout,
-    setLayout,
-    activePaneId,
-    setActivePaneId,
-    resetLayoutState,
-    getLayoutSnapshot,
-    appendPane,
-    closeActivePane,
-    broadcastPaneInput,
-  } = useLayoutState();
-  const [syncTyping, setSyncTyping] = useState(false);
-  const agentsApi = useAgents();
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-  const [commitDialogAgent, setCommitDialogAgent] = useState<Agent | null>(null);
-  const [commitMessage, setCommitMessage] = useState("");
-  const [commitBusy, setCommitBusy] = useState(false);
-  const [commitError, setCommitError] = useState<string | null>(null);
+  const [pane, setPane] = useState<PaneNode | null>(null);
 
-  useClosePaneHotkey(closeActivePane);
-  useDismissOnWindowClickOrEscape(agentsApi.closeAgentMenu);
+  useEffect(() => {
+    let alive = true;
+    let sessionId: string | null = null;
 
-  const handleBindFailed = useCallback(async () => {
-    agentsApi.resetAgentsState();
-    await killLayoutSessions(getLayoutSnapshot());
-    resetLayoutState();
-    setSyncTyping(false);
-  }, [agentsApi, getLayoutSnapshot, resetLayoutState]);
-
-  const launchAgentPanes = useCallback(
-    async (agentList: Agent[]) => {
-      await killLayoutSessions(getLayoutSnapshot());
-      if (!agentList.length) {
-        resetLayoutState();
-        setSyncTyping(false);
-        return;
-      }
-
-      const panesWithAgents: { pane: PaneNode; agent: Agent }[] = [];
-      for (const agent of agentList) {
-        const pane = await createPaneNode({
-          cwd: agent.worktree_path,
-          meta: {
-            agentId: agent.id,
-            agentName: agent.name,
-            branchName: agent.branch_name,
-            worktreePath: agent.worktree_path,
-          },
-        });
-        panesWithAgents.push({ pane, agent });
-      }
-      const panes = panesWithAgents.map(({ pane }) => pane);
-      const nextLayout = buildLayoutFromPanes(panes);
-      setLayout(nextLayout);
-      setActivePaneId(panes[0]?.id ?? null);
-      setSyncTyping(false);
-      await Promise.all(
-        panesWithAgents.map(({ pane, agent }) =>
-          runStartCommand(pane, agent.start_command).catch((error) => {
-            console.error("Failed to run start command for agent", agent.id, error);
-          })
-        )
-      );
-    },
-    [getLayoutSnapshot, resetLayoutState, setActivePaneId, setLayout]
-  );
-
-  const {
-    repoStatus,
-    repoError,
-    setRepoError,
-    repoLoading,
-    baseBranch,
-    beginBindRepo,
-    confirmBindRepo,
-    cancelBindRepo,
-    branchDialogOpen,
-    branchOptions,
-    branchSelection,
-    setBranchSelection,
-    pendingRepoPath,
-    clearBinding,
-  } = useRepoBinding({
-    onBound: async (repoRoot) => {
-      const loaded = await agentsApi.loadAgents(repoRoot);
-      await launchAgentPanes(loaded);
-    },
-    onBindFailed: handleBindFailed,
-  });
-
-  const createDialog = useCreateAgentDialog({
-    canCreate: !!repoStatus,
-    defaultAgentName: `agent-${agentsApi.agents.length + 1}`,
-    onBlocked: () => setRepoError("Bind a git repo before creating an agent."),
-    onCreate: async ({ name, startCommand }) => {
-      if (!repoStatus) throw new Error("Bind a git repo before creating an agent.");
-      const branchForAgent = baseBranch ?? repoStatus.branch;
-      return agentsApi.createAgentForRepo({
-        repoRoot: repoStatus.root_path,
-        name,
-        startCommand,
-        baseBranch: branchForAgent,
-      });
-    },
-    onCreated: async (agent) => {
-      if (!repoStatus) return;
-      const pane = await createPaneNode({
-        cwd: agent.worktree_path,
+    const start = async () => {
+      const next = await createPaneNode({
         meta: {
-          agentId: agent.id,
-          agentName: agent.name,
-          branchName: agent.branch_name,
-          worktreePath: agent.worktree_path,
+          title: "Local session",
         },
       });
-      appendPane(pane);
-      setSyncTyping(false);
-      await runStartCommand(pane, agent.start_command);
-      await agentsApi.refreshDiffStats(repoStatus.root_path);
-    },
-  });
-
-  const handleRemoveAgent = useCallback(
-    async (agent: Agent) => {
-      if (!repoStatus) {
-        setRepoError("Bind a git repo before removing an agent.");
+      sessionId = next.sessionId;
+      if (!alive) {
+        void killSession({ id: next.sessionId });
         return;
       }
+      setPane(next);
+    };
 
-      setRepoError(null);
-      const panesForAgent = collectPanes(getLayoutSnapshot()).filter(
-        (pane) => pane.meta?.agentId === agent.id
-      );
+    void start();
 
-      try {
-        await agentsApi.removeAgentForRepo({
-          repoRoot: repoStatus.root_path,
-          agentId: agent.id,
-        });
-      } catch (error) {
-        setRepoError(formatInvokeError(error) || "Failed to remove agent.");
-        return;
+    return () => {
+      alive = false;
+      if (sessionId) {
+        void killSession({ id: sessionId });
       }
-
-      await Promise.all(
-        panesForAgent.map((pane) =>
-          killSession({ id: pane.sessionId }).catch(() => undefined)
-        )
-      );
-
-      setLayout((prev) => {
-        if (!prev) return prev;
-        let next: LayoutNode | null = prev;
-        for (const pane of panesForAgent) {
-          if (!next) break;
-          next = removePane(next, pane.id);
-        }
-        const fallbackPane = getFirstPane(next);
-        setActivePaneId((currentActive) => {
-          if (!currentActive) return fallbackPane?.id ?? null;
-          if (panesForAgent.some((pane) => pane.id === currentActive)) {
-            return fallbackPane?.id ?? null;
-          }
-          return currentActive;
-        });
-        setSyncTyping(false);
-        return next;
-      });
-    },
-    [agentsApi, getLayoutSnapshot, repoStatus, setLayout]
-  );
-
-  const closeCommitDialog = useCallback(() => {
-    if (commitBusy) return;
-    setCommitDialogOpen(false);
-    setCommitDialogAgent(null);
-    setCommitMessage("");
-    setCommitError(null);
-  }, [commitBusy]);
-
-  const openCommitDialog = useCallback(
-    (agent: Agent) => {
-      agentsApi.closeAgentMenu();
-      setCommitDialogAgent(agent);
-      setCommitMessage("");
-      setCommitError(null);
-      setCommitDialogOpen(true);
-    },
-    [agentsApi]
-  );
-
-  const confirmCommitAndMerge = useCallback(async () => {
-    if (!repoStatus) {
-      setCommitError("Bind a git repo before committing.");
-      return;
-    }
-    if (!commitDialogAgent) return;
-
-    const message = commitMessage.trim();
-    if (!message) {
-      setCommitError("Commit message is required.");
-      return;
-    }
-
-    const bindingBranch = baseBranch ?? repoStatus.branch;
-    if (!bindingBranch) {
-      setCommitError("Bind to a branch before merging.");
-      return;
-    }
-
-    setCommitBusy(true);
-    setCommitError(null);
-    try {
-      await gitCommit({
-        cwd: commitDialogAgent.worktree_path,
-        message,
-        stageAll: true,
-        amend: false,
-      });
-      await gitMergeIntoBranch({
-        repoRoot: repoStatus.root_path,
-        targetBranch: bindingBranch,
-        sourceBranch: commitDialogAgent.branch_name,
-      });
-      await agentsApi.refreshDiffStats(repoStatus.root_path);
-      closeCommitDialog();
-    } catch (error) {
-      setCommitError(formatInvokeError(error) || "Failed to commit and merge.");
-    } finally {
-      setCommitBusy(false);
-    }
-  }, [
-    agentsApi,
-    baseBranch,
-    closeCommitDialog,
-    commitDialogAgent,
-    commitMessage,
-    repoStatus,
-  ]);
-
-  const handleQuit = useCallback(() => {
-    void getCurrentWindow().close();
+    };
   }, []);
-
-  const handleClearCachesAndQuit = useCallback(async () => {
-    const repoIds = new Set<string>();
-
-    if (repoStatus?.root_path) {
-      repoIds.add(repoStatus.root_path);
-    }
-
-    const lastRepo = getString(LAST_REPO_KEY);
-    if (lastRepo) {
-      repoIds.add(lastRepo);
-    }
-
-    await Promise.all(
-      Array.from(repoIds).map(async (repoRoot) => {
-        try {
-          await cleanupAgents({ repoRoot });
-        } catch (error) {
-          console.error("Failed to cleanup agents for repo", repoRoot, error);
-        }
-      })
-    );
-
-    clearBinding();
-    void getCurrentWindow().close();
-  }, [clearBinding, repoStatus]);
 
   return (
     <main className="app-shell">
-      <SyncBar
-        syncEnabled={syncTyping}
-        onToggleSync={() => setSyncTyping((prev) => !prev)}
-        onBindRepo={() => void beginBindRepo()}
-        repoStatus={repoStatus}
-        repoError={repoError}
-        repoLoading={repoLoading}
-      onCreateAgent={createDialog.openDialog}
-      onQuit={handleQuit}
-      onClearCachesAndQuit={handleClearCachesAndQuit}
-    />
-      <AgentOverview
-        agents={agentsApi.agents}
-        diffStats={agentsApi.agentDiffStatsById}
-        openMenuId={agentsApi.agentMenuOpenId}
-        onToggleMenu={agentsApi.toggleAgentMenu}
-        onCommitAndMerge={openCommitDialog}
-        onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
-        removingAgentId={agentsApi.removingAgentId}
-      />
-      <section className="terminal-card">
-        {layout ? (
-          <div className="layout-root">
-            <LayoutRenderer
-              node={layout}
-              activePaneId={activePaneId}
-              onFocusPane={setActivePaneId}
-              onPaneInput={
-                syncTyping
-                  ? broadcastPaneInput
-                  : undefined
-              }
-            />
-          </div>
+      <section className="terminal-shell">
+        {pane ? (
+          <TerminalPane
+            pane={pane}
+            isActive
+            onFocused={() => undefined}
+          />
         ) : (
-          <div className="loading">No terminals yet. Create an agent to start.</div>
+          <div className="loading">Booting terminal session…</div>
         )}
       </section>
-      <BranchBindDialog
-        open={branchDialogOpen}
-        branches={branchOptions}
-        selection={branchSelection}
-        onChangeSelection={setBranchSelection}
-        onCancel={cancelBindRepo}
-        onConfirm={() => void confirmBindRepo()}
-        busy={repoLoading}
-        pendingRepoPath={pendingRepoPath}
-      />
-      <CreateAgentDialog
-        open={createDialog.open}
-        creating={createDialog.creatingAgent}
-        repoRootPathLabel={repoStatus?.root_path ?? "your repo"}
-        agentName={createDialog.agentNameInput}
-        onChangeAgentName={createDialog.setAgentNameInput}
-        startCommand={createDialog.agentCommandInput}
-        onChangeStartCommand={createDialog.setAgentCommandInput}
-        error={createDialog.agentError}
-        placeholderAgentName={`agent-${agentsApi.agents.length + 1}`}
-        onCancel={createDialog.closeDialog}
-        onConfirm={() => void createDialog.confirmCreate()}
-      />
-      <CommitAndMergeDialog
-        open={commitDialogOpen}
-        agent={commitDialogAgent}
-        baseBranch={baseBranch ?? repoStatus?.branch ?? null}
-        commitMessage={commitMessage}
-        onChangeCommitMessage={setCommitMessage}
-        busy={commitBusy}
-        error={commitError}
-        onCancel={closeCommitDialog}
-        onConfirm={() => void confirmCommitAndMerge()}
-      />
     </main>
   );
 }
