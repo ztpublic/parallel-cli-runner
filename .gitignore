@@ -11,13 +11,20 @@ node_modules
 # Build output
 dist
 dist-ssr
+storybook-static
+coverage
 
 # Vite cache
 .vite
+.eslintcache
+
+# TypeScript
+*.tsbuildinfo
 
 # Environment files
 .env
 .env.*
+.env.local
 !.env.example
 
 # IDE/editor
@@ -34,3 +41,6 @@ src-tauri/tauri-build
 # App caches / worktrees
 .parallel-cli
 .parallel-worktrees
+
+# Storybook
+*storybook.log
