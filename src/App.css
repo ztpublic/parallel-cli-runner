@@ -153,6 +153,16 @@ button {
   height: 14px;
 }
 
+.icon-button--danger {
+  color: var(--danger);
+}
+
+.icon-button--danger:hover {
+  background: rgba(244, 135, 113, 0.12);
+  border-color: rgba(244, 135, 113, 0.4);
+  color: #ffd4cb;
+}
+
 .workspace {
   flex: 1 1 auto;
   min-height: 0;
@@ -280,6 +290,10 @@ button {
   gap: 8px;
 }
 
+.git-list--branches {
+  gap: 4px;
+}
+
 .git-item {
   display: flex;
   gap: 8px;
@@ -297,6 +311,7 @@ button {
 }
 
 .git-item--current {
+  padding: 6px;
   background: var(--accent-soft);
   border-color: rgba(0, 122, 204, 0.45);
 }
@@ -339,6 +354,10 @@ button {
   gap: 4px;
   opacity: 0;
   transition: opacity 0.15s ease;
+}
+
+.git-list--branches .git-item > svg {
+  margin-top: 1px;
 }
 
 .git-item:hover .git-item-actions {

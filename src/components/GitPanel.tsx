@@ -124,7 +124,7 @@ export function GitPanel() {
                 </button>
               </div>
               {expanded.local ? (
-                <div className="git-list">
+                <div className="git-list git-list--branches">
                   {localBranches.map((branch) => (
                     <div
                       key={branch.name}
@@ -142,7 +142,11 @@ export function GitPanel() {
                         <button type="button" className="icon-button icon-button--tiny" title="Merge">
                           <Icon name="merge" size={12} />
                         </button>
-                        <button type="button" className="icon-button icon-button--tiny" title="Delete">
+                        <button
+                          type="button"
+                          className="icon-button icon-button--tiny icon-button--danger"
+                          title="Delete"
+                        >
                           <Icon name="trash" size={12} />
                         </button>
                       </div>
@@ -166,7 +170,7 @@ export function GitPanel() {
                 </button>
               </div>
               {expanded.remote ? (
-                <div className="git-list">
+                <div className="git-list git-list--branches">
                   {remoteBranches.map((branch) => (
                     <div key={branch.name} className="git-item">
                       <Icon name="cloud" size={14} />
