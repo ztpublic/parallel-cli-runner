@@ -215,7 +215,8 @@ button {
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
 }
 
 .git-tab:hover {
@@ -225,6 +226,17 @@ button {
 .git-tab.is-active {
   color: var(--text-strong);
   border-bottom-color: var(--accent);
+}
+
+.git-tab.is-drag-over {
+  color: var(--text);
+  background: rgba(0, 122, 204, 0.12);
+  border-bottom-color: rgba(0, 122, 204, 0.5);
+}
+
+.git-tab.is-dragging {
+  opacity: 0.6;
+  cursor: grabbing;
 }
 
 .git-panel-content {

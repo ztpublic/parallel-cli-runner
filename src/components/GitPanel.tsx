@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { Icon } from "./Icons";
 
 type BranchItem = {
@@ -14,12 +14,25 @@ type CommitItem = {
   date: string;
 };
 
+type WorktreeItem = {
+  branch: string;
+  path: string;
+};
+
 type ChangeStatus = "modified" | "added" | "deleted";
 
 type ChangedFile = {
   path: string;
   status: ChangeStatus;
   staged: boolean;
+};
+
+type GitTabId = "branches" | "commits" | "commit" | "worktrees" | "remotes";
+
+type GitTab = {
+  id: GitTabId;
+  label: string;
+  icon: string;
 };
 
 const localBranches: BranchItem[] = [
@@ -40,12 +53,26 @@ const commits: CommitItem[] = [
   { id: "d4f7e8a", message: "Initial commit", author: "John Doe", date: "3 days ago" },
 ];
 
+const worktrees: WorktreeItem[] = [
+  { branch: "feature/new-ui", path: "/home/user/projects/repo-new-ui" },
+  { branch: "bugfix/terminal-crash", path: "/home/user/projects/repo-bugfix" },
+  { branch: "feature/api-integration", path: "/home/user/worktrees/api-work" },
+];
+
 const remotes = [
   {
     name: "origin",
     fetch: "https://github.com/user/repo.git",
     push: "https://github.com/user/repo.git",
   },
+];
+
+const initialTabs: GitTab[] = [
+  { id: "branches", label: "Branches", icon: "branch" },
+  { id: "commits", label: "Commits", icon: "commit" },
+  { id: "commit", label: "Commit", icon: "commit" },
+  { id: "worktrees", label: "Worktrees", icon: "folder" },
+  { id: "remotes", label: "Remotes", icon: "cloud" },
 ];
 
 const initialChangedFiles: ChangedFile[] = [
@@ -57,15 +84,16 @@ const initialChangedFiles: ChangedFile[] = [
 ];
 
 export function GitPanel() {
-  const [activeTab, setActiveTab] = useState<
-    "branches" | "commits" | "commit" | "worktrees" | "remotes"
-  >("branches");
+  const [tabs, setTabs] = useState<GitTab[]>(initialTabs);
+  const [activeTab, setActiveTab] = useState<GitTabId>("branches");
   const [expanded, setExpanded] = useState<{ local: boolean; remote: boolean }>({
     local: true,
     remote: true,
   });
   const [commitMessage, setCommitMessage] = useState("");
   const [changedFiles, setChangedFiles] = useState<ChangedFile[]>(initialChangedFiles);
+  const [draggedTabId, setDraggedTabId] = useState<GitTabId | null>(null);
+  const [dragOverTabId, setDragOverTabId] = useState<GitTabId | null>(null);
 
   const stagedFiles = changedFiles.filter((file) => file.staged);
   const unstagedFiles = changedFiles.filter((file) => !file.staged);
@@ -132,6 +160,51 @@ export function GitPanel() {
     }
   };
 
+  const handleDragStart = (tabId: GitTabId) => (event: DragEvent<HTMLButtonElement>) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", tabId);
+    setDraggedTabId(tabId);
+  };
+
+  const handleDragOver = (tabId: GitTabId) => (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setDragOverTabId(tabId);
+  };
+
+  const handleDrop = (tabId: GitTabId) => (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("text/plain") as GitTabId | "";
+    const sourceTabId = sourceId || draggedTabId;
+
+    if (!sourceTabId || sourceTabId === tabId) {
+      setDragOverTabId(null);
+      return;
+    }
+
+    const { left, width } = event.currentTarget.getBoundingClientRect();
+    const isAfter = event.clientX >= left + width / 2;
+
+    setTabs((current) => {
+      const sourceIndex = current.findIndex((tab) => tab.id === sourceTabId);
+      const targetIndex = current.findIndex((tab) => tab.id === tabId);
+      if (sourceIndex === -1 || targetIndex === -1) return current;
+
+      const next = [...current];
+      const [moved] = next.splice(sourceIndex, 1);
+      const insertIndex = targetIndex + (isAfter ? 1 : 0);
+      const normalizedIndex = sourceIndex < insertIndex ? insertIndex - 1 : insertIndex;
+      next.splice(normalizedIndex, 0, moved);
+      return next;
+    });
+
+    setDragOverTabId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTabId(null);
+    setDragOverTabId(null);
+  };
+
   return (
     <aside className="git-panel">
       <div className="panel-header">
@@ -145,56 +218,26 @@ export function GitPanel() {
       </div>
 
       <div className="git-tabs" role="tablist">
-        <button
-          type="button"
-          className={`git-tab ${activeTab === "branches" ? "is-active" : ""}`}
-          role="tab"
-          aria-selected={activeTab === "branches"}
-          onClick={() => setActiveTab("branches")}
-        >
-          <Icon name="branch" size={14} />
-          <span>Branches</span>
-        </button>
-        <button
-          type="button"
-          className={`git-tab ${activeTab === "commits" ? "is-active" : ""}`}
-          role="tab"
-          aria-selected={activeTab === "commits"}
-          onClick={() => setActiveTab("commits")}
-        >
-          <Icon name="commit" size={14} />
-          <span>Commits</span>
-        </button>
-        <button
-          type="button"
-          className={`git-tab ${activeTab === "commit" ? "is-active" : ""}`}
-          role="tab"
-          aria-selected={activeTab === "commit"}
-          onClick={() => setActiveTab("commit")}
-        >
-          <Icon name="commit" size={14} />
-          <span>Commit</span>
-        </button>
-        <button
-          type="button"
-          className={`git-tab ${activeTab === "worktrees" ? "is-active" : ""}`}
-          role="tab"
-          aria-selected={activeTab === "worktrees"}
-          onClick={() => setActiveTab("worktrees")}
-        >
-          <Icon name="folder" size={14} />
-          <span>Worktrees</span>
-        </button>
-        <button
-          type="button"
-          className={`git-tab ${activeTab === "remotes" ? "is-active" : ""}`}
-          role="tab"
-          aria-selected={activeTab === "remotes"}
-          onClick={() => setActiveTab("remotes")}
-        >
-          <Icon name="cloud" size={14} />
-          <span>Remotes</span>
-        </button>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`git-tab ${activeTab === tab.id ? "is-active" : ""} ${
+              draggedTabId === tab.id ? "is-dragging" : ""
+            } ${dragOverTabId === tab.id ? "is-drag-over" : ""}`}
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            draggable
+            onClick={() => setActiveTab(tab.id)}
+            onDragStart={handleDragStart(tab.id)}
+            onDragOver={handleDragOver(tab.id)}
+            onDrop={handleDrop(tab.id)}
+            onDragEnd={handleDragEnd}
+          >
+            <Icon name={tab.icon} size={14} />
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       <div className="git-panel-content">
@@ -421,12 +464,30 @@ export function GitPanel() {
         ) : null}
 
         {activeTab === "worktrees" ? (
-          <div className="git-empty">
-            <Icon name="folder" size={24} />
-            <p>No worktrees configured</p>
-            <button type="button" className="git-primary-button">
-              Add worktree
-            </button>
+          <div className="git-list git-list--branches">
+            {worktrees.map((worktree) => (
+              <div key={worktree.branch} className="git-item">
+                <Icon name="folder" size={14} />
+                <div className="git-item-body">
+                  <div className="git-item-title">
+                    <span className="git-item-name">{worktree.branch}</span>
+                  </div>
+                  <div className="git-item-meta">{worktree.path}</div>
+                </div>
+                <div className="git-item-actions">
+                  <button type="button" className="icon-button icon-button--tiny" title="Merge">
+                    <Icon name="merge" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button icon-button--tiny icon-button--danger"
+                    title="Delete"
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
 
