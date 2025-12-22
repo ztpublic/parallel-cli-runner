@@ -1,15 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import "./App.css";
-import { createPaneNode } from "./services/sessions";
-import { killSession } from "./services/tauri";
-import { PaneNode } from "./types/layout";
-import { TerminalPane } from "./components/TerminalPane";
+import { createPaneNode, killLayoutSessions } from "./services/sessions";
+import { useLayoutState } from "./hooks/useLayoutState";
+import { useClosePaneHotkey } from "./hooks/useHotkeys";
+import { LayoutRenderer } from "./components/LayoutRenderer";
+
 function App() {
-  const [pane, setPane] = useState<PaneNode | null>(null);
+  const {
+    layout,
+    setLayout,
+    activePaneId,
+    setActivePaneId,
+    closeActivePane,
+  } = useLayoutState();
+
+  useClosePaneHotkey(closeActivePane);
+
+  // Track layout for cleanup
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
 
   useEffect(() => {
     let alive = true;
-    let sessionId: string | null = null;
+    let initialNode: any = null;
 
     const start = async () => {
       const next = await createPaneNode({
@@ -17,20 +30,32 @@ function App() {
           title: "Local session",
         },
       });
-      sessionId = next.sessionId;
+      initialNode = next;
+
       if (!alive) {
-        void killSession({ id: next.sessionId });
+        void killLayoutSessions(next);
         return;
       }
-      setPane(next);
+      setLayout(next);
+      setActivePaneId(next.id);
     };
 
     void start();
 
     return () => {
       alive = false;
-      if (sessionId) {
-        void killSession({ id: sessionId });
+      // If we unmount before setting layout, kill the initial node
+      if (initialNode && !layoutRef.current) {
+        void killLayoutSessions(initialNode);
+      }
+    };
+  }, [setLayout, setActivePaneId]);
+
+  // Global cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (layoutRef.current) {
+        void killLayoutSessions(layoutRef.current);
       }
     };
   }, []);
@@ -38,11 +63,11 @@ function App() {
   return (
     <main className="app-shell">
       <section className="terminal-shell">
-        {pane ? (
-          <TerminalPane
-            pane={pane}
-            isActive
-            onFocused={() => undefined}
+        {layout ? (
+          <LayoutRenderer
+            node={layout}
+            activePaneId={activePaneId}
+            onFocus={setActivePaneId}
           />
         ) : (
           <div className="loading">Booting terminal session…</div>
