@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { SVGProps, ReactNode } from "react";
 
 export type IconName =
   | "alert"
@@ -33,7 +33,7 @@ type IconProps = SVGProps<SVGSVGElement> & {
   size?: number;
 };
 
-const iconPaths: Record<IconName, JSX.Element> = {
+const iconPaths: Record<IconName, ReactNode> = {
   alert: (
     <>
       <path d="M10.3 4.9 3.3 17a1.5 1.5 0 0 0 1.3 2.3h14.8a1.5 1.5 0 0 0 1.3-2.3l-7-12.1a1.5 1.5 0 0 0-2.6 0z" />
