@@ -201,15 +201,21 @@ button {
   display: flex;
   border-bottom: 1px solid var(--border);
   background: var(--surface-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.git-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .git-tab {
-  flex: 1;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   color: var(--text-muted);
   border: none;
@@ -217,6 +223,7 @@ button {
   background: transparent;
   cursor: grab;
   user-select: none;
+  white-space: nowrap;
 }
 
 .git-tab:hover {
