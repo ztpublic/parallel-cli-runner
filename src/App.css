@@ -118,6 +118,7 @@ button {
   color: var(--text);
   width: 28px;
   height: 28px;
+  padding: 0;
   border-radius: 6px;
   display: inline-flex;
   align-items: center;
@@ -145,6 +146,11 @@ button {
   width: 22px;
   height: 22px;
   border-radius: 5px;
+}
+
+.icon-button--tiny svg {
+  width: 14px;
+  height: 14px;
 }
 
 .workspace {
