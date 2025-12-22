@@ -1,9 +1,13 @@
+use git2::{
+    BranchType, Diff, DiffOptions, DiffStatsFormat, ErrorCode, IndexAddOption, Repository, Status,
+    StatusOptions, StatusShow, WorktreeAddOptions, WorktreePruneOptions,
+};
 use serde::Serialize;
 use std::{
-    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     process::Command,
+    time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
 use ts_rs::TS;
@@ -21,6 +25,8 @@ pub enum GitError {
     GitNotFound,
     #[error("git failed: {stderr}")]
     GitFailed { code: Option<i32>, stderr: String },
+    #[error("git2 error: {0}")]
+    Git2(#[from] git2::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("utf8 error: {0}")]
@@ -151,163 +157,166 @@ pub struct BranchInfoDto {
 }
 
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
-    if cwd.join(".git").exists() {
-        return Ok(Some(canonicalize_path(cwd)));
-    }
-
-    match run_git(cwd, &["rev-parse", "--show-toplevel"]) {
-        Ok(output) => {
-            let root = output.stdout.trim();
-            if root.is_empty() {
-                return Ok(None);
-            }
-            let root_path = PathBuf::from(root);
-            Ok(Some(canonicalize_path(&root_path)))
-        }
-        Err(GitError::GitFailed { stderr, .. })
-            if stderr.to_ascii_lowercase().contains("not a git repository") =>
-        {
-            Ok(None)
-        }
-        Err(err) => Err(err),
+    match Repository::discover(cwd) {
+        Ok(repo) => Ok(Some(repo_root_path(&repo))),
+        Err(err) if err.code() == ErrorCode::NotFound => Ok(None),
+        Err(err) => Err(GitError::Git2(err)),
     }
 }
 
 pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    let output = run_git(cwd, &["status", "--porcelain=v2", "-z", "-b"])?;
-    let mut status = parse_status_z(&output.stdout, &repo_root);
-    status.latest_commit = latest_commit(&repo_root)?;
-    Ok(status)
+    let repo = open_repo(cwd)?;
+    let repo_root = repo_root_path(&repo);
+    let (branch, ahead, behind) = branch_status(&repo)?;
+
+    let mut opts = StatusOptions::new();
+    opts.show(StatusShow::IndexAndWorkdir)
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .renames_head_to_index(true)
+        .renames_index_to_workdir(true)
+        .renames_from_rewrites(true);
+
+    let statuses = repo.statuses(Some(&mut opts))?;
+    let mut has_untracked = false;
+    let mut has_staged = false;
+    let mut has_unstaged = false;
+    let mut conflicted_files = 0usize;
+    let mut modified_files = Vec::new();
+
+    for entry in statuses.iter() {
+        let status = entry.status();
+        if status.contains(Status::IGNORED) || status == Status::CURRENT {
+            continue;
+        }
+
+        let Some(path) = entry.path() else {
+            continue;
+        };
+
+        let (staged, unstaged, conflicted) = if status.contains(Status::CONFLICTED) {
+            (Some(FileChangeType::Unmerged), Some(FileChangeType::Unmerged), true)
+        } else {
+            (map_index_status(status), map_worktree_status(status), false)
+        };
+        if conflicted {
+            conflicted_files += 1;
+            has_staged = true;
+            has_unstaged = true;
+        }
+
+        if status.contains(Status::WT_NEW) {
+            has_untracked = true;
+        }
+        if staged.is_some() {
+            has_staged = true;
+        }
+        if unstaged.is_some() {
+            has_unstaged = true;
+        }
+
+        if staged.is_none() && unstaged.is_none() {
+            continue;
+        }
+
+        modified_files.push(FileStatusDto {
+            path: path.to_string(),
+            staged,
+            unstaged,
+        });
+    }
+
+    Ok(RepoStatusDto {
+        repo_id: repo_root.to_string_lossy().to_string(),
+        root_path: repo_root.to_string_lossy().to_string(),
+        branch,
+        ahead,
+        behind,
+        has_untracked,
+        has_staged,
+        has_unstaged,
+        conflicted_files,
+        modified_files,
+        latest_commit: latest_commit_for_repo(&repo)?,
+    })
 }
 
 pub fn diff(cwd: &Path, pathspecs: &[String]) -> Result<String, GitError> {
-    let _repo_root = ensure_repo(cwd)?;
-    let mut args: Vec<String> = vec!["diff".into(), "--numstat".into()];
-    if !pathspecs.is_empty() {
-        args.push("--".into());
-        args.extend(pathspecs.iter().cloned());
+    let repo = open_repo(cwd)?;
+    let mut opts = DiffOptions::new();
+    for pathspec in pathspecs {
+        opts.pathspec(pathspec);
     }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = run_git(cwd, &arg_refs)?;
-    Ok(output.stdout)
+    let diff = repo.diff_index_to_workdir(None, Some(&mut opts))?;
+    let stats = diff.stats()?;
+    let buf = stats.to_buf(DiffStatsFormat::NUMBER, 80)?;
+    Ok(buf.as_str().unwrap_or_default().to_string())
 }
 
 pub fn diff_stats_against_branch(
     worktree: &Path,
     base_branch: &str,
 ) -> Result<DiffStatDto, GitError> {
-    let _ = ensure_repo(worktree)?;
-    let output = run_git(worktree, &["diff", "--numstat", base_branch])?;
-    Ok(parse_numstat_summary(&output.stdout))
+    let repo = open_repo(worktree)?;
+    let obj = repo.revparse_single(base_branch)?;
+    let tree = obj.peel_to_tree()?;
+    let mut opts = DiffOptions::new();
+    let diff = repo.diff_tree_to_workdir_with_index(Some(&tree), Some(&mut opts))?;
+    diff_stats_from_diff(&diff)
 }
 
 pub fn diff_stats_worktree(worktree: &Path) -> Result<DiffStatDto, GitError> {
-    let worktree = ensure_repo(worktree)?;
-    let mut combined = String::new();
-    let mut errors: Vec<GitError> = Vec::new();
-    let mut untracked_files: Vec<String> = Vec::new();
-    let mut untracked_insertions = 0i32;
+    let repo = open_repo(worktree)?;
+    let head_tree = match repo.head() {
+        Ok(head) => Some(head.peel_to_tree()?),
+        Err(err) if err.code() == ErrorCode::UnbornBranch => None,
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    let mut opts = DiffOptions::new();
+    let diff = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts))?;
+    let mut summary = diff_stats_from_diff(&diff)?;
 
-    match run_git(&worktree, &["diff", "--numstat"]) {
-        Ok(out) => {
-            combined.push_str(&out.stdout);
-        }
-        Err(err) => errors.push(err),
-    }
-
-    match run_git(&worktree, &["diff", "--numstat", "--cached"]) {
-        Ok(out) => {
-            if !combined.is_empty() && !out.stdout.is_empty() {
-                combined.push('\n');
-            }
-            combined.push_str(&out.stdout);
-        }
-        Err(err) => errors.push(err),
-    }
-
-    if let Ok(out) = run_git(&worktree, &["ls-files", "--others", "--exclude-standard"]) {
-        for line in out.stdout.lines() {
-            let path = line.trim();
-            if path.is_empty() {
-                continue;
-            }
-            untracked_files.push(path.to_string());
-            let full_path = worktree.join(path);
-            if let Ok(contents) = fs::read_to_string(&full_path) {
-                // Count lines in a simple, cross-platform way.
-                let count = if contents.is_empty() {
-                    0
-                } else {
-                    contents.lines().count()
-                };
-                untracked_insertions += count as i32;
-            }
-        }
-    }
-
-    if combined.trim().is_empty() {
-        if let Some(err) = errors.into_iter().next() {
-            return Err(err);
-        }
-        if !untracked_files.is_empty() {
-            return Ok(DiffStatDto {
-                files_changed: untracked_files.len(),
-                insertions: untracked_insertions,
-                deletions: 0,
-            });
-        }
-        return Ok(DiffStatDto {
-            files_changed: 0,
-            insertions: 0,
-            deletions: 0,
-        });
-    }
-
-    let mut summary = parse_numstat_summary(&combined);
-    if !untracked_files.is_empty() {
-        summary.files_changed += untracked_files.len();
+    let (untracked_count, untracked_insertions) = untracked_stats(&repo)?;
+    if untracked_count > 0 {
+        summary.files_changed += untracked_count;
         summary.insertions += untracked_insertions;
     }
+
     Ok(summary)
 }
 
 pub fn default_branch(cwd: &Path) -> Result<String, GitError> {
-    let repo_root = ensure_repo(cwd)?;
+    let repo = open_repo(cwd)?;
 
-    if let Ok(out) = run_git(&repo_root, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
-    {
-        let remote_head = out.stdout.trim();
-        if !remote_head.is_empty() {
-            let local = remote_head.strip_prefix("origin/").unwrap_or(remote_head);
-            if branch_exists(&repo_root, local)? {
+    if let Ok(reference) = repo.find_reference("refs/remotes/origin/HEAD") {
+        if let Some(target) = reference.symbolic_target() {
+            let local = target.strip_prefix("refs/remotes/origin/").unwrap_or(target);
+            if branch_exists_in_repo(&repo, local)? {
                 return Ok(local.to_string());
             }
         }
     }
 
     for candidate in ["main", "master"] {
-        if branch_exists(&repo_root, candidate)? {
+        if branch_exists_in_repo(&repo, candidate)? {
             return Ok(candidate.to_string());
         }
     }
 
-    current_branch(&repo_root)
+    current_branch_from_repo(&repo)
 }
 
 pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    let output = run_git(&repo_root, &["branch", "--list"])?;
+    let repo = open_repo(cwd)?;
     let mut branches = Vec::new();
-    for line in output.stdout.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let current = trimmed.starts_with('*');
-        let name = trimmed.trim_start_matches('*').trim().to_string();
+    for branch in repo.branches(Some(BranchType::Local))? {
+        let (branch, _branch_type) = branch?;
+        let name = branch.name()?.unwrap_or_default().to_string();
         if !name.is_empty() {
-            branches.push(BranchInfoDto { name, current });
+            branches.push(BranchInfoDto {
+                name,
+                current: branch.is_head(),
+            });
         }
     }
     Ok(branches)
@@ -369,17 +378,58 @@ pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
 }
 
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
-    let _repo_root = ensure_repo(cwd)?;
+    let repo = open_repo(cwd)?;
+    let mut index = repo.index()?;
+
     if stage_all {
-        run_git(cwd, &["add", "-A"])?;
+        index.add_all(["."].iter(), IndexAddOption::DEFAULT, None)?;
+        index.write()?;
     }
 
-    let mut args = vec!["commit".to_string(), "-m".to_string(), message.to_string()];
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let sig = repo.signature()?;
+
     if amend {
-        args.push("--amend".to_string());
+        let head = repo.head().map_err(|err| {
+            if err.code() == ErrorCode::UnbornBranch {
+                GitError::GitFailed {
+                    code: None,
+                    stderr: "cannot amend without any commits".to_string(),
+                }
+            } else {
+                GitError::Git2(err)
+            }
+        })?;
+        let head_id = head.target().ok_or_else(|| GitError::GitFailed {
+            code: None,
+            stderr: "cannot amend without a valid HEAD".to_string(),
+        })?;
+        let head_commit = repo.find_commit(head_id)?;
+        let mut parents = Vec::new();
+        for i in 0..head_commit.parent_count() {
+            parents.push(head_commit.parent(i)?);
+        }
+        let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+        repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)?;
+        return Ok(());
     }
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_git(cwd, &arg_refs)?;
+
+    let mut parents = Vec::new();
+    if let Ok(head) = repo.head() {
+        if let Some(head_id) = head.target() {
+            let head_commit = repo.find_commit(head_id)?;
+            if head_commit.tree_id() == tree.id() {
+                return Err(GitError::GitFailed {
+                    code: None,
+                    stderr: "nothing to commit".to_string(),
+                });
+            }
+            parents.push(head_commit);
+        }
+    }
+    let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
+    repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)?;
     Ok(())
 }
 
@@ -449,18 +499,20 @@ pub fn merge_into_branch(
 }
 
 pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    let output = run_git(&repo_root, &["rev-parse", "--abbrev-ref", "HEAD"])?;
-    Ok(output.stdout.trim().to_string())
+    let repo = open_repo(cwd)?;
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(err) if err.code() == ErrorCode::UnbornBranch => {
+            return Ok("HEAD".to_string());
+        }
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    Ok(head.shorthand().unwrap_or("HEAD").to_string())
 }
 
 pub fn branch_exists(cwd: &Path, branch: &str) -> Result<bool, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    match run_git(&repo_root, &["rev-parse", "--verify", branch]) {
-        Ok(_) => Ok(true),
-        Err(GitError::GitFailed { .. }) => Ok(false),
-        Err(err) => Err(err),
-    }
+    let repo = open_repo(cwd)?;
+    branch_exists_in_repo(&repo, branch)
 }
 
 pub fn add_worktree(
@@ -469,18 +521,18 @@ pub fn add_worktree(
     branch: &str,
     start_point: &str,
 ) -> Result<(), GitError> {
-    let path_str = worktree_path.to_string_lossy();
-    run_git(
-        repo_root,
-        &[
-            "worktree",
-            "add",
-            "-b",
-            branch,
-            path_str.as_ref(),
-            start_point,
-        ],
-    )?;
+    let repo = open_repo(repo_root)?;
+    let start_obj = repo.revparse_single(start_point)?;
+    let start_commit = start_obj.peel_to_commit()?;
+    let branch_ref = repo.branch(branch, &start_commit, false)?;
+    let worktree_name = worktree_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(branch);
+    let mut opts = WorktreeAddOptions::new();
+    let reference = branch_ref.into_reference();
+    opts.reference(Some(&reference));
+    repo.worktree(worktree_name, worktree_path, Some(&opts))?;
     Ok(())
 }
 
@@ -489,22 +541,52 @@ pub fn remove_worktree(
     worktree_path: &Path,
     force: bool,
 ) -> Result<(), GitError> {
-    let path_str = worktree_path.to_string_lossy().to_string();
-    let mut args = vec!["worktree".to_string(), "remove".to_string()];
-    if force {
-        args.push("--force".to_string());
+    let repo = open_repo(repo_root)?;
+    let target_path = canonicalize_path(worktree_path);
+    let worktrees = repo.worktrees()?;
+
+    for name in worktrees.iter().flatten() {
+        let worktree = repo.find_worktree(name)?;
+        if canonicalize_path(worktree.path()) == target_path {
+            let mut opts = WorktreePruneOptions::new();
+            opts.valid(true).working_tree(true);
+            if force {
+                opts.locked(true);
+            }
+            worktree.prune(Some(&mut opts))?;
+            return Ok(());
+        }
     }
-    args.push(path_str);
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_git(repo_root, &arg_refs)?;
-    Ok(())
+
+    Err(GitError::GitFailed {
+        code: None,
+        stderr: "worktree not found".to_string(),
+    })
 }
 
 pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {
-    let repo_root = ensure_repo(repo_root)?;
-    let flag = if force { "-D" } else { "-d" };
-    run_git(&repo_root, &["branch", flag, branch])?;
+    let repo = open_repo(repo_root)?;
+    if force {
+        let refname = local_branch_refname(branch);
+        let mut reference = repo.find_reference(&refname)?;
+        reference.delete()?;
+        return Ok(());
+    }
+
+    let mut branch_ref = repo.find_branch(branch, BranchType::Local)?;
+    branch_ref.delete()?;
     Ok(())
+}
+
+fn open_repo(cwd: &Path) -> Result<Repository, GitError> {
+    match Repository::discover(cwd) {
+        Ok(repo) => Ok(repo),
+        Err(err) if err.code() == ErrorCode::NotFound => Err(GitError::GitFailed {
+            code: None,
+            stderr: "not a git repository".to_string(),
+        }),
+        Err(err) => Err(GitError::Git2(err)),
+    }
 }
 
 fn ensure_repo(cwd: &Path) -> Result<PathBuf, GitError> {
@@ -518,221 +600,219 @@ pub fn canonicalize_path(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn repo_root_path(repo: &Repository) -> PathBuf {
+    if let Some(workdir) = repo.workdir() {
+        canonicalize_path(workdir)
+    } else {
+        canonicalize_path(repo.path())
+    }
+}
+
 pub fn latest_commit(cwd: &Path) -> Result<Option<CommitInfoDto>, GitError> {
-    let repo_root = ensure_repo(cwd)?;
-    let fmt = "%H\x1f%an\x1f%ar\x1f%s";
-    let output = match run_git(
-        &repo_root,
-        &["log", "-1", &format!("--pretty=format:{fmt}")],
-    ) {
-        Ok(out) => out,
-        Err(GitError::GitFailed { code: _, stderr })
-            if stderr
-                .to_ascii_lowercase()
-                .contains("does not have any commits yet") =>
-        {
-            return Ok(None);
+    let repo = open_repo(cwd)?;
+    latest_commit_for_repo(&repo)
+}
+
+fn branch_status(repo: &Repository) -> Result<(String, i32, i32), GitError> {
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(err) if err.code() == ErrorCode::UnbornBranch => {
+            return Ok(("HEAD".to_string(), 0, 0));
         }
-        Err(err) => return Err(err),
+        Err(err) => return Err(GitError::Git2(err)),
     };
 
-    let line = output.stdout.trim();
-    if line.is_empty() {
-        return Ok(None);
+    let branch = head.shorthand().unwrap_or("HEAD").to_string();
+    let mut ahead = 0i32;
+    let mut behind = 0i32;
+
+    let is_branch = head
+        .name()
+        .map(|name| name.starts_with("refs/heads/"))
+        .unwrap_or(false);
+    if is_branch {
+        if let Ok(branch_ref) = repo.find_branch(&branch, BranchType::Local) {
+            if let Ok(upstream) = branch_ref.upstream() {
+                if let (Some(local_oid), Some(upstream_oid)) =
+                    (head.target(), upstream.get().target())
+                {
+                    let (a, b) = repo.graph_ahead_behind(local_oid, upstream_oid)?;
+                    ahead = a as i32;
+                    behind = b as i32;
+                }
+            }
+        }
     }
 
-    let parts: Vec<&str> = line.split('\u{1f}').collect();
-    let id = parts.get(0).unwrap_or(&"").to_string();
-    let author = parts.get(1).unwrap_or(&"").to_string();
-    let relative_time = parts.get(2).unwrap_or(&"").to_string();
-    let summary = parts.get(3).unwrap_or(&"").to_string();
+    Ok((branch, ahead, behind))
+}
 
-    if id.is_empty() && summary.is_empty() {
-        return Ok(None);
+fn branch_exists_in_repo(repo: &Repository, branch: &str) -> Result<bool, GitError> {
+    match repo.find_branch(branch, BranchType::Local) {
+        Ok(_) => Ok(true),
+        Err(err) if err.code() == ErrorCode::NotFound => Ok(false),
+        Err(err) => Err(GitError::Git2(err)),
     }
+}
 
+fn current_branch_from_repo(repo: &Repository) -> Result<String, GitError> {
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(err) if err.code() == ErrorCode::UnbornBranch => {
+            return Ok("HEAD".to_string());
+        }
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    Ok(head.shorthand().unwrap_or("HEAD").to_string())
+}
+
+fn local_branch_refname(branch: &str) -> String {
+    if branch.starts_with("refs/") {
+        branch.to_string()
+    } else {
+        format!("refs/heads/{branch}")
+    }
+}
+
+fn map_index_status(status: Status) -> Option<FileChangeType> {
+    if status.contains(Status::INDEX_RENAMED) {
+        Some(FileChangeType::Renamed)
+    } else if status.contains(Status::INDEX_NEW) {
+        Some(FileChangeType::Added)
+    } else if status.contains(Status::INDEX_DELETED) {
+        Some(FileChangeType::Deleted)
+    } else if status.contains(Status::INDEX_MODIFIED) || status.contains(Status::INDEX_TYPECHANGE) {
+        Some(FileChangeType::Modified)
+    } else {
+        None
+    }
+}
+
+fn map_worktree_status(status: Status) -> Option<FileChangeType> {
+    if status.contains(Status::WT_RENAMED) {
+        Some(FileChangeType::Renamed)
+    } else if status.contains(Status::WT_NEW) {
+        Some(FileChangeType::Added)
+    } else if status.contains(Status::WT_DELETED) {
+        Some(FileChangeType::Deleted)
+    } else if status.contains(Status::WT_MODIFIED) || status.contains(Status::WT_TYPECHANGE) {
+        Some(FileChangeType::Modified)
+    } else {
+        None
+    }
+}
+
+fn diff_stats_from_diff(diff: &Diff<'_>) -> Result<DiffStatDto, GitError> {
+    let stats = diff.stats()?;
+    Ok(DiffStatDto {
+        files_changed: stats.files_changed(),
+        insertions: stats.insertions() as i32,
+        deletions: stats.deletions() as i32,
+    })
+}
+
+fn latest_commit_for_repo(repo: &Repository) -> Result<Option<CommitInfoDto>, GitError> {
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(err) if err.code() == ErrorCode::UnbornBranch => return Ok(None),
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    let Some(oid) = head.target() else {
+        return Ok(None);
+    };
+    let commit = repo.find_commit(oid)?;
+    let summary = commit.summary().unwrap_or_default().to_string();
+    let author = commit.author().name().unwrap_or_default().to_string();
+    let relative_time = format_relative_time(commit.time());
     Ok(Some(CommitInfoDto {
-        id,
+        id: commit.id().to_string(),
         summary,
         author,
         relative_time,
     }))
 }
 
-fn map_status_code(code: char) -> Option<FileChangeType> {
-    match code {
-        'M' | 'T' => Some(FileChangeType::Modified),
-        'A' => Some(FileChangeType::Added),
-        'D' => Some(FileChangeType::Deleted),
-        'R' | 'C' => Some(FileChangeType::Renamed),
-        'U' => Some(FileChangeType::Unmerged),
-        _ => None,
+fn format_relative_time(time: git2::Time) -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let seconds = now.saturating_sub(time.seconds());
+    format_relative_duration(seconds)
+}
+
+fn format_relative_duration(seconds: i64) -> String {
+    let seconds = seconds.max(0);
+    if seconds < 60 {
+        return format_relative_unit(seconds.max(1), "second");
+    }
+    let minutes = seconds / 60;
+    if minutes < 60 {
+        return format_relative_unit(minutes, "minute");
+    }
+    let hours = minutes / 60;
+    if hours < 24 {
+        return format_relative_unit(hours, "hour");
+    }
+    let days = hours / 24;
+    if days < 7 {
+        return format_relative_unit(days, "day");
+    }
+    let weeks = days / 7;
+    if weeks < 5 {
+        return format_relative_unit(weeks, "week");
+    }
+    let months = days / 30;
+    if months < 12 {
+        return format_relative_unit(months.max(1), "month");
+    }
+    let years = days / 365;
+    format_relative_unit(years.max(1), "year")
+}
+
+fn format_relative_unit(value: i64, unit: &str) -> String {
+    if value == 1 {
+        format!("1 {unit} ago")
+    } else {
+        format!("{value} {unit}s ago")
     }
 }
 
-fn parse_status_z(stdout: &str, repo_root: &Path) -> RepoStatusDto {
-    let mut branch = "HEAD".to_string();
-    let mut ahead = 0;
-    let mut behind = 0;
-    let mut has_untracked = false;
-    let mut has_staged = false;
-    let mut has_unstaged = false;
-    let mut conflicted_files = 0usize;
-    let mut modified_files: Vec<FileStatusDto> = Vec::new();
-
-    let tokens: Vec<&str> = stdout.split('\0').collect();
-    let mut i = 0usize;
-
-    while i < tokens.len() {
-        let record = tokens[i];
-        if record.is_empty() {
-            i += 1;
-            continue;
-        }
-
-        if let Some(meta) = record.strip_prefix("# ") {
-            if let Some(value) = meta.strip_prefix("branch.head ") {
-                branch = value.trim().to_string();
-            } else if let Some(value) = meta.strip_prefix("branch.ab ") {
-                let mut parts = value.split_whitespace();
-                ahead = parts.next().map(parse_signed_count).unwrap_or_default();
-                behind = parts.next().map(parse_signed_count).unwrap_or_default();
-            }
-            i += 1;
-            continue;
-        }
-
-        if record.starts_with("1 ") {
-            if let Some(file) = parse_record_file(record) {
-                update_flags(
-                    &file,
-                    &mut has_staged,
-                    &mut has_unstaged,
-                    &mut conflicted_files,
-                );
-                modified_files.push(file);
-            }
-            i += 1;
-            continue;
-        }
-
-        if record.starts_with("2 ") {
-            if let Some(file) = parse_record_file(record) {
-                update_flags(
-                    &file,
-                    &mut has_staged,
-                    &mut has_unstaged,
-                    &mut conflicted_files,
-                );
-                modified_files.push(file);
-            }
-            // porcelain v2 -z provides old path as next NUL token
-            i += 2;
-            continue;
-        }
-
-        if record.starts_with("u ") {
-            if let Some(file) = parse_record_file(record) {
-                update_flags(
-                    &file,
-                    &mut has_staged,
-                    &mut has_unstaged,
-                    &mut conflicted_files,
-                );
-                modified_files.push(file);
-            }
-            i += 1;
-            continue;
-        }
-
-        if let Some(path) = record.strip_prefix("? ") {
-            let path = path.trim();
-            if !path.is_empty() {
-                has_untracked = true;
-                has_unstaged = true;
-                let file = FileStatusDto {
-                    path: path.to_string(),
-                    staged: None,
-                    unstaged: Some(FileChangeType::Added),
-                };
-                modified_files.push(file);
-            }
-            i += 1;
-            continue;
-        }
-
-        i += 1;
-    }
-
-    let repo_id = canonicalize_path(repo_root);
-    RepoStatusDto {
-        repo_id: repo_id.to_string_lossy().to_string(),
-        root_path: repo_id.to_string_lossy().to_string(),
-        branch,
-        ahead,
-        behind,
-        has_untracked,
-        has_staged,
-        has_unstaged,
-        conflicted_files,
-        modified_files,
-        latest_commit: None,
-    }
-}
-
-fn parse_record_file(record: &str) -> Option<FileStatusDto> {
-    // With `git status --porcelain=v2 -z`, records are NUL-delimited but paths are
-    // unquoted "as-is" and may contain spaces. Use splitn() with the exact field
-    // count so the final field preserves spaces in the path.
-    let kind = record.chars().next()?;
-
-    let (xy, path) = match kind {
-        '1' => {
-            // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
-            let parts: Vec<&str> = record.splitn(9, ' ').collect();
-            if parts.len() < 9 {
-                return None;
-            }
-            (parts[1], parts[8])
-        }
-        '2' => {
-            // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>
-            // With -z, <origPath> is in the next NUL token and is handled by the caller.
-            let parts: Vec<&str> = record.splitn(10, ' ').collect();
-            if parts.len() < 10 {
-                return None;
-            }
-            (parts[1], parts[9])
-        }
-        'u' => {
-            // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
-            let parts: Vec<&str> = record.splitn(11, ' ').collect();
-            if parts.len() < 11 {
-                return None;
-            }
-            (parts[1], parts[10])
-        }
-        _ => return None,
+fn untracked_stats(repo: &Repository) -> Result<(usize, i32), GitError> {
+    let Some(workdir) = repo.workdir() else {
+        return Ok((0, 0));
     };
 
-    let xy_chars = xy.chars().collect::<Vec<_>>();
-    if xy_chars.len() < 2 {
-        return None;
+    let mut opts = StatusOptions::new();
+    opts.show(StatusShow::Workdir)
+        .include_untracked(true)
+        .recurse_untracked_dirs(true);
+
+    let statuses = repo.statuses(Some(&mut opts))?;
+    let mut count = 0usize;
+    let mut insertions = 0i32;
+
+    for entry in statuses.iter() {
+        let status = entry.status();
+        if status.contains(Status::IGNORED) || !status.contains(Status::WT_NEW) {
+            continue;
+        }
+        let Some(path) = entry.path() else {
+            continue;
+        };
+        count += 1;
+        let full_path = workdir.join(path);
+        if let Ok(contents) = fs::read_to_string(&full_path) {
+            let lines = if contents.is_empty() {
+                0
+            } else {
+                contents.lines().count()
+            };
+            insertions += lines as i32;
+        }
     }
 
-    let path = path.trim();
-    if path.is_empty() {
-        return None;
-    }
-
-    let staged = map_status_code(xy_chars[0]);
-    let unstaged = map_status_code(xy_chars[1]);
-
-    Some(FileStatusDto {
-        path: path.to_string(),
-        staged,
-        unstaged,
-    })
+    Ok((count, insertions))
 }
 
 fn resolve_difftool_tool() -> Option<String> {
@@ -747,133 +827,5 @@ fn resolve_difftool_tool() -> Option<String> {
         Some("opendiff".to_string())
     } else {
         None
-    }
-}
-
-fn update_flags(
-    file: &FileStatusDto,
-    has_staged: &mut bool,
-    has_unstaged: &mut bool,
-    conflicted_files: &mut usize,
-) {
-    if matches!(file.staged, Some(FileChangeType::Unmerged))
-        || matches!(file.unstaged, Some(FileChangeType::Unmerged))
-    {
-        *conflicted_files += 1;
-    }
-
-    if file.staged.is_some() {
-        *has_staged = true;
-    }
-    if file.unstaged.is_some() {
-        *has_unstaged = true;
-    }
-}
-
-fn parse_signed_count(raw: &str) -> i32 {
-    let trimmed = raw.trim_start_matches('+').trim_start_matches('-');
-    trimmed.parse::<i32>().unwrap_or(0)
-}
-
-fn parse_numstat_summary(stdout: &str) -> DiffStatDto {
-    let mut files_changed = 0usize;
-    let mut insertions = 0i32;
-    let mut deletions = 0i32;
-    let mut seen: HashSet<String> = HashSet::new();
-
-    for line in stdout.lines() {
-        let mut parts = line.split_whitespace();
-        let added = parts.next().unwrap_or_default();
-        let removed = parts.next().unwrap_or_default();
-        let file_path = parts.next().unwrap_or_default();
-        if file_path.is_empty() {
-            continue;
-        }
-
-        if seen.insert(file_path.to_string()) {
-            files_changed += 1;
-        }
-        if added != "-" {
-            insertions += added.parse::<i32>().unwrap_or(0);
-        }
-        if removed != "-" {
-            deletions += removed.parse::<i32>().unwrap_or(0);
-        }
-    }
-
-    DiffStatDto {
-        files_changed,
-        insertions,
-        deletions,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::Path;
-
-    #[test]
-    fn parse_numstat_summary_counts_unique_files_but_sums_changes() {
-        let out = [
-            "1\t0\tfile-a.txt",
-            "2\t1\tfile-b.txt",
-            // Same file repeated (e.g. staged + unstaged diffs combined)
-            "3\t4\tfile-a.txt",
-            // Binary change uses '-' which should be ignored for counts
-            "-\t-\tbin.dat",
-        ]
-        .join("\n");
-
-        let summary = parse_numstat_summary(&out);
-        assert_eq!(summary.files_changed, 3); // file-a, file-b, bin.dat
-        assert_eq!(summary.insertions, 1 + 2 + 3);
-        assert_eq!(summary.deletions, 0 + 1 + 4);
-    }
-
-    #[test]
-    fn parse_status_z_handles_spaces_and_rename_separator() {
-        let status = concat!(
-            "# branch.head main\0",
-            "# branch.ab +2 -1\0",
-            "1 M. N... 100644 100644 100644 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb src/with space.txt\0",
-            "2 R. N... 100644 100644 100644 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb R100 renamed to.txt\0",
-            "renamed from.txt\0",
-            "? untracked file.txt\0",
-            "u UU N... 100644 100644 100644 100644 cccccccccccccccccccccccccccccccccccccccc dddddddddddddddddddddddddddddddddddddddd eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee conflicted file.txt\0"
-        );
-
-        let repo_root = Path::new("fake-repo-root");
-        let parsed = parse_status_z(status, repo_root);
-
-        assert_eq!(parsed.branch, "main");
-        assert_eq!(parsed.ahead, 2);
-        assert_eq!(parsed.behind, 1);
-        assert!(parsed.has_staged);
-        assert!(parsed.has_unstaged);
-        assert!(parsed.has_untracked);
-        assert_eq!(parsed.conflicted_files, 1);
-
-        let paths: Vec<&str> = parsed.modified_files.iter().map(|f| f.path.as_str()).collect();
-        assert!(paths.contains(&"src/with space.txt"));
-        assert!(paths.contains(&"renamed to.txt"));
-        assert!(paths.contains(&"untracked file.txt"));
-        assert!(paths.contains(&"conflicted file.txt"));
-
-        let renamed = parsed
-            .modified_files
-            .iter()
-            .find(|f| f.path == "renamed to.txt")
-            .expect("rename record missing");
-        assert!(matches!(renamed.staged, Some(FileChangeType::Renamed)));
-        assert!(renamed.unstaged.is_none());
-
-        let conflicted = parsed
-            .modified_files
-            .iter()
-            .find(|f| f.path == "conflicted file.txt")
-            .expect("conflict record missing");
-        assert!(matches!(conflicted.staged, Some(FileChangeType::Unmerged)));
-        assert!(matches!(conflicted.unstaged, Some(FileChangeType::Unmerged)));
     }
 }
