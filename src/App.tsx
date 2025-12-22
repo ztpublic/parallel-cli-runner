@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
@@ -25,6 +25,37 @@ function App() {
   // Track layout for cleanup
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    const newWidth = Math.max(240, Math.min(e.clientX, 800));
+    setSidebarWidth(newWidth);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    window.addEventListener("mousemove", resize);
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   useEffect(() => {
     let alive = true;
@@ -81,8 +112,13 @@ function App() {
   return (
     <main className="app-shell">
       <TopBar />
-      <div className="workspace">
-        <GitPanel />
+      <div className="workspace" style={{ position: "relative" }}>
+        <GitPanel width={sidebarWidth} />
+        <div
+          className={`resize-handle ${isResizing ? "is-resizing" : ""}`}
+          style={{ left: sidebarWidth - 3 }}
+          onMouseDown={startResizing}
+        />
         <TerminalPanel
           layout={layout}
           panes={panes}

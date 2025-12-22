@@ -24,6 +24,7 @@ type GitPanelProps = {
   worktrees?: WorktreeItem[];
   remotes?: RemoteItem[];
   changedFiles?: ChangedFile[];
+  width?: number;
 };
 
 const defaultTabs: GitTab[] = [
@@ -42,6 +43,7 @@ export function GitPanel({
   worktrees = [],
   remotes = [],
   changedFiles = [],
+  width,
 }: GitPanelProps) {
   const {
     tabs,
@@ -67,7 +69,7 @@ export function GitPanel({
   } = useGitStaging(changedFiles);
 
   return (
-    <aside className="git-panel">
+    <aside className="git-panel" style={{ width }}>
       <div className="panel-header">
         <div className="panel-title">
           <Icon name="branch" size={16} />

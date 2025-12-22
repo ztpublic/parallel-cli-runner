@@ -895,3 +895,19 @@ button {
     width: 100%;
   }
 }
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 100;
+  background: transparent;
+  transition: background 0.1s ease;
+}
+
+.resize-handle:hover,
+.resize-handle.is-resizing {
+  background: var(--accent);
+}
