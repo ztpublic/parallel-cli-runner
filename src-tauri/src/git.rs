@@ -322,61 +322,6 @@ pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
     Ok(branches)
 }
 
-pub fn difftool(worktree: &Path, path: Option<&str>) -> Result<(), GitError> {
-    let worktree = ensure_repo(worktree)?;
-    let tool = resolve_difftool_tool();
-
-    // If a specific path is requested, run difftool for that path.
-    if let Some(p) = path {
-        let mut args: Vec<String> = vec!["difftool".to_string(), "-y".to_string()];
-        if let Some(tool) = &tool {
-            args.push(format!("--tool={tool}"));
-        }
-        args.push("--".to_string());
-        args.push(p.to_string());
-        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        return run_git(&worktree, &arg_refs).map(|_| ());
-    }
-
-    // Otherwise, only launch difftool when there is something to diff.
-    let tracked = run_git(&worktree, &["diff", "--name-only"])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-    let tracked_cached = run_git(&worktree, &["diff", "--name-only", "--cached"])
-        .map(|o| o.stdout)
-        .unwrap_or_default();
-
-    if !tracked.trim().is_empty() || !tracked_cached.trim().is_empty() {
-        let mut args: Vec<String> = vec!["difftool".to_string(), "-y".to_string()];
-        if let Some(tool) = &tool {
-            args.push(format!("--tool={tool}"));
-        }
-        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        return run_git(&worktree, &arg_refs).map(|_| ());
-    }
-
-    // Fall back to showing untracked file(s) against /dev/null.
-    if let Ok(out) = run_git(&worktree, &["ls-files", "--others", "--exclude-standard"]) {
-        if let Some(first) = out.stdout.lines().find(|l| !l.trim().is_empty()) {
-            let null_path = if cfg!(windows) { "NUL" } else { "/dev/null" };
-            let mut args: Vec<String> = vec![
-                "difftool".to_string(),
-                "-y".to_string(),
-            ];
-            if let Some(tool) = &tool {
-                args.push(format!("--tool={tool}"));
-            }
-            args.push("--no-index".to_string());
-            args.push(null_path.to_string());
-            args.push(first.trim().to_string());
-            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-            return run_git(&worktree, &arg_refs).map(|_| ());
-        }
-    }
-
-    Ok(())
-}
-
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
     let repo = open_repo(cwd)?;
     let mut index = repo.index()?;
@@ -813,19 +758,4 @@ fn untracked_stats(repo: &Repository) -> Result<(usize, i32), GitError> {
     }
 
     Ok((count, insertions))
-}
-
-fn resolve_difftool_tool() -> Option<String> {
-    if let Ok(tool) = std::env::var("PARALLEL_DIFFTOOL") {
-        let trimmed = tool.trim();
-        if !trimmed.is_empty() {
-            return Some(trimmed.to_string());
-        }
-    }
-
-    if cfg!(target_os = "macos") {
-        Some("opendiff".to_string())
-    } else {
-        None
-    }
 }

@@ -204,22 +204,6 @@ function App() {
     [agentsApi, getLayoutSnapshot, repoStatus, setLayout]
   );
 
-  const handleShowDiff = useCallback(
-    async (agent: Agent) => {
-      if (!repoStatus) {
-        setRepoError("Bind a git repo before opening a diff view.");
-        return;
-      }
-
-      try {
-        await agentsApi.showDiff(agent);
-      } catch (error) {
-        setRepoError(formatInvokeError(error) || "Failed to open diff view.");
-      }
-    },
-    [agentsApi, repoStatus, setRepoError]
-  );
-
   const closeCommitDialog = useCallback(() => {
     if (commitBusy) return;
     setCommitDialogOpen(false);
@@ -336,7 +320,6 @@ function App() {
         diffStats={agentsApi.agentDiffStatsById}
         openMenuId={agentsApi.agentMenuOpenId}
         onToggleMenu={agentsApi.toggleAgentMenu}
-        onShowDiff={(agent) => void handleShowDiff(agent)}
         onCommitAndMerge={openCommitDialog}
         onRemoveAgent={(agent) => void handleRemoveAgent(agent)}
         removingAgentId={agentsApi.removingAgentId}

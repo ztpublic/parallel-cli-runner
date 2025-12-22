@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Agent, AgentDiffStat } from "../types/agent";
-import { agentDiffStats, createAgent, listAgents, openDiffBetweenRefs, removeAgent } from "../services/tauri";
+import { agentDiffStats, createAgent, listAgents, removeAgent } from "../services/tauri";
 
 export function useAgents() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -86,11 +86,6 @@ export function useAgents() {
     }
   }, []);
 
-  const showDiff = useCallback(async (agent: Agent) => {
-    await openDiffBetweenRefs({ worktreePath: agent.worktree_path, path: null });
-    setAgentMenuOpenId(null);
-  }, []);
-
   return {
     agents,
     agentDiffStatsById,
@@ -103,7 +98,5 @@ export function useAgents() {
     refreshDiffStats,
     createAgentForRepo,
     removeAgentForRepo,
-    showDiff,
   };
 }
-

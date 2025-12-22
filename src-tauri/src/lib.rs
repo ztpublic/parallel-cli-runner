@@ -116,15 +116,6 @@ async fn remove_agent(
     agent::remove_agent(&manager, repo_root, agent_id).map_err(CommandError::from)
 }
 
-#[tauri::command(rename_all = "camelCase")]
-async fn open_diff_between_refs(
-    worktree_path: String,
-    path: Option<String>,
-) -> Result<(), CommandError> {
-    let worktree = PathBuf::from(worktree_path);
-    git::difftool(&worktree, path.as_deref()).map_err(CommandError::from)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -148,8 +139,7 @@ pub fn run() {
             list_agents,
             cleanup_agents,
             agent_diff_stats,
-            remove_agent,
-            open_diff_between_refs
+            remove_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

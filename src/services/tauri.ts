@@ -67,10 +67,3 @@ export function agentDiffStats(params: { repoRoot: string }): Promise<AgentDiffS
 export function cleanupAgents(params: { repoRoot: string }): Promise<void> {
   return invoke("cleanup_agents", params);
 }
-
-export function openDiffBetweenRefs(params: {
-  worktreePath: string;
-  path: string | null;
-}): Promise<void> {
-  return invoke("open_diff_between_refs", params);
-}

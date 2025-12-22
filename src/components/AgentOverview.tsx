@@ -5,7 +5,6 @@ type AgentOverviewProps = {
   diffStats: Record<string, AgentDiffStat | undefined>;
   openMenuId: string | null;
   onToggleMenu: (agentId: string) => void;
-  onShowDiff: (agent: Agent) => void;
   onCommitAndMerge: (agent: Agent) => void;
   onRemoveAgent: (agent: Agent) => void;
   removingAgentId: string | null;
@@ -16,7 +15,6 @@ export function AgentOverview({
   diffStats,
   openMenuId,
   onToggleMenu,
-  onShowDiff,
   onCommitAndMerge,
   onRemoveAgent,
   removingAgentId,
@@ -64,16 +62,6 @@ export function AgentOverview({
                     className="agent-menu"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <button
-                      className="agent-menu-item"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onShowDiff(agent);
-                      }}
-                      disabled={removingAgentId === agent.id}
-                    >
-                      Show diff view
-                    </button>
                     <button
                       className="agent-menu-item"
                       onClick={(event) => {
