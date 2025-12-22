@@ -1,23 +1,17 @@
 use git2::{
-    BranchType, Diff, DiffOptions, DiffStatsFormat, ErrorCode, IndexAddOption, Repository, Status,
-    StatusOptions, StatusShow, WorktreeAddOptions, WorktreePruneOptions,
+    build::CheckoutBuilder,
+    BranchType, Diff, DiffOptions, DiffStatsFormat, ErrorCode, IndexAddOption, MergeOptions,
+    Repository, StashFlags, Status, StatusOptions, StatusShow, WorktreeAddOptions,
+    WorktreePruneOptions,
 };
 use serde::Serialize;
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
 use ts_rs::TS;
-
-#[derive(Debug)]
-pub struct GitOutput {
-    pub stdout: String,
-    #[allow(dead_code)]
-    pub stderr: String,
-}
 
 #[derive(Error, Debug)]
 pub enum GitError {
@@ -31,76 +25,6 @@ pub enum GitError {
     Io(#[from] std::io::Error),
     #[error("utf8 error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
-}
-
-pub struct GitCommandBuilder<'a> {
-    cwd: &'a Path,
-    args: Vec<String>,
-    env: Vec<(String, String)>,
-}
-
-impl<'a> GitCommandBuilder<'a> {
-    pub fn new(cwd: &'a Path) -> Self {
-        Self {
-            cwd,
-            args: Vec::new(),
-            env: vec![("LC_ALL".to_string(), "C".to_string())],
-        }
-    }
-
-    pub fn arg(mut self, arg: impl Into<String>) -> Self {
-        self.args.push(arg.into());
-        self
-    }
-
-    pub fn args<I, S>(mut self, args: I) -> Self
-    where
-        I: IntoIterator<Item = S>,
-        S: Into<String>,
-    {
-        self.args.extend(args.into_iter().map(Into::into));
-        self
-    }
-
-    pub fn env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env.push((key.into(), value.into()));
-        self
-    }
-
-    pub fn run(self) -> Result<GitOutput, GitError> {
-        let mut cmd = Command::new("git");
-        cmd.current_dir(self.cwd);
-        cmd.args(&self.args);
-        for (k, v) in self.env {
-            cmd.env(k, v);
-        }
-
-        let output = cmd.output().map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                GitError::GitNotFound
-            } else {
-                e.into()
-            }
-        })?;
-
-        if output.status.success() {
-            Ok(GitOutput {
-                stdout: String::from_utf8(output.stdout)?,
-                stderr: String::from_utf8(output.stderr)?,
-            })
-        } else {
-            Err(GitError::GitFailed {
-                code: output.status.code(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            })
-        }
-    }
-}
-
-pub fn run_git(cwd: &Path, args: &[&str]) -> Result<GitOutput, GitError> {
-    GitCommandBuilder::new(cwd)
-        .args(args.iter().copied())
-        .run()
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
@@ -383,8 +307,7 @@ pub fn merge_into_branch(
     target_branch: &str,
     source_branch: &str,
 ) -> Result<(), GitError> {
-    let repo_root = ensure_repo(repo_root)?;
-
+    let mut repo = open_repo(repo_root)?;
     if target_branch.trim().is_empty() || source_branch.trim().is_empty() {
         return Err(GitError::GitFailed {
             code: None,
@@ -392,55 +315,117 @@ pub fn merge_into_branch(
         });
     }
 
-    // Ensure both refs exist up-front for clearer errors.
-    run_git(&repo_root, &["rev-parse", "--verify", target_branch])?;
-    run_git(&repo_root, &["rev-parse", "--verify", source_branch])?;
+    let target_refname = {
+        let target_ref = repo.find_branch(target_branch, BranchType::Local)?;
+        target_ref
+            .get()
+            .name()
+            .ok_or_else(|| GitError::GitFailed {
+                code: None,
+                stderr: "target branch refname is invalid".to_string(),
+            })?
+            .to_string()
+    };
+    let source_refname = {
+        let source_ref = repo.find_branch(source_branch, BranchType::Local)?;
+        source_ref
+            .get()
+            .name()
+            .ok_or_else(|| GitError::GitFailed {
+                code: None,
+                stderr: "source branch refname is invalid".to_string(),
+            })?
+            .to_string()
+    };
 
-    let original_branch = current_branch(&repo_root)?;
-    let switched = original_branch != target_branch;
-    if switched {
-        // NOTE: This will fail if the branch is checked out in another worktree.
-        run_git(&repo_root, &["switch", target_branch])?;
-    }
+    let original_head = repo
+        .head()
+        .ok()
+        .and_then(|head| head.name().map(|name| name.to_string()));
+    let switched = original_head
+        .as_deref()
+        .map(|name| name != target_refname)
+        .unwrap_or(true);
 
-    // If the target worktree is dirty, stash it before merging, then restore after.
     let mut created_stash = false;
-    match run_git(&repo_root, &["status", "--porcelain"]) {
-        Ok(status) if !status.stdout.trim().is_empty() => {
-            let msg = "parallel-cli-runner: auto-stash before merge";
-            run_git(&repo_root, &["stash", "push", "-u", "-m", msg])?;
-            created_stash = true;
-        }
-        Ok(_) => {}
-        Err(err) => return Err(err),
+    if is_repo_dirty(&repo)? {
+        let msg = "parallel-cli-runner: auto-stash before merge";
+        let sig = repo.signature()?;
+        repo.stash_save(&sig, msg, Some(StashFlags::INCLUDE_UNTRACKED))?;
+        created_stash = true;
     }
 
-    match run_git(&repo_root, &["merge", "--no-edit", source_branch]) {
-        Ok(_) => {
+    if switched {
+        if let Err(err) = checkout_branch(&repo, &target_refname) {
             if created_stash {
-                // Re-apply stashed local changes onto the target branch.
-                if let Err(err) = run_git(&repo_root, &["stash", "pop"]) {
-                    // Don't try to switch branches if the worktree is now conflicted.
-                    return Err(GitError::GitFailed {
-                        code: None,
-                        stderr: format!(
-                            "merge succeeded, but failed to re-apply stashed changes; resolve manually (git stash list / git stash pop): {err}"
-                        ),
-                    });
-                }
+                let _ = repo.stash_pop(0, None);
             }
-            if switched {
-                // Best-effort: don't fail the whole operation just because restoring fails.
-                let _ = run_git(&repo_root, &["switch", &original_branch]);
-            }
-            Ok(())
-        }
-        Err(err) => {
-            // If the merge failed (e.g., conflicts), don't attempt to pop the stash.
-            // Keep it so the user can restore once the merge is resolved/aborted.
-            Err(err)
+            return Err(err);
         }
     }
+
+    {
+        let annotated = {
+            let source_ref = repo.find_reference(&source_refname)?;
+            repo.reference_to_annotated_commit(&source_ref)?
+        };
+        let annotated_id = annotated.id();
+        let mut merge_opts = MergeOptions::new();
+        let mut checkout_opts = CheckoutBuilder::new();
+        checkout_opts.allow_conflicts(true);
+        repo.merge(&[&annotated], Some(&mut merge_opts), Some(&mut checkout_opts))?;
+
+        let mut index = repo.index()?;
+        if index.has_conflicts() {
+            return Err(GitError::GitFailed {
+                code: None,
+                stderr: "merge conflicts detected; resolve them in the worktree".to_string(),
+            });
+        }
+
+        let tree_id = index.write_tree()?;
+        let tree = repo.find_tree(tree_id)?;
+        let sig = repo.signature()?;
+
+        let head = repo.head()?.target().ok_or_else(|| GitError::GitFailed {
+            code: None,
+            stderr: "target branch has no commits".to_string(),
+        })?;
+        let head_commit = repo.find_commit(head)?;
+        let their_commit = repo.find_commit(annotated_id)?;
+        let message = format!("Merge {source_branch} into {target_branch}");
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            &message,
+            &tree,
+            &[&head_commit, &their_commit],
+        )?;
+        let mut checkout = CheckoutBuilder::new();
+        checkout.force();
+        repo.checkout_head(Some(&mut checkout))?;
+        repo.cleanup_state()?;
+    }
+
+    if created_stash {
+        if let Err(err) = repo.stash_pop(0, None) {
+            return Err(GitError::GitFailed {
+                code: None,
+                stderr: format!(
+                    "merge succeeded, but failed to re-apply stashed changes; resolve manually: {err}"
+                ),
+            });
+        }
+    }
+
+    if switched {
+        if let Some(original_head) = original_head {
+            let _ = checkout_branch(&repo, &original_head);
+        }
+    }
+
+    Ok(())
 }
 
 pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
@@ -532,13 +517,6 @@ fn open_repo(cwd: &Path) -> Result<Repository, GitError> {
         }),
         Err(err) => Err(GitError::Git2(err)),
     }
-}
-
-fn ensure_repo(cwd: &Path) -> Result<PathBuf, GitError> {
-    detect_repo(cwd)?.ok_or_else(|| GitError::GitFailed {
-        code: None,
-        stderr: "not a git repository".to_string(),
-    })
 }
 
 pub fn canonicalize_path(path: &Path) -> PathBuf {
@@ -654,6 +632,29 @@ fn diff_stats_from_diff(diff: &Diff<'_>) -> Result<DiffStatDto, GitError> {
         insertions: stats.insertions() as i32,
         deletions: stats.deletions() as i32,
     })
+}
+
+fn is_repo_dirty(repo: &Repository) -> Result<bool, GitError> {
+    let mut opts = StatusOptions::new();
+    opts.show(StatusShow::IndexAndWorkdir)
+        .include_untracked(true)
+        .recurse_untracked_dirs(true);
+    let statuses = repo.statuses(Some(&mut opts))?;
+    for entry in statuses.iter() {
+        let status = entry.status();
+        if status != Status::CURRENT && !status.contains(Status::IGNORED) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn checkout_branch(repo: &Repository, refname: &str) -> Result<(), GitError> {
+    repo.set_head(refname)?;
+    let mut checkout = CheckoutBuilder::new();
+    checkout.force();
+    repo.checkout_head(Some(&mut checkout))?;
+    Ok(())
 }
 
 fn latest_commit_for_repo(repo: &Repository) -> Result<Option<CommitInfoDto>, GitError> {
