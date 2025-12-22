@@ -1,4 +1,11 @@
-import { BranchItem, CommitItem, WorktreeItem, RemoteItem, GitTab, ChangedFile } from "../types/git-ui";
+import {
+  BranchItem,
+  CommitItem,
+  WorktreeItem,
+  RemoteItem,
+  GitTab,
+  ChangedFile,
+} from "../../types/git-ui";
 
 export const initialLocalBranches: BranchItem[] = [
   { name: "main", current: true, lastCommit: "Fix: Update dependencies" },

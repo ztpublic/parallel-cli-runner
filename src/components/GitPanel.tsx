@@ -8,16 +8,41 @@ import { GitStaging } from "./git/GitStaging";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
 import {
-  initialChangedFiles,
-  initialCommits,
-  initialLocalBranches,
-  initialRemoteBranches,
-  initialRemotes,
-  initialTabs,
-  initialWorktrees,
-} from "../mocks/git-ui";
+  BranchItem,
+  ChangedFile,
+  CommitItem,
+  GitTab,
+  RemoteItem,
+  WorktreeItem,
+} from "../types/git-ui";
 
-export function GitPanel() {
+type GitPanelProps = {
+  initialTabs?: GitTab[];
+  localBranches?: BranchItem[];
+  remoteBranches?: BranchItem[];
+  commits?: CommitItem[];
+  worktrees?: WorktreeItem[];
+  remotes?: RemoteItem[];
+  changedFiles?: ChangedFile[];
+};
+
+const defaultTabs: GitTab[] = [
+  { id: "branches", label: "Branches", icon: "branch" },
+  { id: "commits", label: "Commits", icon: "commit" },
+  { id: "commit", label: "Commit", icon: "commit" },
+  { id: "worktrees", label: "Worktrees", icon: "folder" },
+  { id: "remotes", label: "Remotes", icon: "cloud" },
+];
+
+export function GitPanel({
+  initialTabs,
+  localBranches = [],
+  remoteBranches = [],
+  commits = [],
+  worktrees = [],
+  remotes = [],
+  changedFiles = [],
+}: GitPanelProps) {
   const {
     tabs,
     activeTab,
@@ -28,7 +53,7 @@ export function GitPanel() {
     handleDragOver,
     handleDrop,
     handleDragEnd,
-  } = useGitTabs(initialTabs);
+  } = useGitTabs(initialTabs ?? defaultTabs);
 
   const {
     commitMessage,
@@ -39,7 +64,7 @@ export function GitPanel() {
     stageAllFiles,
     unstageAllFiles,
     generateCommitMessage,
-  } = useGitStaging(initialChangedFiles);
+  } = useGitStaging(changedFiles);
 
   return (
     <aside className="git-panel">
@@ -67,13 +92,10 @@ export function GitPanel() {
 
       <div className="git-panel-content">
         {activeTab === "branches" ? (
-          <GitBranches
-            localBranches={initialLocalBranches}
-            remoteBranches={initialRemoteBranches}
-          />
+          <GitBranches localBranches={localBranches} remoteBranches={remoteBranches} />
         ) : null}
 
-        {activeTab === "commits" ? <GitCommits commits={initialCommits} /> : null}
+        {activeTab === "commits" ? <GitCommits commits={commits} /> : null}
 
         {activeTab === "commit" ? (
           <GitStaging
@@ -88,9 +110,9 @@ export function GitPanel() {
           />
         ) : null}
 
-        {activeTab === "worktrees" ? <GitWorktrees worktrees={initialWorktrees} /> : null}
+        {activeTab === "worktrees" ? <GitWorktrees worktrees={worktrees} /> : null}
 
-        {activeTab === "remotes" ? <GitRemotes remotes={initialRemotes} /> : null}
+        {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}
       </div>
     </aside>
   );
