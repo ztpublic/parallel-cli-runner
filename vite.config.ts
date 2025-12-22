@@ -1,12 +1,23 @@
 import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
+const useTauriMock = process.env.TAURI_MOCK === "1";
+
 export default defineConfig(async () => ({
   plugins: [react()],
+  resolve: {
+    alias: useTauriMock
+      ? {
+          "@tauri-apps/api/core": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
+          "@tauri-apps/api/event": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
+        }
+      : undefined,
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
