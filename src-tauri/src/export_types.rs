@@ -2,7 +2,7 @@
 mod tests {
     use crate::git::{
         BranchInfoDto, CommitInfoDto, DiffStatDto, FileChangeType, FileStatusDto, RemoteInfoDto,
-        RepoStatusDto, WorktreeInfoDto,
+        RepoInfoDto, RepoStatusDto, WorktreeInfoDto,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -23,6 +23,8 @@ mod tests {
         git_ts.push_str(&FileStatusDto::decl());
         git_ts.push_str("\n\n");
         git_ts.push_str(&CommitInfoDto::decl());
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&RepoInfoDto::decl());
         git_ts.push_str("\n\n");
         git_ts.push_str(&RepoStatusDto::decl());
         git_ts.push_str("\n\n");

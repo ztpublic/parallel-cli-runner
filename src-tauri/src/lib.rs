@@ -4,7 +4,7 @@ mod command_error;
 use crate::command_error::CommandError;
 
 pub mod git;
-use crate::git::RepoStatusDto;
+use crate::git::{RepoInfoDto, RepoStatusDto};
 mod pty;
 use crate::pty::PtyManager;
 
@@ -23,6 +23,12 @@ async fn git_detect_repo(cwd: String) -> Result<Option<String>, CommandError> {
     git::detect_repo(&path)
         .map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
         .map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_scan_repos(cwd: String) -> Result<Vec<RepoInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::scan_repos(&path).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -132,6 +138,7 @@ pub fn run() {
             pty::kill_session,
             pty::broadcast_line,
             git_detect_repo,
+            git_scan_repos,
             git_status,
             git_diff,
             git_list_branches,

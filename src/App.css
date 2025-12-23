@@ -119,6 +119,190 @@ button {
   z-index: 10;
 }
 
+.repo-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 30;
+}
+
+.repo-picker {
+  width: min(720px, 92vw);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+.repo-picker-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 18px 8px;
+}
+
+.repo-picker-title {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.repo-picker-title-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.repo-picker-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.repo-picker-error {
+  margin: 0 18px 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(244, 135, 113, 0.12);
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.repo-picker-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px 8px;
+}
+
+.repo-picker-action {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.repo-picker-action:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.repo-picker-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.repo-picker-list {
+  padding: 0 18px 16px;
+  overflow: auto;
+}
+
+.repo-picker-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.repo-picker-item:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.repo-picker-item input {
+  margin-top: 3px;
+}
+
+.repo-picker-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repo-picker-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.repo-picker-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.repo-picker-item-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.repo-picker-empty {
+  padding: 24px 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.repo-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.repo-picker-button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.repo-picker-button:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.repo-picker-button--primary {
+  background: var(--accent);
+  border-color: var(--accent-strong);
+  color: #fff;
+}
+
+.repo-picker-button--primary:hover {
+  background: var(--accent-strong);
+}
+
+.repo-picker-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .submenu-item {
   width: 100%;
   text-align: left;
@@ -416,6 +600,64 @@ button {
 
 .git-list--branches .git-item > svg {
   margin-top: 1px;
+}
+
+.git-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.git-tree-node {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.git-tree-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.git-tree-header:hover {
+  background: var(--surface-2);
+}
+
+.git-tree-header--static {
+  cursor: default;
+}
+
+.git-tree-header--static:hover {
+  background: transparent;
+}
+
+.git-tree-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.git-tree-path {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.git-tree-children {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .git-item:hover .git-item-actions {

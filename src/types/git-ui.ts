@@ -6,6 +6,23 @@ export type BranchItem = {
   lastCommit: string;
 };
 
+export type RepoHeader = {
+  repoId: string;
+  name: string;
+  path: string;
+};
+
+export type RepoGroup<T> = {
+  repo: RepoHeader;
+  items: T[];
+};
+
+export type RepoBranchGroup = {
+  repo: RepoHeader;
+  localBranches: BranchItem[];
+  remoteBranches: BranchItem[];
+};
+
 export type CommitItem = {
   id: string;
   message: string;

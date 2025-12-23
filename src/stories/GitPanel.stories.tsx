@@ -2,12 +2,11 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { GitPanel } from "../components/GitPanel";
 import {
   initialChangedFiles,
-  initialCommits,
-  initialLocalBranches,
-  initialRemoteBranches,
+  initialCommitGroups,
+  initialBranchGroups,
   initialRemotes,
   initialTabs,
-  initialWorktrees,
+  initialWorktreeGroups,
 } from "./mocks/git-ui";
 
 const meta = {
@@ -24,10 +23,10 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {
   args: {
     initialTabs,
-    localBranches: initialLocalBranches,
-    remoteBranches: initialRemoteBranches,
-    commits: initialCommits,
-    worktrees: initialWorktrees,
+    repoRoot: "repo-alpha",
+    branchGroups: initialBranchGroups,
+    commitGroups: initialCommitGroups,
+    worktreeGroups: initialWorktreeGroups,
     remotes: initialRemotes,
     changedFiles: initialChangedFiles,
   },

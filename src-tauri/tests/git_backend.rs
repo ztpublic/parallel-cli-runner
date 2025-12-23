@@ -24,6 +24,11 @@ fn write_file(root: &Path, relative: &str, contents: &str) -> PathBuf {
     path
 }
 
+fn init_repo_at(path: &Path) -> Repository {
+    fs::create_dir_all(path).expect("create repo dir");
+    Repository::init(path).expect("init repo")
+}
+
 #[test]
 fn detect_repo_from_subdir() {
     let (temp, _repo) = init_repo();
@@ -144,4 +149,42 @@ fn list_worktrees() {
     assert!(paths.iter().any(|p| p == &repo_path));
     assert!(paths.iter().any(|p| p == &worktree_path));
     assert!(worktrees.iter().any(|w| w.branch == "feature/one"));
+}
+
+#[test]
+fn scan_repos_in_folder() {
+    let temp = TempDir::new().expect("create temp dir");
+    let root = temp.path();
+
+    let repo_one_path = root.join("repo-one");
+    let repo_two_path = root.join("group/repo-two");
+    let _repo_one = init_repo_at(&repo_one_path);
+    let _repo_two = init_repo_at(&repo_two_path);
+    fs::create_dir_all(root.join("notes")).expect("create non-repo dir");
+
+    let repos = git::scan_repos(root).expect("scan repos");
+    let repo_paths: Vec<String> = repos.iter().map(|repo| repo.root_path.clone()).collect();
+
+    let repo_one = git::canonicalize_path(&repo_one_path).to_string_lossy().to_string();
+    let repo_two = git::canonicalize_path(&repo_two_path).to_string_lossy().to_string();
+
+    assert!(repo_paths.contains(&repo_one));
+    assert!(repo_paths.contains(&repo_two));
+    assert_eq!(repo_paths.len(), 2);
+}
+
+#[test]
+fn scan_repos_in_subdir_includes_parent_repo() {
+    let temp = TempDir::new().expect("create temp dir");
+    let repo_root = temp.path().join("main-repo");
+    let _repo = init_repo_at(&repo_root);
+    let subdir = repo_root.join("src/nested");
+    fs::create_dir_all(&subdir).expect("create subdir");
+
+    let repos = git::scan_repos(&subdir).expect("scan repos from subdir");
+    let repo_paths: Vec<String> = repos.iter().map(|repo| repo.root_path.clone()).collect();
+    let expected = git::canonicalize_path(&repo_root).to_string_lossy().to_string();
+
+    assert!(repo_paths.contains(&expected));
+    assert_eq!(repo_paths.len(), 1);
 }

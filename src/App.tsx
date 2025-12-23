@@ -8,7 +8,17 @@ import { TopBar } from "./components/TopBar";
 import { StatusBar } from "./components/StatusBar";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
-import { useGitRepo } from "./hooks/git/useGitRepo";
+import { useGitRepos } from "./hooks/git/useGitRepos";
+import { gitScanRepos } from "./services/tauri";
+import { RepoPickerModal } from "./components/RepoPickerModal";
+import type { RepoInfoDto } from "./types/git";
+import type {
+  CommitItem,
+  RepoBranchGroup,
+  RepoGroup,
+  RepoHeader,
+  WorktreeItem,
+} from "./types/git-ui";
 
 function App() {
   const {
@@ -31,25 +41,31 @@ function App() {
   const [isResizing, setIsResizing] = useState(false);
 
   const {
-    repoRoot,
-    status,
-    localBranches,
-    remoteBranches,
-    commits,
-    worktrees,
-    remotes,
-    changedFiles,
+    repos,
+    setRepos,
+    activeRepoId,
+    activeStatus,
+    localBranchesByRepo,
+    remoteBranchesByRepo,
+    commitsByRepo,
+    worktreesByRepo,
+    activeRemotes,
+    activeChangedFiles,
     loading: gitLoading,
     error: gitError,
-    refresh: refreshGit,
+    refreshRepos,
     stageFiles,
     unstageFiles,
     stageAll,
     unstageAll,
     commit,
-  } = useGitRepo();
+  } = useGitRepos();
 
   const [openedFolder, setOpenedFolder] = useState<string | null>(null);
+  const [repoCandidates, setRepoCandidates] = useState<RepoInfoDto[]>([]);
+  const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>([]);
+  const [isRepoPickerOpen, setIsRepoPickerOpen] = useState(false);
+  const [repoScanError, setRepoScanError] = useState<string | null>(null);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -120,11 +136,105 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!openedFolder) return;
-    void refreshGit(openedFolder);
-  }, [openedFolder, refreshGit]);
+    if (!activeRepoId) return;
+    void refreshRepos(activeRepoId);
+  }, [activeRepoId, refreshRepos]);
+
+  const handleOpenFolder = useCallback(
+    async (path: string) => {
+      setOpenedFolder(path);
+      setRepoScanError(null);
+      try {
+        const repos = await gitScanRepos({ cwd: path });
+        setRepoCandidates(repos);
+        setSelectedRepoIds(repos.map((repo) => repo.repo_id));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to scan repos";
+        setRepoScanError(message);
+        setRepoCandidates([]);
+        setSelectedRepoIds([]);
+      }
+      setIsRepoPickerOpen(true);
+    },
+    []
+  );
+
+  const handleToggleRepo = useCallback((repoId: string) => {
+    setSelectedRepoIds((prev) =>
+      prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]
+    );
+  }, []);
+
+  const handleSelectAllRepos = useCallback(() => {
+    setSelectedRepoIds(repoCandidates.map((repo) => repo.repo_id));
+  }, [repoCandidates]);
+
+  const handleClearRepos = useCallback(() => {
+    setSelectedRepoIds([]);
+  }, []);
+
+  const handleConfirmRepos = useCallback(() => {
+    const selected = repoCandidates.filter((repo) =>
+      selectedRepoIds.includes(repo.repo_id)
+    );
+    setRepos(selected);
+    setIsRepoPickerOpen(false);
+  }, [repoCandidates, selectedRepoIds, setRepos]);
+
+  const handleCloseRepoPicker = useCallback(() => {
+    setIsRepoPickerOpen(false);
+  }, []);
 
   const panes = useMemo(() => collectPanes(layout), [layout]);
+
+  const repoHeaders = useMemo<RepoHeader[]>(
+    () =>
+      repos.map((repo) => ({
+        repoId: repo.repo_id,
+        name: repo.name || repo.root_path,
+        path: repo.root_path,
+      })),
+    [repos]
+  );
+
+  const branchGroups = useMemo<RepoBranchGroup[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        localBranches: localBranchesByRepo[repo.repoId] ?? [],
+        remoteBranches: remoteBranchesByRepo[repo.repoId] ?? [],
+      })),
+    [localBranchesByRepo, remoteBranchesByRepo, repoHeaders]
+  );
+
+  const commitGroups = useMemo<RepoGroup<CommitItem>[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        items: commitsByRepo[repo.repoId] ?? [],
+      })),
+    [commitsByRepo, repoHeaders]
+  );
+
+  const worktreeGroups = useMemo<RepoGroup<WorktreeItem>[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        items: worktreesByRepo[repo.repoId] ?? [],
+      })),
+    [repoHeaders, worktreesByRepo]
+  );
+
+  const activeRepoName = useMemo(() => {
+    if (!activeRepoId) return null;
+    const repo = repos.find((entry) => entry.repo_id === activeRepoId);
+    return repo?.name || repo?.root_path || null;
+  }, [activeRepoId, repos]);
+
+  const branchLabel = useMemo(() => {
+    if (!activeRepoId && repos.length > 1) return "Multiple";
+    return activeStatus?.branch ?? "No repo";
+  }, [activeRepoId, activeStatus?.branch, repos.length]);
 
   const handleNewPane = useCallback(async () => {
     const nextIndex = panes.length + 1;
@@ -138,26 +248,35 @@ function App() {
 
   return (
     <main className="app-shell">
-      <TopBar onOpenFolder={setOpenedFolder} />
+      <TopBar onOpenFolder={handleOpenFolder} />
       <div className="workspace" style={{ position: "relative" }}>
-        <GitPanel
-          width={sidebarWidth}
-          repoRoot={repoRoot}
-          loading={gitLoading}
-          error={gitError}
-          localBranches={localBranches}
-          remoteBranches={remoteBranches}
-          commits={commits}
-          worktrees={worktrees}
-          remotes={remotes}
-          changedFiles={changedFiles}
-          onRefresh={() => void refreshGit()}
-          onStageAll={() => void stageAll()}
-          onUnstageAll={() => void unstageAll()}
-          onStageFile={(path) => void stageFiles([path])}
-          onUnstageFile={(path) => void unstageFiles([path])}
-          onCommit={(message) => void commit(message)}
-        />
+      <GitPanel
+        width={sidebarWidth}
+        repoRoot={activeRepoId}
+        loading={gitLoading}
+        error={gitError}
+        branchGroups={branchGroups}
+        commitGroups={commitGroups}
+        worktreeGroups={worktreeGroups}
+        remotes={activeRemotes}
+        changedFiles={activeChangedFiles}
+        onRefresh={() => void refreshRepos()}
+        onStageAll={() => {
+          if (activeRepoId) void stageAll(activeRepoId);
+        }}
+        onUnstageAll={() => {
+          if (activeRepoId) void unstageAll(activeRepoId);
+        }}
+        onStageFile={(path) => {
+          if (activeRepoId) void stageFiles(activeRepoId, [path]);
+        }}
+        onUnstageFile={(path) => {
+          if (activeRepoId) void unstageFiles(activeRepoId, [path]);
+        }}
+        onCommit={(message) => {
+          if (activeRepoId) void commit(activeRepoId, message);
+        }}
+      />
         <div
           className={`resize-handle ${isResizing ? "is-resizing" : ""}`}
           style={{ left: sidebarWidth - 3 }}
@@ -173,10 +292,23 @@ function App() {
         />
       </div>
       <StatusBar
-        branch={status?.branch ?? "No repo"}
+        branch={branchLabel}
         openedFolder={openedFolder}
+        repoCount={repos.length}
+        activeRepoName={activeRepoName}
         errors={0}
         warnings={3}
+      />
+      <RepoPickerModal
+        open={isRepoPickerOpen}
+        repos={repoCandidates}
+        selectedRepoIds={selectedRepoIds}
+        error={repoScanError}
+        onToggleRepo={handleToggleRepo}
+        onSelectAll={handleSelectAllRepos}
+        onClear={handleClearRepos}
+        onConfirm={handleConfirmRepos}
+        onClose={handleCloseRepoPicker}
       />
     </main>
   );

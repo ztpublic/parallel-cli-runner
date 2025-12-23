@@ -6,6 +6,8 @@ type FileStatusDto = { path: string, staged: FileChangeType | null, unstaged: Fi
 
 type CommitInfoDto = { id: string, summary: string, author: string, relative_time: string, };
 
+type RepoInfoDto = { repo_id: string, root_path: string, name: string, is_bare: boolean, };
+
 type RepoStatusDto = { repo_id: string, root_path: string, branch: string, ahead: number, behind: number, has_untracked: boolean, has_staged: boolean, has_unstaged: boolean, conflicted_files: number, modified_files: Array<FileStatusDto>, latest_commit: CommitInfoDto | null, };
 
 type DiffStatDto = { files_changed: number, insertions: number, deletions: number, };

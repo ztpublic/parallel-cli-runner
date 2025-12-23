@@ -1,29 +1,52 @@
 import { Icon } from "../Icons";
-import { CommitItem } from "../../types/git-ui";
+import { CommitItem, RepoGroup } from "../../types/git-ui";
 
 type GitCommitsProps = {
-  commits: CommitItem[];
+  commitGroups: RepoGroup<CommitItem>[];
 };
 
-export function GitCommits({ commits }: GitCommitsProps) {
+export function GitCommits({ commitGroups }: GitCommitsProps) {
   return (
-    <div className="git-list">
-      {commits.map((commit) => (
-        <div key={commit.id} className="git-item">
-          <Icon name="commit" size={14} />
-          <div className="git-item-body">
-            <div className="git-item-title">
-              <span className="git-item-name">{commit.message}</span>
-              <span className="git-hash">{commit.id}</span>
+    <div className="git-tree">
+      {commitGroups.map((group) => (
+        <div key={group.repo.repoId} className="git-tree-node">
+          <div className="git-tree-header git-tree-header--static">
+            <Icon name="folder" size={14} />
+            <div className="git-tree-title">
+              <span>{group.repo.name}</span>
+              <span className="git-tree-path">{group.repo.path}</span>
             </div>
-            <div className="git-item-meta">
-              <span>{commit.author}</span>
-              <span className="git-dot" />
-              <span>{commit.date}</span>
+            <span className="git-section-spacer" />
+            <span className="git-pill">{group.items.length}</span>
+          </div>
+          <div className="git-tree-children">
+            <div className="git-list">
+              {group.items.map((commit) => (
+                <div key={`${group.repo.repoId}:${commit.id}`} className="git-item">
+                  <Icon name="commit" size={14} />
+                  <div className="git-item-body">
+                    <div className="git-item-title">
+                      <span className="git-item-name">{commit.message}</span>
+                      <span className="git-hash">{commit.id}</span>
+                    </div>
+                    <div className="git-item-meta">
+                      <span>{commit.author}</span>
+                      <span className="git-dot" />
+                      <span>{commit.date}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
       ))}
+      {!commitGroups.length ? (
+        <div className="git-empty">
+          <Icon name="folder" size={22} />
+          <p>No repositories bound.</p>
+        </div>
+      ) : null}
     </div>
   );
 }

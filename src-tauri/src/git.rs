@@ -6,6 +6,7 @@ use git2::{
 };
 use serde::Serialize;
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -65,6 +66,14 @@ pub struct RepoStatusDto {
     pub conflicted_files: usize,
     pub modified_files: Vec<FileStatusDto>,
     pub latest_commit: Option<CommitInfoDto>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RepoInfoDto {
+    pub repo_id: String,
+    pub root_path: String,
+    pub name: String,
+    pub is_bare: bool,
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
@@ -177,6 +186,59 @@ pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
         modified_files,
         latest_commit: latest_commit_for_repo(&repo)?,
     })
+}
+
+pub fn scan_repos(root: &Path) -> Result<Vec<RepoInfoDto>, GitError> {
+    let mut seen = HashSet::new();
+    let mut repos = Vec::new();
+
+    if let Ok(repo) = Repository::discover(root) {
+        let info = repo_info_from_repo(&repo);
+        if seen.insert(info.root_path.clone()) {
+            repos.push(info);
+        }
+    }
+
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+
+        let git_marker = dir.join(".git");
+        if fs::symlink_metadata(&git_marker).is_ok() {
+            if let Ok(repo) = Repository::discover(&dir) {
+                let info = repo_info_from_repo(&repo);
+                if seen.insert(info.root_path.clone()) {
+                    repos.push(info);
+                }
+            }
+        }
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let metadata = match entry.metadata() {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            if !metadata.is_dir() {
+                continue;
+            }
+            if path.file_name().and_then(|name| name.to_str()) == Some(".git") {
+                continue;
+            }
+
+            pending.push(path);
+        }
+    }
+
+    repos.sort_by(|a, b| a.root_path.cmp(&b.root_path));
+    Ok(repos)
 }
 
 pub fn diff(cwd: &Path, pathspecs: &[String]) -> Result<String, GitError> {
@@ -685,6 +747,22 @@ fn repo_root_path(repo: &Repository) -> PathBuf {
         canonicalize_path(workdir)
     } else {
         canonicalize_path(repo.path())
+    }
+}
+
+fn repo_info_from_repo(repo: &Repository) -> RepoInfoDto {
+    let repo_root = repo_root_path(repo);
+    let name = repo_root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string();
+
+    RepoInfoDto {
+        repo_id: repo_root.to_string_lossy().to_string(),
+        root_path: repo_root.to_string_lossy().to_string(),
+        name,
+        is_bare: repo.is_bare(),
     }
 }
 

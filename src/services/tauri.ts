@@ -3,6 +3,7 @@ import type {
   BranchInfoDto,
   CommitInfoDto,
   RemoteInfoDto,
+  RepoInfoDto,
   RepoStatusDto,
   WorktreeInfoDto,
 } from "../types/git";
@@ -21,6 +22,10 @@ export function killSession(params: { id: string }): Promise<void> {
 
 export function gitDetectRepo(params: { cwd: string }): Promise<string | null> {
   return invoke<string | null>("git_detect_repo", params);
+}
+
+export function gitScanRepos(params: { cwd: string }): Promise<RepoInfoDto[]> {
+  return invoke<RepoInfoDto[]>("git_scan_repos", params);
 }
 
 export function gitStatus(params: { cwd: string }): Promise<RepoStatusDto> {

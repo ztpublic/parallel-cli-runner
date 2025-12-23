@@ -1,6 +1,8 @@
 type StatusBarProps = {
   branch: string;
   openedFolder: string | null;
+  repoCount?: number;
+  activeRepoName?: string | null;
   errors?: number;
   warnings?: number;
 };
@@ -8,6 +10,8 @@ type StatusBarProps = {
 export function StatusBar({
   branch,
   openedFolder,
+  repoCount,
+  activeRepoName,
   errors = 0,
   warnings = 0,
 }: StatusBarProps) {
@@ -16,6 +20,14 @@ export function StatusBar({
       <div className="status-item">
         <span>Folder:</span>
         <span className="status-path">{openedFolder ?? "None"}</span>
+      </div>
+      <div className="status-item">
+        <span>Repos:</span>
+        <span>{repoCount ?? 0}</span>
+      </div>
+      <div className="status-item">
+        <span>Active Repo:</span>
+        <span>{activeRepoName ?? "None"}</span>
       </div>
       <div className="status-item">
         <span>Branch:</span>

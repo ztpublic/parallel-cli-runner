@@ -8,20 +8,20 @@ import { GitStaging } from "./git/GitStaging";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
 import {
-  BranchItem,
   ChangedFile,
   CommitItem,
   GitTab,
   RemoteItem,
+  RepoBranchGroup,
+  RepoGroup,
   WorktreeItem,
 } from "../types/git-ui";
 
 type GitPanelProps = {
   initialTabs?: GitTab[];
-  localBranches?: BranchItem[];
-  remoteBranches?: BranchItem[];
-  commits?: CommitItem[];
-  worktrees?: WorktreeItem[];
+  branchGroups?: RepoBranchGroup[];
+  commitGroups?: RepoGroup<CommitItem>[];
+  worktreeGroups?: RepoGroup<WorktreeItem>[];
   remotes?: RemoteItem[];
   changedFiles?: ChangedFile[];
   width?: number;
@@ -46,10 +46,9 @@ const defaultTabs: GitTab[] = [
 
 export function GitPanel({
   initialTabs,
-  localBranches = [],
-  remoteBranches = [],
-  commits = [],
-  worktrees = [],
+  branchGroups = [],
+  commitGroups = [],
+  worktreeGroups = [],
   remotes = [],
   changedFiles = [],
   width,
@@ -163,11 +162,9 @@ export function GitPanel({
 
         {repoRoot && !error ? (
           <>
-            {activeTab === "branches" ? (
-              <GitBranches localBranches={localBranches} remoteBranches={remoteBranches} />
-            ) : null}
+            {activeTab === "branches" ? <GitBranches branchGroups={branchGroups} /> : null}
 
-            {activeTab === "commits" ? <GitCommits commits={commits} /> : null}
+            {activeTab === "commits" ? <GitCommits commitGroups={commitGroups} /> : null}
 
             {activeTab === "commit" ? (
               <GitStaging
@@ -184,7 +181,9 @@ export function GitPanel({
               />
             ) : null}
 
-            {activeTab === "worktrees" ? <GitWorktrees worktrees={worktrees} /> : null}
+            {activeTab === "worktrees" ? (
+              <GitWorktrees worktreeGroups={worktreeGroups} />
+            ) : null}
 
             {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}
           </>
