@@ -15,6 +15,9 @@ export default defineConfig(async () => ({
       ? {
           "@tauri-apps/api/core": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
           "@tauri-apps/api/event": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
+          "@tauri-apps/plugin-dialog": fileURLToPath(
+            new URL("./src/mocks/dialog.ts", import.meta.url),
+          ),
         }
       : undefined,
   },

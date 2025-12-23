@@ -877,6 +877,14 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+}
+
+.status-path {
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-spacer {

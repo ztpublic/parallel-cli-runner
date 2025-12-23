@@ -49,6 +49,8 @@ function App() {
     commit,
   } = useGitRepo();
 
+  const [openedFolder, setOpenedFolder] = useState<string | null>(null);
+
   const startResizing = useCallback(() => {
     setIsResizing(true);
     document.body.style.cursor = "col-resize";
@@ -117,6 +119,11 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!openedFolder) return;
+    void refreshGit(openedFolder);
+  }, [openedFolder, refreshGit]);
+
   const panes = useMemo(() => collectPanes(layout), [layout]);
 
   const handleNewPane = useCallback(async () => {
@@ -131,7 +138,7 @@ function App() {
 
   return (
     <main className="app-shell">
-      <TopBar />
+      <TopBar onOpenFolder={setOpenedFolder} />
       <div className="workspace" style={{ position: "relative" }}>
         <GitPanel
           width={sidebarWidth}
@@ -165,7 +172,12 @@ function App() {
           onNewPane={() => void handleNewPane()}
         />
       </div>
-      <StatusBar branch={status?.branch ?? "No repo"} errors={0} warnings={3} />
+      <StatusBar
+        branch={status?.branch ?? "No repo"}
+        openedFolder={openedFolder}
+        errors={0}
+        warnings={3}
+      />
     </main>
   );
 }

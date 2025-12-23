@@ -1,10 +1,33 @@
 import { useEffect, useRef, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 import { Icon } from "./Icons";
 
-export function TopBar() {
+type TopBarProps = {
+  onOpenFolder: (path: string) => void;
+};
+
+export function TopBar({ onOpenFolder }: TopBarProps) {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const handleOpenFolder = async () => {
+    setIsFileMenuOpen(false);
+    try {
+      const selection = await open({
+        directory: true,
+        multiple: false,
+        title: "Open Folder",
+      });
+      if (typeof selection === "string") {
+        onOpenFolder(selection);
+      } else if (Array.isArray(selection) && selection[0]) {
+        onOpenFolder(selection[0]);
+      }
+    } catch (error) {
+      console.error("Failed to open folder picker", error);
+    }
+  };
 
   useEffect(() => {
     if (!isFileMenuOpen) {
@@ -37,7 +60,12 @@ export function TopBar() {
             </button>
             {isFileMenuOpen ? (
               <div className="top-bar-submenu" role="menu" aria-label="File menu">
-                <button type="button" className="submenu-item" role="menuitem">
+                <button
+                  type="button"
+                  className="submenu-item"
+                  role="menuitem"
+                  onClick={handleOpenFolder}
+                >
                   Open Folder
                 </button>
               </div>

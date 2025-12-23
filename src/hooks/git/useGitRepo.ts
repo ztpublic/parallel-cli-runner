@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   gitCommit,
   gitDetectRepo,
@@ -146,10 +146,6 @@ export function useGitRepo() {
     },
     [repoRoot]
   );
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
 
   const changedFiles = useMemo(() => {
     if (!status) return [];
