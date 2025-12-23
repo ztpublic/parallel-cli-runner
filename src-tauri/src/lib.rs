@@ -43,6 +43,37 @@ async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, Comma
     git::list_branches(&path).map_err(CommandError::from)
 }
 
+#[tauri::command]
+async fn git_list_remote_branches(
+    cwd: String,
+) -> Result<Vec<git::BranchInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::list_remote_branches(&path).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_list_commits(
+    cwd: String,
+    limit: usize,
+) -> Result<Vec<git::CommitInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::list_commits(&path, limit).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_list_worktrees(
+    cwd: String,
+) -> Result<Vec<git::WorktreeInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::list_worktrees(&path).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_list_remotes(cwd: String) -> Result<Vec<git::RemoteInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::list_remotes(&path).map_err(CommandError::from)
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn git_commit(
     cwd: String,
@@ -52,6 +83,30 @@ async fn git_commit(
 ) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
     git::commit(&path, &message, stage_all, amend).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn git_stage_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::stage_paths(&path, &paths).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn git_unstage_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::unstage_paths(&path, &paths).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_stage_all(cwd: String) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::stage_all(&path).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_unstage_all(cwd: String) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::unstage_all(&path).map_err(CommandError::from)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -80,7 +135,15 @@ pub fn run() {
             git_status,
             git_diff,
             git_list_branches,
+            git_list_remote_branches,
+            git_list_commits,
+            git_list_worktrees,
+            git_list_remotes,
             git_commit,
+            git_stage_files,
+            git_unstage_files,
+            git_stage_all,
+            git_unstage_all,
             git_merge_into_branch
         ])
         .run(tauri::generate_context!())

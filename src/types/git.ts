@@ -18,6 +18,23 @@ export type CommitInfoDto = {
   relative_time: string;
 };
 
+export type BranchInfoDto = {
+  name: string;
+  current: boolean;
+  last_commit: string;
+};
+
+export type RemoteInfoDto = {
+  name: string;
+  fetch: string;
+  push: string;
+};
+
+export type WorktreeInfoDto = {
+  branch: string;
+  path: string;
+};
+
 export type RepoStatusDto = {
   repo_id: string;
   root_path: string;
@@ -31,4 +48,3 @@ export type RepoStatusDto = {
   modified_files: FileStatusDto[];
   latest_commit: CommitInfoDto | null;
 };
-

@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod tests {
-    use crate::git::{BranchInfoDto, CommitInfoDto, DiffStatDto, FileChangeType, FileStatusDto, RepoStatusDto};
+    use crate::git::{
+        BranchInfoDto, CommitInfoDto, DiffStatDto, FileChangeType, FileStatusDto, RemoteInfoDto,
+        RepoStatusDto, WorktreeInfoDto,
+    };
     use std::fs;
     use std::path::PathBuf;
     use ts_rs::TS;
@@ -26,6 +29,10 @@ mod tests {
         git_ts.push_str(&DiffStatDto::decl());
         git_ts.push_str("\n\n");
         git_ts.push_str(&BranchInfoDto::decl());
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&RemoteInfoDto::decl());
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&WorktreeInfoDto::decl());
         
         fs::write(types_dir.join("git.ts"), git_ts).unwrap();
 

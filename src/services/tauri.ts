@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { RepoStatusDto } from "../types/git";
+import type {
+  BranchInfoDto,
+  CommitInfoDto,
+  RemoteInfoDto,
+  RepoStatusDto,
+  WorktreeInfoDto,
+} from "../types/git";
 
 export function createSession(params: { cwd?: string }): Promise<string> {
   return invoke<string>("create_session", params);
@@ -21,6 +27,26 @@ export function gitStatus(params: { cwd: string }): Promise<RepoStatusDto> {
   return invoke<RepoStatusDto>("git_status", params);
 }
 
+export function gitListBranches(params: { cwd: string }): Promise<BranchInfoDto[]> {
+  return invoke<BranchInfoDto[]>("git_list_branches", params);
+}
+
+export function gitListRemoteBranches(params: { cwd: string }): Promise<BranchInfoDto[]> {
+  return invoke<BranchInfoDto[]>("git_list_remote_branches", params);
+}
+
+export function gitListCommits(params: { cwd: string; limit: number }): Promise<CommitInfoDto[]> {
+  return invoke<CommitInfoDto[]>("git_list_commits", params);
+}
+
+export function gitListWorktrees(params: { cwd: string }): Promise<WorktreeInfoDto[]> {
+  return invoke<WorktreeInfoDto[]>("git_list_worktrees", params);
+}
+
+export function gitListRemotes(params: { cwd: string }): Promise<RemoteInfoDto[]> {
+  return invoke<RemoteInfoDto[]>("git_list_remotes", params);
+}
+
 export function gitCommit(params: {
   cwd: string;
   message: string;
@@ -28,6 +54,22 @@ export function gitCommit(params: {
   amend: boolean;
 }): Promise<void> {
   return invoke("git_commit", params);
+}
+
+export function gitStageFiles(params: { cwd: string; paths: string[] }): Promise<void> {
+  return invoke("git_stage_files", params);
+}
+
+export function gitUnstageFiles(params: { cwd: string; paths: string[] }): Promise<void> {
+  return invoke("git_unstage_files", params);
+}
+
+export function gitStageAll(params: { cwd: string }): Promise<void> {
+  return invoke("git_stage_all", params);
+}
+
+export function gitUnstageAll(params: { cwd: string }): Promise<void> {
+  return invoke("git_unstage_all", params);
 }
 
 export function gitMergeIntoBranch(params: {

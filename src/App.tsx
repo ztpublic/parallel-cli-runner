@@ -8,6 +8,7 @@ import { TopBar } from "./components/TopBar";
 import { StatusBar } from "./components/StatusBar";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
+import { useGitRepo } from "./hooks/git/useGitRepo";
 
 function App() {
   const {
@@ -28,6 +29,25 @@ function App() {
 
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
+
+  const {
+    repoRoot,
+    status,
+    localBranches,
+    remoteBranches,
+    commits,
+    worktrees,
+    remotes,
+    changedFiles,
+    loading: gitLoading,
+    error: gitError,
+    refresh: refreshGit,
+    stageFiles,
+    unstageFiles,
+    stageAll,
+    unstageAll,
+    commit,
+  } = useGitRepo();
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -113,7 +133,24 @@ function App() {
     <main className="app-shell">
       <TopBar />
       <div className="workspace" style={{ position: "relative" }}>
-        <GitPanel width={sidebarWidth} />
+        <GitPanel
+          width={sidebarWidth}
+          repoRoot={repoRoot}
+          loading={gitLoading}
+          error={gitError}
+          localBranches={localBranches}
+          remoteBranches={remoteBranches}
+          commits={commits}
+          worktrees={worktrees}
+          remotes={remotes}
+          changedFiles={changedFiles}
+          onRefresh={() => void refreshGit()}
+          onStageAll={() => void stageAll()}
+          onUnstageAll={() => void unstageAll()}
+          onStageFile={(path) => void stageFiles([path])}
+          onUnstageFile={(path) => void unstageFiles([path])}
+          onCommit={(message) => void commit(message)}
+        />
         <div
           className={`resize-handle ${isResizing ? "is-resizing" : ""}`}
           style={{ left: sidebarWidth - 3 }}
@@ -128,7 +165,7 @@ function App() {
           onNewPane={() => void handleNewPane()}
         />
       </div>
-      <StatusBar branch="main" errors={0} warnings={3} />
+      <StatusBar branch={status?.branch ?? "No repo"} errors={0} warnings={3} />
     </main>
   );
 }

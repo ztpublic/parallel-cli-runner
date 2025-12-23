@@ -78,6 +78,20 @@ pub struct DiffStatDto {
 pub struct BranchInfoDto {
     pub name: String,
     pub current: bool,
+    pub last_commit: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct RemoteInfoDto {
+    pub name: String,
+    pub fetch: String,
+    pub push: String,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct WorktreeInfoDto {
+    pub branch: String,
+    pub path: String,
 }
 
 pub fn detect_repo(cwd: &Path) -> Result<Option<PathBuf>, GitError> {
@@ -237,13 +251,113 @@ pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
         let (branch, _branch_type) = branch?;
         let name = branch.name()?.unwrap_or_default().to_string();
         if !name.is_empty() {
+            let last_commit = branch_last_commit(&branch)?;
             branches.push(BranchInfoDto {
                 name,
                 current: branch.is_head(),
+                last_commit,
             });
         }
     }
     Ok(branches)
+}
+
+pub fn list_remote_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut branches = Vec::new();
+    for branch in repo.branches(Some(BranchType::Remote))? {
+        let (branch, _branch_type) = branch?;
+        let Some(name) = branch.name()? else {
+            continue;
+        };
+        let name = name.to_string();
+        if name.is_empty() || name.ends_with("/HEAD") {
+            continue;
+        }
+        let last_commit = branch_last_commit(&branch)?;
+        branches.push(BranchInfoDto {
+            name,
+            current: false,
+            last_commit,
+        });
+    }
+    Ok(branches)
+}
+
+pub fn list_remotes(cwd: &Path) -> Result<Vec<RemoteInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut remotes = Vec::new();
+    let names = repo.remotes()?;
+    for name in names.iter().flatten() {
+        let remote = repo.find_remote(name)?;
+        let fetch = remote.url().unwrap_or_default().to_string();
+        let push = remote.pushurl().unwrap_or(fetch.as_str()).to_string();
+        remotes.push(RemoteInfoDto {
+            name: name.to_string(),
+            fetch,
+            push,
+        });
+    }
+    Ok(remotes)
+}
+
+pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut worktrees = Vec::new();
+
+    if let Some(workdir) = repo.workdir() {
+        let branch = current_branch_from_repo(&repo)?;
+        worktrees.push(WorktreeInfoDto {
+            branch,
+            path: canonicalize_path(workdir).to_string_lossy().to_string(),
+        });
+    }
+
+    let names = repo.worktrees()?;
+    for name in names.iter().flatten() {
+        let worktree = repo.find_worktree(name)?;
+        let path = worktree.path();
+        let branch = match Repository::open(path) {
+            Ok(worktree_repo) => current_branch_from_repo(&worktree_repo).unwrap_or_else(|_| "HEAD".to_string()),
+            Err(_) => "HEAD".to_string(),
+        };
+        worktrees.push(WorktreeInfoDto {
+            branch,
+            path: canonicalize_path(path).to_string_lossy().to_string(),
+        });
+    }
+
+    Ok(worktrees)
+}
+
+pub fn list_commits(cwd: &Path, limit: usize) -> Result<Vec<CommitInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut revwalk = match repo.revwalk() {
+        Ok(walk) => walk,
+        Err(err) if err.code() == ErrorCode::UnbornBranch => return Ok(Vec::new()),
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    if let Err(err) = revwalk.push_head() {
+        if err.code() == ErrorCode::UnbornBranch {
+            return Ok(Vec::new());
+        }
+        return Err(GitError::Git2(err));
+    }
+    let mut commits = Vec::new();
+    for oid in revwalk.take(limit) {
+        let oid = oid?;
+        let commit = repo.find_commit(oid)?;
+        let summary = commit.summary().unwrap_or_default().to_string();
+        let author = commit.author().name().unwrap_or_default().to_string();
+        let relative_time = format_relative_time(commit.time());
+        commits.push(CommitInfoDto {
+            id: commit.id().to_string(),
+            summary,
+            author,
+            relative_time,
+        });
+    }
+    Ok(commits)
 }
 
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
@@ -300,6 +414,46 @@ pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result
     let parent_refs: Vec<&git2::Commit<'_>> = parents.iter().collect();
     repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &parent_refs)?;
     Ok(())
+}
+
+pub fn stage_paths(cwd: &Path, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let repo = open_repo(cwd)?;
+    let mut index = repo.index()?;
+    for path in paths {
+        index.add_path(Path::new(path))?;
+    }
+    index.write()?;
+    Ok(())
+}
+
+pub fn unstage_paths(cwd: &Path, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let repo = open_repo(cwd)?;
+    let head = match repo.head() {
+        Ok(head) => Some(head.peel_to_object()?),
+        Err(err) if err.code() == ErrorCode::UnbornBranch => None,
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+    repo.reset_default(head.as_ref(), paths.iter().map(|path| path.as_str()))?;
+    Ok(())
+}
+
+pub fn stage_all(cwd: &Path) -> Result<(), GitError> {
+    let repo = open_repo(cwd)?;
+    let mut index = repo.index()?;
+    index.add_all(["."].iter(), IndexAddOption::DEFAULT, None)?;
+    index.write()?;
+    Ok(())
+}
+
+pub fn unstage_all(cwd: &Path) -> Result<(), GitError> {
+    let staged_paths = staged_paths(cwd)?;
+    unstage_paths(cwd, &staged_paths)
 }
 
 pub fn merge_into_branch(
@@ -676,6 +830,38 @@ fn latest_commit_for_repo(repo: &Repository) -> Result<Option<CommitInfoDto>, Gi
         author,
         relative_time,
     }))
+}
+
+fn staged_paths(cwd: &Path) -> Result<Vec<String>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut opts = StatusOptions::new();
+    opts.show(StatusShow::IndexAndWorkdir)
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .renames_head_to_index(true)
+        .renames_index_to_workdir(true)
+        .renames_from_rewrites(true);
+
+    let statuses = repo.statuses(Some(&mut opts))?;
+    let mut paths = Vec::new();
+    for entry in statuses.iter() {
+        let status = entry.status();
+        if status.contains(Status::IGNORED) || status == Status::CURRENT {
+            continue;
+        }
+        let Some(path) = entry.path() else {
+            continue;
+        };
+        if map_index_status(status).is_some() || status.contains(Status::CONFLICTED) {
+            paths.push(path.to_string());
+        }
+    }
+    Ok(paths)
+}
+
+fn branch_last_commit(branch: &git2::Branch<'_>) -> Result<String, GitError> {
+    let commit = branch.get().peel_to_commit()?;
+    Ok(commit.summary().unwrap_or_default().to_string())
 }
 
 fn format_relative_time(time: git2::Time) -> String {

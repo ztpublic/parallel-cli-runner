@@ -9,7 +9,9 @@ type GitStagingProps = {
   onGenerateCommitMessage: () => void;
   onStageAll: () => void;
   onUnstageAll: () => void;
-  onToggleFileStage: (path: string) => void;
+  onStageFile: (path: string) => void;
+  onUnstageFile: (path: string) => void;
+  onCommit: () => void;
 };
 
 export function GitStaging({
@@ -20,7 +22,9 @@ export function GitStaging({
   onGenerateCommitMessage,
   onStageAll,
   onUnstageAll,
-  onToggleFileStage,
+  onStageFile,
+  onUnstageFile,
+  onCommit,
 }: GitStagingProps) {
   const commitDisabled = !commitMessage.trim() || stagedFiles.length === 0;
   const magicDisabled = stagedFiles.length === 0;
@@ -69,7 +73,12 @@ export function GitStaging({
             <Icon name="sparkle" size={12} />
           </button>
         </div>
-        <button type="button" className="commit-button" disabled={commitDisabled}>
+        <button
+          type="button"
+          className="commit-button"
+          disabled={commitDisabled}
+          onClick={onCommit}
+        >
           <Icon name="check" size={14} />
           Commit Changes
         </button>
@@ -87,7 +96,7 @@ export function GitStaging({
             </div>
             <div className="commit-file-list">
               {stagedFiles.map((file) => (
-                <div key={file.path} className="commit-file">
+                <div key={`${file.path}:staged`} className="commit-file">
                   <Icon
                     name={getStatusIcon(file.status)}
                     size={14}
@@ -101,7 +110,7 @@ export function GitStaging({
                     type="button"
                     className="icon-button icon-button--tiny commit-file-action commit-file-action--unstage"
                     title="Unstage file"
-                    onClick={() => onToggleFileStage(file.path)}
+                    onClick={() => onUnstageFile(file.path)}
                   >
                     <Icon name="minus" size={12} />
                   </button>
@@ -122,7 +131,7 @@ export function GitStaging({
             </div>
             <div className="commit-file-list">
               {unstagedFiles.map((file) => (
-                <div key={file.path} className="commit-file">
+                <div key={`${file.path}:unstaged`} className="commit-file">
                   <Icon
                     name={getStatusIcon(file.status)}
                     size={14}
@@ -136,7 +145,7 @@ export function GitStaging({
                     type="button"
                     className="icon-button icon-button--tiny commit-file-action commit-file-action--stage"
                     title="Stage file"
-                    onClick={() => onToggleFileStage(file.path)}
+                    onClick={() => onStageFile(file.path)}
                   >
                     <Icon name="plus" size={12} />
                   </button>

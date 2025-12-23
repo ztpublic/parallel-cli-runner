@@ -1,26 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChangedFile } from "../../types/git-ui";
 
-export function useGitStaging(initialFiles: ChangedFile[]) {
-  const [changedFiles, setChangedFiles] = useState<ChangedFile[]>(initialFiles);
+export function useGitStaging(changedFiles: ChangedFile[]) {
   const [commitMessage, setCommitMessage] = useState("");
 
-  const stagedFiles = changedFiles.filter((file) => file.staged);
-  const unstagedFiles = changedFiles.filter((file) => !file.staged);
-
-  const toggleFileStage = (path: string) => {
-    setChangedFiles((files) =>
-      files.map((file) => (file.path === path ? { ...file, staged: !file.staged } : file))
-    );
-  };
-
-  const stageAllFiles = () => {
-    setChangedFiles((files) => files.map((file) => ({ ...file, staged: true })));
-  };
-
-  const unstageAllFiles = () => {
-    setChangedFiles((files) => files.map((file) => ({ ...file, staged: false })));
-  };
+  const stagedFiles = useMemo(
+    () => changedFiles.filter((file) => file.staged),
+    [changedFiles]
+  );
+  const unstagedFiles = useMemo(
+    () => changedFiles.filter((file) => !file.staged),
+    [changedFiles]
+  );
 
   const generateCommitMessage = () => {
     if (!stagedFiles.length) return;
@@ -46,14 +37,10 @@ export function useGitStaging(initialFiles: ChangedFile[]) {
   };
 
   return {
-    changedFiles,
     commitMessage,
     setCommitMessage,
     stagedFiles,
     unstagedFiles,
-    toggleFileStage,
-    stageAllFiles,
-    unstageAllFiles,
     generateCommitMessage,
   };
 }

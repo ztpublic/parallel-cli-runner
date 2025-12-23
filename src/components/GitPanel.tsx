@@ -25,6 +25,15 @@ type GitPanelProps = {
   remotes?: RemoteItem[];
   changedFiles?: ChangedFile[];
   width?: number;
+  repoRoot?: string | null;
+  loading?: boolean;
+  error?: string | null;
+  onRefresh?: () => void;
+  onCommit?: (message: string) => void;
+  onStageAll?: () => void;
+  onUnstageAll?: () => void;
+  onStageFile?: (path: string) => void;
+  onUnstageFile?: (path: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -44,6 +53,15 @@ export function GitPanel({
   remotes = [],
   changedFiles = [],
   width,
+  repoRoot,
+  loading = false,
+  error,
+  onRefresh,
+  onCommit,
+  onStageAll,
+  onUnstageAll,
+  onStageFile,
+  onUnstageFile,
 }: GitPanelProps) {
   const {
     tabs,
@@ -62,11 +80,35 @@ export function GitPanel({
     setCommitMessage,
     stagedFiles,
     unstagedFiles,
-    toggleFileStage,
-    stageAllFiles,
-    unstageAllFiles,
     generateCommitMessage,
   } = useGitStaging(changedFiles);
+
+  const canInteract = Boolean(repoRoot) && !loading;
+
+  const handleCommit = () => {
+    if (!canInteract || !onCommit) return;
+    onCommit(commitMessage);
+  };
+
+  const handleStageAll = () => {
+    if (!canInteract || !onStageAll) return;
+    onStageAll();
+  };
+
+  const handleUnstageAll = () => {
+    if (!canInteract || !onUnstageAll) return;
+    onUnstageAll();
+  };
+
+  const handleStageFile = (path: string) => {
+    if (!canInteract || !onStageFile) return;
+    onStageFile(path);
+  };
+
+  const handleUnstageFile = (path: string) => {
+    if (!canInteract || !onUnstageFile) return;
+    onUnstageFile(path);
+  };
 
   return (
     <aside className="git-panel" style={{ width }}>
@@ -75,7 +117,13 @@ export function GitPanel({
           <Icon name="branch" size={16} />
           <span>Git Manager</span>
         </div>
-        <button type="button" className="icon-button icon-button--small" title="Refresh">
+        <button
+          type="button"
+          className="icon-button icon-button--small"
+          title="Refresh"
+          onClick={onRefresh}
+          disabled={loading}
+        >
           <Icon name="refresh" size={14} />
         </button>
       </div>
@@ -93,28 +141,54 @@ export function GitPanel({
       />
 
       <div className="git-panel-content">
-        {activeTab === "branches" ? (
-          <GitBranches localBranches={localBranches} remoteBranches={remoteBranches} />
+        {!repoRoot ? (
+          <div className="git-empty">
+            <Icon name="folder" size={22} />
+            <p>No git repository detected.</p>
+            <button type="button" className="git-primary-button" onClick={onRefresh}>
+              Try Again
+            </button>
+          </div>
         ) : null}
 
-        {activeTab === "commits" ? <GitCommits commits={commits} /> : null}
-
-        {activeTab === "commit" ? (
-          <GitStaging
-            stagedFiles={stagedFiles}
-            unstagedFiles={unstagedFiles}
-            commitMessage={commitMessage}
-            onCommitMessageChange={setCommitMessage}
-            onGenerateCommitMessage={generateCommitMessage}
-            onStageAll={stageAllFiles}
-            onUnstageAll={unstageAllFiles}
-            onToggleFileStage={toggleFileStage}
-          />
+        {repoRoot && error ? (
+          <div className="git-empty">
+            <Icon name="alert" size={22} />
+            <p>{error}</p>
+            <button type="button" className="git-primary-button" onClick={onRefresh}>
+              Retry
+            </button>
+          </div>
         ) : null}
 
-        {activeTab === "worktrees" ? <GitWorktrees worktrees={worktrees} /> : null}
+        {repoRoot && !error ? (
+          <>
+            {activeTab === "branches" ? (
+              <GitBranches localBranches={localBranches} remoteBranches={remoteBranches} />
+            ) : null}
 
-        {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}
+            {activeTab === "commits" ? <GitCommits commits={commits} /> : null}
+
+            {activeTab === "commit" ? (
+              <GitStaging
+                stagedFiles={stagedFiles}
+                unstagedFiles={unstagedFiles}
+                commitMessage={commitMessage}
+                onCommitMessageChange={setCommitMessage}
+                onGenerateCommitMessage={generateCommitMessage}
+                onStageAll={handleStageAll}
+                onUnstageAll={handleUnstageAll}
+                onStageFile={handleStageFile}
+                onUnstageFile={handleUnstageFile}
+                onCommit={handleCommit}
+              />
+            ) : null}
+
+            {activeTab === "worktrees" ? <GitWorktrees worktrees={worktrees} /> : null}
+
+            {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}
+          </>
+        ) : null}
       </div>
     </aside>
   );
