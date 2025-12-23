@@ -1,17 +1,48 @@
+import { useEffect, useRef, useState } from "react";
+
 import { Icon } from "./Icons";
 
 export function TopBar() {
+  const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
+  const fileMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isFileMenuOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!fileMenuRef.current?.contains(event.target as Node)) {
+        setIsFileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isFileMenuOpen]);
+
   return (
     <header className="top-bar">
       <div className="top-bar-left">
-        <button type="button" className="icon-button" aria-label="Main menu">
-          <Icon name="menu" size={16} />
-        </button>
-        <div className="top-bar-title">Code Agent CLI Runner</div>
         <nav className="top-bar-menu" aria-label="Primary">
-          <button type="button" className="menu-item">
-            File
-          </button>
+          <div className="menu-item-wrapper" ref={fileMenuRef}>
+            <button
+              type="button"
+              className="menu-item"
+              aria-haspopup="menu"
+              aria-expanded={isFileMenuOpen}
+              onClick={() => setIsFileMenuOpen((prev) => !prev)}
+            >
+              File
+            </button>
+            {isFileMenuOpen ? (
+              <div className="top-bar-submenu" role="menu" aria-label="File menu">
+                <button type="button" className="submenu-item" role="menuitem">
+                  Open Folder
+                </button>
+              </div>
+            ) : null}
+          </div>
           <button type="button" className="menu-item">
             Edit
           </button>
