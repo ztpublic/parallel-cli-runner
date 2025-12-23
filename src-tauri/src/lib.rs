@@ -3,7 +3,7 @@ use std::path::PathBuf;
 mod command_error;
 use crate::command_error::CommandError;
 
-mod git;
+pub mod git;
 use crate::git::RepoStatusDto;
 mod pty;
 use crate::pty::PtyManager;

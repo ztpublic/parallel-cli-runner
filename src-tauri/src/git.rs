@@ -435,7 +435,10 @@ pub fn unstage_paths(cwd: &Path, paths: &[String]) -> Result<(), GitError> {
     }
     let repo = open_repo(cwd)?;
     let head = match repo.head() {
-        Ok(head) => Some(head.peel_to_object()?),
+        Ok(head) => match head.target() {
+            Some(oid) => Some(repo.find_object(oid, None)?),
+            None => None,
+        },
         Err(err) if err.code() == ErrorCode::UnbornBranch => None,
         Err(err) => return Err(GitError::Git2(err)),
     };
