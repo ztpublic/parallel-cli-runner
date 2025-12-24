@@ -472,7 +472,7 @@ button {
 .git-panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
