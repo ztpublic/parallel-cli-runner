@@ -22,7 +22,6 @@ export function GitCommits({
       label: commit.message,
       description: `${commit.author} - ${commit.date}`,
       icon: "commit",
-      rightSlot: <span className="git-hash">{commit.id}</span>,
     }));
 
     if (canLoadMore?.(group.repo.repoId)) {
