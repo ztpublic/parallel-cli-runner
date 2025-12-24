@@ -86,6 +86,7 @@ export function GitPanel({
     handleDragOver,
     handleDrop,
     handleDragEnd,
+    handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
 
   const {
@@ -151,6 +152,7 @@ export function GitPanel({
         onDragOver={handleDragOver}
         onDrop={handleDrop}
         onDragEnd={handleDragEnd}
+        onPointerDown={handlePointerDown}
       />
 
       <div className="git-panel-content">
