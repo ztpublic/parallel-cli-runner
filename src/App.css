@@ -1567,3 +1567,55 @@ button {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.dialog-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dialog-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  cursor: pointer;
+}
+
+.dialog-radio:hover {
+  background: var(--surface-2);
+}
+
+.dialog-radio input {
+  margin-top: 3px;
+}
+
+.dialog-radio-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dialog-radio-label strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.dialog-radio-label span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.dialog-button--danger {
+  background: var(--danger);
+  border-color: rgba(244, 135, 113, 0.4);
+  color: #1e1e1e;
+}
+
+.dialog-button--danger:hover {
+  background: #f69d8b;
+}

@@ -149,6 +149,12 @@ async fn git_checkout_branch(cwd: String, branch_name: String) -> Result<(), Com
     git::checkout_local_branch(&path, &branch_name).map_err(CommandError::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn git_reset(cwd: String, target: String, mode: String) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::reset(&path, &target, &mode).map_err(CommandError::from)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -177,7 +183,8 @@ pub fn run() {
             git_unstage_all,
             git_merge_into_branch,
             git_create_branch,
-            git_checkout_branch
+            git_checkout_branch,
+            git_reset
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

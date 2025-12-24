@@ -1,7 +1,7 @@
 use git2::{
     build::CheckoutBuilder,
     BranchType, Diff, DiffOptions, DiffStatsFormat, ErrorCode, IndexAddOption, MergeOptions,
-    Repository, StashFlags, Status, StatusOptions, StatusShow, WorktreeAddOptions,
+    Repository, ResetType, StashFlags, Status, StatusOptions, StatusShow, WorktreeAddOptions,
     WorktreePruneOptions,
 };
 use serde::Serialize;
@@ -763,6 +763,26 @@ pub fn checkout_local_branch(repo_root: &Path, branch_name: &str) -> Result<(), 
     let repo = open_repo(repo_root)?;
     let refname = local_branch_refname(branch_name);
     checkout_branch(&repo, &refname)
+}
+
+pub fn reset(repo_root: &Path, target: &str, mode: &str) -> Result<(), GitError> {
+    let repo = open_repo(repo_root)?;
+    let obj = repo.revparse_single(target)?;
+    let reset_type = match mode {
+        "soft" => ResetType::Soft,
+        "mixed" => ResetType::Mixed,
+        "hard" => ResetType::Hard,
+        _ => ResetType::Mixed,
+    };
+    
+    // For hard reset, we need checkout builder
+    let mut checkout = CheckoutBuilder::new();
+    if mode == "hard" {
+        checkout.force();
+    }
+    
+    repo.reset(&obj, reset_type, Some(&mut checkout))?;
+    Ok(())
 }
 
 pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {

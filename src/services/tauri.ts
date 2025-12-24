@@ -103,3 +103,11 @@ export function gitCheckoutBranch(params: {
 }): Promise<void> {
   return invoke("git_checkout_branch", params);
 }
+
+export function gitReset(params: {
+  cwd: string;
+  target: string;
+  mode: "soft" | "mixed" | "hard";
+}): Promise<void> {
+  return invoke("git_reset", params);
+}
