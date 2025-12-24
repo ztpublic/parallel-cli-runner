@@ -82,7 +82,7 @@ fn commit_and_list_commits() {
 
     git::commit(temp.path(), "Initial commit", true, false).expect("commit");
 
-    let commits = git::list_commits(temp.path(), 10).expect("list commits");
+    let commits = git::list_commits(temp.path(), 10, None).expect("list commits");
     assert_eq!(commits.len(), 1);
     assert_eq!(commits[0].summary, "Initial commit");
 }
