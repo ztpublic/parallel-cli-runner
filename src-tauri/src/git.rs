@@ -193,12 +193,13 @@ where
     F: Fn(String),
 {
     let mut seen = HashSet::new();
-    let mut repos = Vec::new();
+    let mut scanned_entries = Vec::new();
 
     if let Ok(repo) = Repository::discover(root) {
         let info = repo_info_from_repo(&repo);
+        let git_path = canonicalize_path(repo.path());
         if seen.insert(info.root_path.clone()) {
-            repos.push(info);
+            scanned_entries.push((info, git_path));
         }
     }
 
@@ -214,8 +215,9 @@ where
         if fs::symlink_metadata(&git_marker).is_ok() {
             if let Ok(repo) = Repository::discover(&dir) {
                 let info = repo_info_from_repo(&repo);
+                let git_path = canonicalize_path(repo.path());
                 if seen.insert(info.root_path.clone()) {
-                    repos.push(info);
+                    scanned_entries.push((info, git_path));
                 }
             }
         }
@@ -238,6 +240,27 @@ where
             }
 
             pending.push(path);
+        }
+    }
+
+    let mut repos = Vec::new();
+    for (info, git_path) in &scanned_entries {
+        let is_worktree = scanned_entries.iter().any(|(_, other_git_path)| {
+            if git_path == other_git_path {
+                return false;
+            }
+            if let Ok(relative) = git_path.strip_prefix(other_git_path) {
+                // Check if it's a worktree (path inside .git/worktrees/...)
+                let mut components = relative.components();
+                if let Some(first) = components.next() {
+                    return first.as_os_str() == "worktrees";
+                }
+            }
+            false
+        });
+
+        if !is_worktree {
+            repos.push(info.clone());
         }
     }
 
