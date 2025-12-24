@@ -45,6 +45,7 @@ type GitPanelProps = {
   onOpenFolder?: () => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
+  onRevert?: (repoId: string, commitId: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -83,6 +84,7 @@ export function GitPanel({
   onOpenFolder,
   onSwitchBranch,
   onReset,
+  onRevert,
 }: GitPanelProps) {
   const {
     tabs,
@@ -204,6 +206,7 @@ export function GitPanel({
                 canLoadMore={canLoadMoreCommits}
                 isLoadingMore={isLoadingMoreCommits}
                 onReset={onReset}
+                onRevert={onRevert}
               />
             ) : null}
 

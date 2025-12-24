@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { ResetDialog } from "../dialogs/ResetDialog";
+import { RevertDialog } from "../dialogs/RevertDialog";
 import type { CommitItem, RepoGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -11,6 +12,7 @@ type GitCommitsProps = {
   canLoadMore?: (repoId: string) => boolean;
   isLoadingMore?: (repoId: string) => boolean;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
+  onRevert?: (repoId: string, commitId: string) => void;
 };
 
 export function GitCommits({
@@ -19,8 +21,15 @@ export function GitCommits({
   canLoadMore,
   isLoadingMore,
   onReset,
+  onRevert,
 }: GitCommitsProps) {
   const [resetDialog, setResetDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    commitId: string;
+  }>({ open: false, repoId: "", commitId: "" });
+
+  const [revertDialog, setRevertDialog] = useState<{
     open: boolean;
     repoId: string;
     commitId: string;
@@ -36,7 +45,10 @@ export function GitCommits({
         {
           id: "reset",
           label: "Reset...",
-          icon: "refresh",
+        },
+        {
+          id: "revert",
+          label: "Revert...",
         },
       ],
     }));
@@ -71,18 +83,17 @@ export function GitCommits({
   };
 
   const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+    // Node ID format: repoId:commitId
+    const lastColonIndex = node.id.lastIndexOf(":");
+    if (lastColonIndex === -1) return;
+    
+    const repoId = node.id.substring(0, lastColonIndex);
+    const commitId = node.id.substring(lastColonIndex + 1);
+
     if (itemId === "reset") {
-      // Node ID format: repoId:commitId
-      // Since repoId can contain colons, we should be careful.
-      // Assuming commit ID is the last part and is not extremely long or path-like.
-      // Commit hash is usually hex.
-      
-      const lastColonIndex = node.id.lastIndexOf(":");
-      if (lastColonIndex !== -1) {
-        const repoId = node.id.substring(0, lastColonIndex);
-        const commitId = node.id.substring(lastColonIndex + 1);
-        setResetDialog({ open: true, repoId, commitId });
-      }
+      setResetDialog({ open: true, repoId, commitId });
+    } else if (itemId === "revert") {
+      setRevertDialog({ open: true, repoId, commitId });
     }
   };
 
@@ -107,6 +118,15 @@ export function GitCommits({
         onClose={() => setResetDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={(mode) => {
           onReset?.(resetDialog.repoId, resetDialog.commitId, mode);
+        }}
+      />
+
+      <RevertDialog
+        open={revertDialog.open}
+        commitHash={revertDialog.commitId}
+        onClose={() => setRevertDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={() => {
+          onRevert?.(revertDialog.repoId, revertDialog.commitId);
         }}
       />
     </div>

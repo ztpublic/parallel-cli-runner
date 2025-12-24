@@ -111,3 +111,10 @@ export function gitReset(params: {
 }): Promise<void> {
   return invoke("git_reset", params);
 }
+
+export function gitRevert(params: {
+  cwd: string;
+  commit: string;
+}): Promise<void> {
+  return invoke("git_revert", params);
+}

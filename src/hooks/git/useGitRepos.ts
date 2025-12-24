@@ -9,6 +9,7 @@ import {
   gitListRemotes,
   gitListWorktrees,
   gitReset,
+  gitRevert,
   gitStageAll,
   gitStageFiles,
   gitStatus,
@@ -427,6 +428,24 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const revert = useCallback(
+    async (repoId: RepoId, commitId: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitRevert({
+          cwd: repo.root_path,
+          commit: commitId,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to revert commit", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const activeStatus = activeRepoId ? statusByRepo[activeRepoId] ?? null : null;
   const activeLocalBranches = activeRepoId ? localBranchesByRepo[activeRepoId] ?? [] : [];
   const activeRemoteBranches = activeRepoId ? remoteBranchesByRepo[activeRepoId] ?? [] : [];
@@ -465,6 +484,7 @@ export function useGitRepos() {
     createBranch,
     switchBranch,
     reset,
+    revert,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

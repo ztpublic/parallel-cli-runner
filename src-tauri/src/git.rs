@@ -1,8 +1,8 @@
 use git2::{
     build::CheckoutBuilder,
     BranchType, Diff, DiffOptions, DiffStatsFormat, ErrorCode, IndexAddOption, MergeOptions,
-    Repository, ResetType, StashFlags, Status, StatusOptions, StatusShow, WorktreeAddOptions,
-    WorktreePruneOptions,
+    Repository, ResetType, RevertOptions, StashFlags, Status, StatusOptions, StatusShow,
+    WorktreeAddOptions, WorktreePruneOptions,
 };
 use serde::Serialize;
 use std::{
@@ -782,6 +782,50 @@ pub fn reset(repo_root: &Path, target: &str, mode: &str) -> Result<(), GitError>
     }
     
     repo.reset(&obj, reset_type, Some(&mut checkout))?;
+    Ok(())
+}
+
+pub fn revert(repo_root: &Path, commit_str: &str) -> Result<(), GitError> {
+    let repo = open_repo(repo_root)?;
+    let obj = repo.revparse_single(commit_str)?;
+    let commit = obj.peel_to_commit()?;
+    
+    let mut opts = RevertOptions::new();
+    repo.revert(&commit, Some(&mut opts))?;
+    
+    // Auto-commit the revert if possible, or leave it staged if conflicts or if that's standard behavior.
+    // git revert usually commits unless -n is passed. git2 revert only updates index and worktree.
+    // We should try to commit if index is clean (no conflicts).
+    
+    let mut index = repo.index()?;
+    if index.has_conflicts() {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "revert resulted in conflicts; resolve them manually".to_string(),
+        });
+    }
+    
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let sig = repo.signature()?;
+    let head = repo.head()?.target().ok_or_else(|| GitError::GitFailed {
+        code: None,
+        stderr: "HEAD invalid".to_string(),
+    })?;
+    let head_commit = repo.find_commit(head)?;
+    
+    let message = format!("Revert \"{}\"", commit.summary().unwrap_or(""));
+    
+    repo.commit(
+        Some("HEAD"),
+        &sig,
+        &sig,
+        &message,
+        &tree,
+        &[&head_commit],
+    )?;
+    
+    repo.cleanup_state()?;
     Ok(())
 }
 
