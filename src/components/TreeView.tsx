@@ -252,10 +252,6 @@ export function TreeView({
           </div>
 
           <div className="tree-node-right">
-            {renderRightSlot ? renderRightSlot(node) : node.rightSlot}
-            {renderActions ? (
-              <div className="tree-actions">{renderActions(node)}</div>
-            ) : null}
             {node.actions?.length ? (
               <div className="tree-actions">
                 {node.actions.map((action) => (
@@ -276,6 +272,10 @@ export function TreeView({
                 ))}
               </div>
             ) : null}
+            {renderActions ? (
+              <div className="tree-actions">{renderActions(node)}</div>
+            ) : null}
+            {renderRightSlot ? renderRightSlot(node) : node.rightSlot}
           </div>
         </div>
 

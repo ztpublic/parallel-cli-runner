@@ -89,7 +89,7 @@ export function useGitTabs(initialTabs: GitTab[]) {
         | null;
       const targetId = targetButton?.dataset.gitTabId as GitTabId | undefined;
 
-      if (!targetId) {
+      if (!targetButton || !targetId) {
         setDragOverTabId(null);
         return;
       }
