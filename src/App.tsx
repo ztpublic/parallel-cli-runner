@@ -138,6 +138,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (repos.length > 0) {
+      void refreshRepos();
+    }
+  }, [refreshRepos]);
+
+  useEffect(() => {
     if (!activeRepoId) return;
     void refreshRepos(activeRepoId);
   }, [activeRepoId, refreshRepos]);
