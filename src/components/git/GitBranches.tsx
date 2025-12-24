@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
+import { CreateBranchDialog } from "../dialogs/CreateBranchDialog";
 import type { RepoBranchGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -9,6 +11,7 @@ type GitBranchesProps = {
   onLoadMoreRemote?: (repoId: string) => void;
   canLoadMoreLocal?: (repoId: string) => boolean;
   canLoadMoreRemote?: (repoId: string) => boolean;
+  onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
 };
 
 export function GitBranches({
@@ -17,7 +20,14 @@ export function GitBranches({
   onLoadMoreRemote,
   canLoadMoreLocal,
   canLoadMoreRemote,
+  onCreateBranch,
 }: GitBranchesProps) {
+  const [createDialog, setCreateDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    sourceBranch?: string;
+  }>({ open: false, repoId: "" });
+
   const nodes: TreeNode[] = branchGroups.map((group) => {
     const localChildren: TreeNode[] = group.localBranches.map((branch) => ({
       id: `${group.repo.repoId}:local:${branch.name}`,
@@ -126,15 +136,44 @@ export function GitBranches({
     }
   };
 
+  const handleAction = (node: TreeNode, actionId: string) => {
+    if (actionId === "new-branch") {
+      const repoId = node.id.replace(":local", "");
+      // Find the current branch for this repo
+      const group = branchGroups.find((g) => g.repo.repoId === repoId);
+      const currentBranch = group?.localBranches.find((b) => b.current)?.name;
+      
+      setCreateDialog({
+        open: true,
+        repoId,
+        sourceBranch: currentBranch,
+      });
+    }
+  };
+
   return (
     <div className="git-tree">
-      <TreeView nodes={nodes} toggleOnRowClick onNodeActivate={handleNodeActivate} />
+      <TreeView
+        nodes={nodes}
+        toggleOnRowClick
+        onNodeActivate={handleNodeActivate}
+        onAction={handleAction}
+      />
       {!branchGroups.length ? (
         <div className="git-empty">
           <Icon name="folder" size={22} />
           <p>No repositories bound.</p>
         </div>
       ) : null}
+
+      <CreateBranchDialog
+        open={createDialog.open}
+        sourceBranch={createDialog.sourceBranch}
+        onClose={() => setCreateDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={(name) => {
+          onCreateBranch?.(createDialog.repoId, name, createDialog.sourceBranch);
+        }}
+      />
     </div>
   );
 }

@@ -88,3 +88,11 @@ export function gitMergeIntoBranch(params: {
 }): Promise<void> {
   return invoke("git_merge_into_branch", params);
 }
+
+export function gitCreateBranch(params: {
+  cwd: string;
+  branchName: string;
+  sourceBranch?: string;
+}): Promise<void> {
+  return invoke("git_create_branch", params);
+}

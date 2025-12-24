@@ -96,7 +96,7 @@ export const initialRemotes: RemoteItem[] = [
 export const initialTabs: GitTab[] = [
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
-  { id: "commit", label: "Commit", icon: "commit" },
+  { id: "commit", label: "Changes", icon: "fileEdit" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];

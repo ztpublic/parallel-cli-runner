@@ -133,6 +133,16 @@ async fn git_merge_into_branch(
     git::merge_into_branch(&path, &target_branch, &source_branch).map_err(CommandError::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn git_create_branch(
+    cwd: String,
+    branch_name: String,
+    source_branch: Option<String>,
+) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::create_branch(&path, &branch_name, source_branch).map_err(CommandError::from)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -159,7 +169,8 @@ pub fn run() {
             git_unstage_files,
             git_stage_all,
             git_unstage_all,
-            git_merge_into_branch
+            git_merge_into_branch,
+            git_create_branch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

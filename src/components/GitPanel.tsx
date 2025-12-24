@@ -41,12 +41,14 @@ type GitPanelProps = {
   canLoadMoreLocalBranches?: (repoId: string) => boolean;
   canLoadMoreRemoteBranches?: (repoId: string) => boolean;
   isLoadingMoreCommits?: (repoId: string) => boolean;
+  onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
+  onOpenFolder?: () => void;
 };
 
 const defaultTabs: GitTab[] = [
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
-  { id: "commit", label: "Commit", icon: "commit" },
+  { id: "commit", label: "Changes", icon: "fileEdit" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];
@@ -75,6 +77,8 @@ export function GitPanel({
   canLoadMoreLocalBranches,
   canLoadMoreRemoteBranches,
   isLoadingMoreCommits,
+  onCreateBranch,
+  onOpenFolder,
 }: GitPanelProps) {
   const {
     tabs,
@@ -159,9 +163,8 @@ export function GitPanel({
         {!repoRoot ? (
           <div className="git-empty">
             <Icon name="folder" size={22} />
-            <p>No git repository detected.</p>
-            <button type="button" className="git-primary-button" onClick={onRefresh}>
-              Try Again
+            <button type="button" className="git-primary-button" onClick={onOpenFolder}>
+              Open Folder
             </button>
           </div>
         ) : null}
@@ -185,6 +188,7 @@ export function GitPanel({
                 onLoadMoreRemote={onLoadMoreRemoteBranches}
                 canLoadMoreLocal={canLoadMoreLocalBranches}
                 canLoadMoreRemote={canLoadMoreRemoteBranches}
+                onCreateBranch={onCreateBranch}
               />
             ) : null}
 

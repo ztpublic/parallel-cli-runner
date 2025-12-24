@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   gitCommit,
+  gitCreateBranch,
   gitListBranches,
   gitListCommits,
   gitListRemoteBranches,
@@ -368,6 +369,25 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const createBranch = useCallback(
+    async (repoId: RepoId, name: string, sourceBranch?: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitCreateBranch({
+          cwd: repo.root_path,
+          branchName: name,
+          sourceBranch,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to create branch", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const activeStatus = activeRepoId ? statusByRepo[activeRepoId] ?? null : null;
   const activeLocalBranches = activeRepoId ? localBranchesByRepo[activeRepoId] ?? [] : [];
   const activeRemoteBranches = activeRepoId ? remoteBranchesByRepo[activeRepoId] ?? [] : [];
@@ -403,6 +423,7 @@ export function useGitRepos() {
     stageAll,
     unstageAll,
     commit,
+    createBranch,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

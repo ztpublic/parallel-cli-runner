@@ -16,6 +16,7 @@ type TreeViewProps = {
   onNodeToggle?: (nodeId: string, expanded: boolean) => void;
   onNodeActivate?: (node: TreeNode) => void;
   onContextMenuSelect?: (node: TreeNode, itemId: string) => void;
+  onAction?: (node: TreeNode, actionId: string) => void;
   toggleOnRowClick?: boolean;
   renderRightSlot?: (node: TreeNode) => ReactNode;
   renderActions?: (node: TreeNode) => ReactNode;
@@ -29,6 +30,7 @@ export function TreeView({
   onNodeToggle,
   onNodeActivate,
   onContextMenuSelect,
+  onAction,
   toggleOnRowClick = false,
   renderRightSlot,
   renderActions,
@@ -265,6 +267,7 @@ export function TreeView({
                     disabled={action.disabled}
                     onClick={(event) => {
                       event.stopPropagation();
+                      onAction?.(node, action.id);
                     }}
                   >
                     <Icon name={action.icon} size={12} />

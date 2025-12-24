@@ -10,6 +10,7 @@ import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
 import { gitScanRepos } from "./services/tauri";
+import { open } from "@tauri-apps/plugin-dialog";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import type { RepoInfoDto } from "./types/git";
@@ -60,6 +61,7 @@ function App() {
     stageAll,
     unstageAll,
     commit,
+    createBranch,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -179,6 +181,23 @@ function App() {
     []
   );
 
+  const handleTriggerOpenFolder = useCallback(async () => {
+    try {
+      const selection = await open({
+        directory: true,
+        multiple: false,
+        title: "Open Folder",
+      });
+      if (typeof selection === "string") {
+        void handleOpenFolder(selection);
+      } else if (Array.isArray(selection) && selection[0]) {
+        void handleOpenFolder(selection[0]);
+      }
+    } catch (error) {
+      console.error("Failed to open folder picker", error);
+    }
+  }, [handleOpenFolder]);
+
   const handleToggleRepo = useCallback((repoId: string) => {
     setSelectedRepoIds((prev) =>
       prev.includes(repoId) ? prev.filter((id) => id !== repoId) : [...prev, repoId]
@@ -296,6 +315,10 @@ function App() {
         onCommit={(message) => {
           if (activeRepoId) void commit(activeRepoId, message);
         }}
+        onCreateBranch={(repoId, name, source) => {
+          void createBranch(repoId, name, source);
+        }}
+        onOpenFolder={handleTriggerOpenFolder}
         onLoadMoreCommits={loadMoreCommits}
         onLoadMoreLocalBranches={loadMoreLocalBranches}
         onLoadMoreRemoteBranches={loadMoreRemoteBranches}

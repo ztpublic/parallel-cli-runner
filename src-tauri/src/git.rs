@@ -718,6 +718,24 @@ pub fn remove_worktree(
     })
 }
 
+pub fn create_branch(
+    repo_root: &Path,
+    name: &str,
+    source_branch: Option<String>,
+) -> Result<(), GitError> {
+    let repo = open_repo(repo_root)?;
+    let start_point = match source_branch {
+        Some(b) => b,
+        None => current_branch_from_repo(&repo)?,
+    };
+
+    let obj = repo.revparse_single(&start_point)?;
+    let commit = obj.peel_to_commit()?;
+
+    repo.branch(name, &commit, false)?;
+    Ok(())
+}
+
 pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {
     let repo = open_repo(repo_root)?;
     if force {
