@@ -62,6 +62,7 @@ export function GitStaging({
             rows={4}
             value={commitMessage}
             onChange={(event) => onCommitMessageChange(event.target.value)}
+            spellCheck={false}
           />
           <button
             type="button"

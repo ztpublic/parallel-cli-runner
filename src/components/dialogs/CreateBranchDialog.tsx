@@ -63,8 +63,8 @@ export function CreateBranchDialog({
               className="dialog-input"
               value={branchName}
               onChange={(e) => setBranchName(e.target.value)}
-              placeholder="feature/new-feature"
               autoComplete="off"
+              spellCheck={false}
             />
           </div>
           

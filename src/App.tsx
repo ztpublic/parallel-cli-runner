@@ -62,6 +62,7 @@ function App() {
     unstageAll,
     commit,
     createBranch,
+    switchBranch,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -317,6 +318,9 @@ function App() {
         }}
         onCreateBranch={(repoId, name, source) => {
           void createBranch(repoId, name, source);
+        }}
+        onSwitchBranch={(repoId, branchName) => {
+          void switchBranch(repoId, branchName);
         }}
         onOpenFolder={handleTriggerOpenFolder}
         onLoadMoreCommits={loadMoreCommits}

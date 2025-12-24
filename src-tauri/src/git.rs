@@ -759,6 +759,12 @@ pub fn create_branch(
     Ok(())
 }
 
+pub fn checkout_local_branch(repo_root: &Path, branch_name: &str) -> Result<(), GitError> {
+    let repo = open_repo(repo_root)?;
+    let refname = local_branch_refname(branch_name);
+    checkout_branch(&repo, &refname)
+}
+
 pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {
     let repo = open_repo(repo_root)?;
     if force {

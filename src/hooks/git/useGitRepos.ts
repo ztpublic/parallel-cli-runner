@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
+  gitCheckoutBranch,
   gitCommit,
   gitCreateBranch,
   gitListBranches,
@@ -388,6 +389,24 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const switchBranch = useCallback(
+    async (repoId: RepoId, branchName: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitCheckoutBranch({
+          cwd: repo.root_path,
+          branchName,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to switch branch", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const activeStatus = activeRepoId ? statusByRepo[activeRepoId] ?? null : null;
   const activeLocalBranches = activeRepoId ? localBranchesByRepo[activeRepoId] ?? [] : [];
   const activeRemoteBranches = activeRepoId ? remoteBranchesByRepo[activeRepoId] ?? [] : [];
@@ -424,6 +443,7 @@ export function useGitRepos() {
     unstageAll,
     commit,
     createBranch,
+    switchBranch,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

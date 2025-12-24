@@ -96,3 +96,10 @@ export function gitCreateBranch(params: {
 }): Promise<void> {
   return invoke("git_create_branch", params);
 }
+
+export function gitCheckoutBranch(params: {
+  cwd: string;
+  branchName: string;
+}): Promise<void> {
+  return invoke("git_checkout_branch", params);
+}

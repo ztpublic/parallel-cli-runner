@@ -43,6 +43,7 @@ type GitPanelProps = {
   isLoadingMoreCommits?: (repoId: string) => boolean;
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onOpenFolder?: () => void;
+  onSwitchBranch?: (repoId: string, branchName: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -79,6 +80,7 @@ export function GitPanel({
   isLoadingMoreCommits,
   onCreateBranch,
   onOpenFolder,
+  onSwitchBranch,
 }: GitPanelProps) {
   const {
     tabs,
@@ -189,6 +191,7 @@ export function GitPanel({
                 canLoadMoreLocal={canLoadMoreLocalBranches}
                 canLoadMoreRemote={canLoadMoreRemoteBranches}
                 onCreateBranch={onCreateBranch}
+                onSwitchBranch={onSwitchBranch}
               />
             ) : null}
 

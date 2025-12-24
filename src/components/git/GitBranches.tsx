@@ -12,6 +12,7 @@ type GitBranchesProps = {
   canLoadMoreLocal?: (repoId: string) => boolean;
   canLoadMoreRemote?: (repoId: string) => boolean;
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
+  onSwitchBranch?: (repoId: string, branchName: string) => void;
 };
 
 export function GitBranches({
@@ -21,6 +22,7 @@ export function GitBranches({
   canLoadMoreLocal,
   canLoadMoreRemote,
   onCreateBranch,
+  onSwitchBranch,
 }: GitBranchesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -37,6 +39,13 @@ export function GitBranches({
       rightSlot: branch.current ? (
         <span className="git-badge">current</span>
       ) : undefined,
+      contextMenu: [
+        {
+          id: "switch-branch",
+          label: "Switch Branch",
+          disabled: branch.current,
+        },
+      ],
       actions: [
         {
           id: "merge",
@@ -151,6 +160,24 @@ export function GitBranches({
     }
   };
 
+  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+    if (itemId === "switch-branch") {
+      // id format: repoId:local:branchName
+      // We need to parse it carefully because repoId can contain colons?
+      // Actually, standard IDs here are constructed as `${group.repo.repoId}:local:${branch.name}`.
+      // A safer way is to find the group and branch from the node structure or ID if we assume structure.
+      // But passing repoId and branchName in context or parsing ID is common.
+      // Let's rely on the structure we built: last part is branch name, prefix is repoId:local
+      
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        onSwitchBranch?.(repoId, branchName);
+      }
+    }
+  };
+
   return (
     <div className="git-tree">
       <TreeView
@@ -158,6 +185,7 @@ export function GitBranches({
         toggleOnRowClick
         onNodeActivate={handleNodeActivate}
         onAction={handleAction}
+        onContextMenuSelect={handleContextMenuSelect}
       />
       {!branchGroups.length ? (
         <div className="git-empty">
