@@ -183,7 +183,7 @@ export function TreeView({
       >
         <div
           className={`tree-row ${isSelected ? "tree-row--selected" : ""}`}
-          style={{ paddingLeft: `${depth * 16 + 12}px` }}
+          style={{ paddingLeft: `${depth * 12 + 8}px` }}
           tabIndex={selectable ? 0 : -1}
           onClick={(event) => {
             if (toggleOnRowClick && selectionMode === "none" && hasChildren) {

@@ -667,7 +667,7 @@ button {
 .tree-view {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 
 .tree-node {
@@ -686,7 +686,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 6px 8px;
   cursor: pointer;
   color: var(--text);
 }
@@ -773,10 +773,10 @@ button {
 
 .tree-children {
   border-top: 1px solid var(--border);
-  padding: 6px 0 8px;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
 .context-menu {
