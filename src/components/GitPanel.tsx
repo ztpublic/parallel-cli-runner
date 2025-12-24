@@ -34,6 +34,13 @@ type GitPanelProps = {
   onUnstageAll?: () => void;
   onStageFile?: (path: string) => void;
   onUnstageFile?: (path: string) => void;
+  onLoadMoreCommits?: (repoId: string) => void;
+  onLoadMoreLocalBranches?: (repoId: string) => void;
+  onLoadMoreRemoteBranches?: (repoId: string) => void;
+  canLoadMoreCommits?: (repoId: string) => boolean;
+  canLoadMoreLocalBranches?: (repoId: string) => boolean;
+  canLoadMoreRemoteBranches?: (repoId: string) => boolean;
+  isLoadingMoreCommits?: (repoId: string) => boolean;
 };
 
 const defaultTabs: GitTab[] = [
@@ -61,6 +68,13 @@ export function GitPanel({
   onUnstageAll,
   onStageFile,
   onUnstageFile,
+  onLoadMoreCommits,
+  onLoadMoreLocalBranches,
+  onLoadMoreRemoteBranches,
+  canLoadMoreCommits,
+  canLoadMoreLocalBranches,
+  canLoadMoreRemoteBranches,
+  isLoadingMoreCommits,
 }: GitPanelProps) {
   const {
     tabs,
@@ -162,9 +176,24 @@ export function GitPanel({
 
         {repoRoot && !error ? (
           <>
-            {activeTab === "branches" ? <GitBranches branchGroups={branchGroups} /> : null}
+            {activeTab === "branches" ? (
+              <GitBranches
+                branchGroups={branchGroups}
+                onLoadMoreLocal={onLoadMoreLocalBranches}
+                onLoadMoreRemote={onLoadMoreRemoteBranches}
+                canLoadMoreLocal={canLoadMoreLocalBranches}
+                canLoadMoreRemote={canLoadMoreRemoteBranches}
+              />
+            ) : null}
 
-            {activeTab === "commits" ? <GitCommits commitGroups={commitGroups} /> : null}
+            {activeTab === "commits" ? (
+              <GitCommits
+                commitGroups={commitGroups}
+                onLoadMore={onLoadMoreCommits}
+                canLoadMore={canLoadMoreCommits}
+                isLoadingMore={isLoadingMoreCommits}
+              />
+            ) : null}
 
             {activeTab === "commit" ? (
               <GitStaging

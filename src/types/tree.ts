@@ -29,4 +29,6 @@ export type TreeNode = {
   selectable?: boolean;
   defaultExpanded?: boolean;
   rightSlot?: ReactNode;
+  variant?: "default" | "load-more";
+  isLoading?: boolean;
 };

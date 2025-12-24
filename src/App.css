@@ -708,6 +708,19 @@ button {
   color: var(--text);
 }
 
+.tree-row--load-more {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.tree-row--load-more:hover {
+  background: rgba(0, 122, 204, 0.1);
+}
+
+.tree-row--load-more .tree-node-label {
+  color: var(--accent);
+}
+
 .tree-toggle {
   display: inline-flex;
   align-items: center;
@@ -1420,4 +1433,14 @@ button {
 @keyframes indeterminate {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
+}
+
+.icon-spin {
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
 }

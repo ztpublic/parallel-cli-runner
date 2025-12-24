@@ -40,7 +40,11 @@ export function gitListRemoteBranches(params: { cwd: string }): Promise<BranchIn
   return invoke<BranchInfoDto[]>("git_list_remote_branches", params);
 }
 
-export function gitListCommits(params: { cwd: string; limit: number }): Promise<CommitInfoDto[]> {
+export function gitListCommits(params: {
+  cwd: string;
+  limit: number;
+  skip?: number;
+}): Promise<CommitInfoDto[]> {
   return invoke<CommitInfoDto[]>("git_list_commits", params);
 }
 

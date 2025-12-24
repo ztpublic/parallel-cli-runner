@@ -166,7 +166,36 @@ export function TreeView({
     });
   };
 
-  const renderNode = (node: TreeNode, depth = 0) => {
+    const renderNode = (node: TreeNode, depth = 0) => {
+    if (node.variant === "load-more") {
+      return (
+        <div
+          key={node.id}
+          className="tree-node tree-node--load-more"
+          role="treeitem"
+        >
+          <div
+            className="tree-row tree-row--load-more"
+            style={{ paddingLeft: `${depth * 12 + 28}px` }}
+            onClick={(event) => {
+              if (node.isLoading) return;
+              handleSelect(node, event);
+              onNodeActivate?.(node);
+            }}
+          >
+            {node.isLoading ? (
+              <Icon name="refresh" size={14} className="icon-spin" />
+            ) : (
+              <Icon name="plus" size={14} />
+            )}
+            <span className="tree-node-label">
+              {node.isLoading ? "Loading..." : node.label}
+            </span>
+          </div>
+        </div>
+      );
+    }
+
     const hasChildren = Boolean(node.children?.length);
     const isExpanded = expandedNodes.has(node.id);
     const isSelected =

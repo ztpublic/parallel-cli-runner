@@ -60,6 +60,13 @@ function App() {
     stageAll,
     unstageAll,
     commit,
+    loadMoreCommits,
+    loadMoreLocalBranches,
+    loadMoreRemoteBranches,
+    canLoadMoreCommits,
+    canLoadMoreLocalBranches,
+    canLoadMoreRemoteBranches,
+    isLoadingMoreCommits,
   } = useGitRepos();
 
   const [openedFolder, setOpenedFolder] = useState<string | null>(null);
@@ -289,6 +296,13 @@ function App() {
         onCommit={(message) => {
           if (activeRepoId) void commit(activeRepoId, message);
         }}
+        onLoadMoreCommits={loadMoreCommits}
+        onLoadMoreLocalBranches={loadMoreLocalBranches}
+        onLoadMoreRemoteBranches={loadMoreRemoteBranches}
+        canLoadMoreCommits={canLoadMoreCommits}
+        canLoadMoreLocalBranches={canLoadMoreLocalBranches}
+        canLoadMoreRemoteBranches={canLoadMoreRemoteBranches}
+        isLoadingMoreCommits={isLoadingMoreCommits}
       />
         <div
           className={`resize-handle ${isResizing ? "is-resizing" : ""}`}

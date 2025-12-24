@@ -68,9 +68,10 @@ async fn git_list_remote_branches(
 async fn git_list_commits(
     cwd: String,
     limit: usize,
+    skip: Option<usize>,
 ) -> Result<Vec<git::CommitInfoDto>, CommandError> {
     let path = PathBuf::from(cwd);
-    git::list_commits(&path, limit).map_err(CommandError::from)
+    git::list_commits(&path, limit, skip).map_err(CommandError::from)
 }
 
 #[tauri::command]

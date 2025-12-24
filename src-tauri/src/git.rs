@@ -396,7 +396,7 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
     Ok(worktrees)
 }
 
-pub fn list_commits(cwd: &Path, limit: usize) -> Result<Vec<CommitInfoDto>, GitError> {
+pub fn list_commits(cwd: &Path, limit: usize, skip: Option<usize>) -> Result<Vec<CommitInfoDto>, GitError> {
     let repo = open_repo(cwd)?;
     let mut revwalk = match repo.revwalk() {
         Ok(walk) => walk,
@@ -410,7 +410,8 @@ pub fn list_commits(cwd: &Path, limit: usize) -> Result<Vec<CommitInfoDto>, GitE
         return Err(GitError::Git2(err));
     }
     let mut commits = Vec::new();
-    for oid in revwalk.take(limit) {
+    let skip = skip.unwrap_or(0);
+    for oid in revwalk.skip(skip).take(limit) {
         let oid = oid?;
         let commit = repo.find_commit(oid)?;
         let summary = commit.summary().unwrap_or_default().to_string();

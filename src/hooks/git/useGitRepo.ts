@@ -30,7 +30,6 @@ import type {
 } from "../../types/git-ui";
 
 const DEFAULT_CWD = ".";
-const DEFAULT_COMMIT_LIMIT = 50;
 
 function mapFileStatus(file: FileStatusDto): ChangedFile[] {
   const entries: ChangedFile[] = [];
@@ -94,12 +93,20 @@ function mapRemotes(remotes: RemoteInfoDto[]): RemoteItem[] {
 export function useGitRepo() {
   const [repoRoot, setRepoRoot] = useState<string | null>(null);
   const [status, setStatus] = useState<RepoStatusDto | null>(null);
-  const [localBranches, setLocalBranches] = useState<BranchItem[]>([]);
-  const [remoteBranches, setRemoteBranches] = useState<BranchItem[]>([]);
+  // We fetch all branches but paginate the display
+  const [allLocalBranches, setAllLocalBranches] = useState<BranchItem[]>([]);
+  const [allRemoteBranches, setAllRemoteBranches] = useState<BranchItem[]>([]);
+  const [localBranchLimit, setLocalBranchLimit] = useState(10);
+  const [remoteBranchLimit, setRemoteBranchLimit] = useState(10);
+
   const [commits, setCommits] = useState<CommitItem[]>([]);
+  const [commitSkip, setCommitSkip] = useState(0);
+  const [hasMoreCommits, setHasMoreCommits] = useState(true);
+
   const [worktrees, setWorktrees] = useState<WorktreeItem[]>([]);
   const [remotes, setRemotes] = useState<RemoteItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMoreCommits, setLoadingMoreCommits] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(
@@ -111,8 +118,8 @@ export function useGitRepo() {
         if (!root) {
           setRepoRoot(null);
           setStatus(null);
-          setLocalBranches([]);
-          setRemoteBranches([]);
+          setAllLocalBranches([]);
+          setAllRemoteBranches([]);
           setCommits([]);
           setWorktrees([]);
           setRemotes([]);
@@ -121,20 +128,27 @@ export function useGitRepo() {
         }
 
         setRepoRoot(root);
+        // Reset pagination
+        setLocalBranchLimit(10);
+        setRemoteBranchLimit(10);
+        setCommitSkip(0);
+        setHasMoreCommits(true);
+
         const [statusDto, local, remote, commitDtos, worktreeDtos, remoteDtos] =
           await Promise.all([
             gitStatus({ cwd: root }),
             gitListBranches({ cwd: root }),
             gitListRemoteBranches({ cwd: root }),
-            gitListCommits({ cwd: root, limit: DEFAULT_COMMIT_LIMIT }),
+            gitListCommits({ cwd: root, limit: 10, skip: 0 }),
             gitListWorktrees({ cwd: root }),
             gitListRemotes({ cwd: root }),
           ]);
 
         setStatus(statusDto);
-        setLocalBranches(mapBranches(local));
-        setRemoteBranches(mapBranches(remote));
+        setAllLocalBranches(mapBranches(local));
+        setAllRemoteBranches(mapBranches(remote));
         setCommits(mapCommits(commitDtos));
+        setHasMoreCommits(commitDtos.length === 10);
         setWorktrees(mapWorktrees(worktreeDtos));
         setRemotes(mapRemotes(remoteDtos));
       } catch (err) {
@@ -145,6 +159,45 @@ export function useGitRepo() {
       }
     },
     [repoRoot]
+  );
+
+  const loadMoreCommits = useCallback(async () => {
+    if (!repoRoot || !hasMoreCommits || loadingMoreCommits) return;
+    setLoadingMoreCommits(true);
+    try {
+      const nextSkip = commitSkip + 10;
+      const moreCommits = await gitListCommits({
+        cwd: repoRoot,
+        limit: 10,
+        skip: nextSkip,
+      });
+      if (moreCommits.length < 10) {
+        setHasMoreCommits(false);
+      }
+      setCommits((prev) => [...prev, ...mapCommits(moreCommits)]);
+      setCommitSkip(nextSkip);
+    } catch (err) {
+      console.error("Failed to load more commits", err);
+    } finally {
+      setLoadingMoreCommits(false);
+    }
+  }, [repoRoot, commitSkip, hasMoreCommits, loadingMoreCommits]);
+
+  const loadMoreLocalBranches = useCallback(() => {
+    setLocalBranchLimit((prev) => prev + 10);
+  }, []);
+
+  const loadMoreRemoteBranches = useCallback(() => {
+    setRemoteBranchLimit((prev) => prev + 10);
+  }, []);
+
+  const localBranches = useMemo(
+    () => allLocalBranches.slice(0, localBranchLimit),
+    [allLocalBranches, localBranchLimit]
+  );
+  const remoteBranches = useMemo(
+    () => allRemoteBranches.slice(0, remoteBranchLimit),
+    [allRemoteBranches, remoteBranchLimit]
   );
 
   const changedFiles = useMemo(() => {
@@ -208,5 +261,12 @@ export function useGitRepo() {
     stageAll,
     unstageAll,
     commit,
+    loadMoreCommits,
+    loadMoreLocalBranches,
+    loadMoreRemoteBranches,
+    hasMoreCommits,
+    loadingMoreCommits,
+    hasMoreLocalBranches: allLocalBranches.length > localBranchLimit,
+    hasMoreRemoteBranches: allRemoteBranches.length > remoteBranchLimit,
   };
 }
