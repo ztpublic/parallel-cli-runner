@@ -1,25 +1,29 @@
 import { Icon } from "../Icons";
-import { RemoteItem } from "../../types/git-ui";
+import { TreeView } from "../TreeView";
+import type { RemoteItem } from "../../types/git-ui";
+import type { TreeNode } from "../../types/tree";
 
 type GitRemotesProps = {
   remotes: RemoteItem[];
 };
 
 export function GitRemotes({ remotes }: GitRemotesProps) {
+  const nodes: TreeNode[] = remotes.map((remote) => ({
+    id: `remote:${remote.name}`,
+    label: remote.name,
+    description: `Fetch: ${remote.fetch} - Push: ${remote.push}`,
+    icon: "cloud",
+  }));
+
   return (
-    <div className="git-list">
-      {remotes.map((remote) => (
-        <div key={remote.name} className="git-item">
-          <Icon name="cloud" size={14} />
-          <div className="git-item-body">
-            <div className="git-item-title">
-              <span className="git-item-name">{remote.name}</span>
-            </div>
-            <div className="git-item-meta">Fetch: {remote.fetch}</div>
-            <div className="git-item-meta">Push: {remote.push}</div>
-          </div>
+    <div className="git-tree">
+      <TreeView nodes={nodes} />
+      {!remotes.length ? (
+        <div className="git-empty">
+          <Icon name="cloud" size={22} />
+          <p>No remotes configured.</p>
         </div>
-      ))}
+      ) : null}
     </div>
   );
 }

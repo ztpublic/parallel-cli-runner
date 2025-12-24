@@ -1,0 +1,32 @@
+import type { ReactNode } from "react";
+import type { IconName } from "../components/Icons";
+
+export type TreeSelectionMode = "none" | "single" | "multiple";
+
+export type TreeNodeAction = {
+  id: string;
+  icon: IconName;
+  label?: string;
+  disabled?: boolean;
+  intent?: "default" | "danger";
+};
+
+export type TreeNodeContextMenuItem = {
+  id: string;
+  label: string;
+  icon?: IconName;
+  disabled?: boolean;
+};
+
+export type TreeNode = {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: IconName;
+  children?: TreeNode[];
+  actions?: TreeNodeAction[];
+  contextMenu?: TreeNodeContextMenuItem[];
+  selectable?: boolean;
+  defaultExpanded?: boolean;
+  rightSlot?: ReactNode;
+};
