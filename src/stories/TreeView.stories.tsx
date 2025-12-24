@@ -105,6 +105,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const SingleSelect: Story = {
+  args: {
+    nodes: sampleNodes,
+  },
   render: () => {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     return (
@@ -122,6 +125,9 @@ export const SingleSelect: Story = {
 };
 
 export const MultiSelect: Story = {
+  args: {
+    nodes: sampleNodes,
+  },
   render: () => {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     return (

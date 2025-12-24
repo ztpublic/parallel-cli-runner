@@ -188,7 +188,10 @@ pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
     })
 }
 
-pub fn scan_repos(root: &Path) -> Result<Vec<RepoInfoDto>, GitError> {
+pub fn scan_repos<F>(root: &Path, progress_cb: F) -> Result<Vec<RepoInfoDto>, GitError>
+where
+    F: Fn(String),
+{
     let mut seen = HashSet::new();
     let mut repos = Vec::new();
 
@@ -201,6 +204,7 @@ pub fn scan_repos(root: &Path) -> Result<Vec<RepoInfoDto>, GitError> {
 
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
+        progress_cb(dir.to_string_lossy().to_string());
         let entries = match fs::read_dir(&dir) {
             Ok(entries) => entries,
             Err(_) => continue,

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use tauri::Emitter;
 
 mod command_error;
 use crate::command_error::CommandError;
@@ -26,9 +27,15 @@ async fn git_detect_repo(cwd: String) -> Result<Option<String>, CommandError> {
 }
 
 #[tauri::command]
-async fn git_scan_repos(cwd: String) -> Result<Vec<RepoInfoDto>, CommandError> {
+async fn git_scan_repos(
+    app: tauri::AppHandle,
+    cwd: String,
+) -> Result<Vec<RepoInfoDto>, CommandError> {
     let path = PathBuf::from(cwd);
-    git::scan_repos(&path).map_err(CommandError::from)
+    git::scan_repos(&path, |p| {
+        let _ = app.emit("scan-progress", p);
+    })
+    .map_err(CommandError::from)
 }
 
 #[tauri::command]

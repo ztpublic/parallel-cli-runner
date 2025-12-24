@@ -162,7 +162,7 @@ fn scan_repos_in_folder() {
     let _repo_two = init_repo_at(&repo_two_path);
     fs::create_dir_all(root.join("notes")).expect("create non-repo dir");
 
-    let repos = git::scan_repos(root).expect("scan repos");
+    let repos = git::scan_repos(root, |_| {}).expect("scan repos");
     let repo_paths: Vec<String> = repos.iter().map(|repo| repo.root_path.clone()).collect();
 
     let repo_one = git::canonicalize_path(&repo_one_path).to_string_lossy().to_string();
@@ -181,7 +181,7 @@ fn scan_repos_in_subdir_includes_parent_repo() {
     let subdir = repo_root.join("src/nested");
     fs::create_dir_all(&subdir).expect("create subdir");
 
-    let repos = git::scan_repos(&subdir).expect("scan repos from subdir");
+    let repos = git::scan_repos(&subdir, |_| {}).expect("scan repos from subdir");
     let repo_paths: Vec<String> = repos.iter().map(|repo| repo.root_path.clone()).collect();
     let expected = git::canonicalize_path(&repo_root).to_string_lossy().to_string();
 

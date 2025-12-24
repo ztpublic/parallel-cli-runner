@@ -11,6 +11,7 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
 import { gitScanRepos } from "./services/tauri";
 import { RepoPickerModal } from "./components/RepoPickerModal";
+import { ScanProgressModal } from "./components/ScanProgressModal";
 import type { RepoInfoDto } from "./types/git";
 import type {
   CommitItem,
@@ -65,6 +66,7 @@ function App() {
   const [repoCandidates, setRepoCandidates] = useState<RepoInfoDto[]>([]);
   const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>([]);
   const [isRepoPickerOpen, setIsRepoPickerOpen] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
 
   const startResizing = useCallback(() => {
@@ -144,17 +146,22 @@ function App() {
     async (path: string) => {
       setOpenedFolder(path);
       setRepoScanError(null);
+      setIsScanning(true);
       try {
         const repos = await gitScanRepos({ cwd: path });
         setRepoCandidates(repos);
         setSelectedRepoIds(repos.map((repo) => repo.repo_id));
+        setIsRepoPickerOpen(true);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to scan repos";
         setRepoScanError(message);
         setRepoCandidates([]);
         setSelectedRepoIds([]);
+        // Still open the picker to show the error
+        setIsRepoPickerOpen(true);
+      } finally {
+        setIsScanning(false);
       }
-      setIsRepoPickerOpen(true);
     },
     []
   );
@@ -299,6 +306,7 @@ function App() {
         errors={0}
         warnings={3}
       />
+      <ScanProgressModal open={isScanning} />
       <RepoPickerModal
         open={isRepoPickerOpen}
         repos={repoCandidates}
