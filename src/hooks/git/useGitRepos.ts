@@ -1,13 +1,16 @@
 import { useCallback, useMemo, useState } from "react";
 import {
+  gitAddWorktree,
   gitCheckoutBranch,
   gitCommit,
   gitCreateBranch,
+  gitDeleteBranch,
   gitListBranches,
   gitListCommits,
   gitListRemoteBranches,
   gitListRemotes,
   gitListWorktrees,
+  gitRemoveWorktree,
   gitReset,
   gitRevert,
   gitStageAll,
@@ -446,6 +449,63 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const createWorktree = useCallback(
+    async (repoId: RepoId, branchName: string, path: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitAddWorktree({
+          repoRoot: repo.root_path,
+          path,
+          branch: branchName,
+          startPoint: "HEAD",
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to create worktree", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
+  const removeWorktree = useCallback(
+    async (repoId: RepoId, branchName: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      
+      const worktrees = worktreesByRepo[repoId] || [];
+      const worktree = worktrees.find((wt) => wt.branch === branchName);
+      
+      if (!worktree) {
+        console.error("Worktree not found for branch", branchName);
+        return;
+      }
+
+      try {
+        // Force removal to ensure cleanup
+        await gitRemoveWorktree({
+          repoRoot: repo.root_path,
+          path: worktree.path,
+          force: true,
+        });
+        
+        // Also delete the branch
+        await gitDeleteBranch({
+          repoRoot: repo.root_path,
+          branch: branchName,
+          force: true,
+        });
+        
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to remove worktree", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo, worktreesByRepo]
+  );
+
   const activeStatus = activeRepoId ? statusByRepo[activeRepoId] ?? null : null;
   const activeLocalBranches = activeRepoId ? localBranchesByRepo[activeRepoId] ?? [] : [];
   const activeRemoteBranches = activeRepoId ? remoteBranchesByRepo[activeRepoId] ?? [] : [];
@@ -485,6 +545,8 @@ export function useGitRepos() {
     switchBranch,
     reset,
     revert,
+    createWorktree,
+    removeWorktree,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

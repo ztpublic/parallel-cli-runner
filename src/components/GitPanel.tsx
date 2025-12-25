@@ -46,6 +46,8 @@ type GitPanelProps = {
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
   onRevert?: (repoId: string, commitId: string) => void;
+  onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
+  onDeleteWorktree?: (repoId: string, branchName: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -85,6 +87,8 @@ export function GitPanel({
   onSwitchBranch,
   onReset,
   onRevert,
+  onCreateWorktree,
+  onDeleteWorktree,
 }: GitPanelProps) {
   const {
     tabs,
@@ -226,7 +230,11 @@ export function GitPanel({
             ) : null}
 
             {activeTab === "worktrees" ? (
-              <GitWorktrees worktreeGroups={worktreeGroups} />
+              <GitWorktrees
+                worktreeGroups={worktreeGroups}
+                onCreateWorktree={onCreateWorktree}
+                onDeleteWorktree={onDeleteWorktree}
+              />
             ) : null}
 
             {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}

@@ -161,6 +161,39 @@ async fn git_revert(cwd: String, commit: String) -> Result<(), CommandError> {
     git::revert(&path, &commit).map_err(CommandError::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn git_add_worktree(
+    repo_root: String,
+    path: String,
+    branch: String,
+    start_point: String,
+) -> Result<(), CommandError> {
+    let root = PathBuf::from(repo_root);
+    let worktree_path = PathBuf::from(path);
+    git::add_worktree(&root, &worktree_path, &branch, &start_point).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn git_remove_worktree(
+    repo_root: String,
+    path: String,
+    force: bool,
+) -> Result<(), CommandError> {
+    let root = PathBuf::from(repo_root);
+    let worktree_path = PathBuf::from(path);
+    git::remove_worktree(&root, &worktree_path, force).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn git_delete_branch(
+    repo_root: String,
+    branch: String,
+    force: bool,
+) -> Result<(), CommandError> {
+    let root = PathBuf::from(repo_root);
+    git::delete_branch(&root, &branch, force).map_err(CommandError::from)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -191,7 +224,10 @@ pub fn run() {
             git_create_branch,
             git_checkout_branch,
             git_reset,
-            git_revert
+            git_revert,
+            git_add_worktree,
+            git_remove_worktree,
+            git_delete_branch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

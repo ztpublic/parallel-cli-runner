@@ -118,3 +118,28 @@ export function gitRevert(params: {
 }): Promise<void> {
   return invoke("git_revert", params);
 }
+
+export function gitAddWorktree(params: {
+  repoRoot: string;
+  path: string;
+  branch: string;
+  startPoint: string;
+}): Promise<void> {
+  return invoke("git_add_worktree", params);
+}
+
+export function gitRemoveWorktree(params: {
+  repoRoot: string;
+  path: string;
+  force: boolean;
+}): Promise<void> {
+  return invoke("git_remove_worktree", params);
+}
+
+export function gitDeleteBranch(params: {
+  repoRoot: string;
+  branch: string;
+  force: boolean;
+}): Promise<void> {
+  return invoke("git_delete_branch", params);
+}

@@ -406,6 +406,32 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
     for name in names.iter().flatten() {
         let worktree = repo.find_worktree(name)?;
         let path = worktree.path();
+        
+        if !path.exists() {
+            // Try to find the branch name before pruning
+            let mut branch_to_delete = None;
+            let worktree_git_dir = repo.path().join("worktrees").join(name);
+            let head_file = worktree_git_dir.join("HEAD");
+            
+            if let Ok(content) = fs::read_to_string(&head_file) {
+                let content = content.trim();
+                if let Some(ref_name) = content.strip_prefix("ref: refs/heads/") {
+                    branch_to_delete = Some(ref_name.to_string());
+                }
+            }
+
+            let mut opts = WorktreePruneOptions::new();
+            opts.valid(true);
+            if worktree.prune(Some(&mut opts)).is_ok() {
+                if let Some(branch_name) = branch_to_delete {
+                    if let Ok(mut branch) = repo.find_branch(&branch_name, BranchType::Local) {
+                        let _ = branch.delete();
+                    }
+                }
+            }
+            continue;
+        }
+
         let branch = match Repository::open(path) {
             Ok(worktree_repo) => current_branch_from_repo(&worktree_repo).unwrap_or_else(|_| "HEAD".to_string()),
             Err(_) => "HEAD".to_string(),
@@ -702,14 +728,21 @@ pub fn add_worktree(
     let start_obj = repo.revparse_single(start_point)?;
     let start_commit = start_obj.peel_to_commit()?;
     let branch_ref = repo.branch(branch, &start_commit, false)?;
-    let worktree_name = worktree_path
+    
+    let full_path = if worktree_path.is_absolute() {
+        worktree_path.to_path_buf()
+    } else {
+        repo_root.join(worktree_path)
+    };
+    
+    let worktree_name = full_path
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or(branch);
     let mut opts = WorktreeAddOptions::new();
     let reference = branch_ref.into_reference();
     opts.reference(Some(&reference));
-    repo.worktree(worktree_name, worktree_path, Some(&opts))?;
+    repo.worktree(worktree_name, &full_path, Some(&opts))?;
     Ok(())
 }
 

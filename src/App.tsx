@@ -65,6 +65,7 @@ function App() {
     switchBranch,
     reset,
     revert,
+    createWorktree,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -329,6 +330,9 @@ function App() {
         }}
         onRevert={(repoId, commitId) => {
           void revert(repoId, commitId);
+        }}
+        onCreateWorktree={(repoId, branchName, path) => {
+          void createWorktree(repoId, branchName, path);
         }}
         onOpenFolder={handleTriggerOpenFolder}
         onLoadMoreCommits={loadMoreCommits}
