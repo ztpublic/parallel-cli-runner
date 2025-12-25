@@ -217,6 +217,7 @@ where
             Err(_) => continue,
         };
 
+        let mut is_repo_dir = false;
         let git_marker = dir.join(".git");
         if fs::symlink_metadata(&git_marker).is_ok() {
             if let Ok(repo) = Repository::discover(&dir) {
@@ -225,7 +226,25 @@ where
                 if seen.insert(info.root_path.clone()) {
                     scanned_entries.push((info, git_path));
                 }
+                is_repo_dir = true;
             }
+        } else {
+            let head = dir.join("HEAD");
+            let objects = dir.join("objects");
+            if head.is_file() && objects.is_dir() {
+                if let Ok(repo) = Repository::open(&dir) {
+                    let info = repo_info_from_repo(&repo);
+                    let git_path = canonicalize_path(repo.path());
+                    if seen.insert(info.root_path.clone()) {
+                        scanned_entries.push((info, git_path));
+                    }
+                    is_repo_dir = true;
+                }
+            }
+        }
+
+        if is_repo_dir {
+            continue;
         }
 
         for entry in entries.flatten() {
