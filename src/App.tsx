@@ -10,6 +10,7 @@ import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
 import { gitScanRepos } from "./services/tauri";
+import { formatInvokeError } from "./services/errors";
 import { open } from "@tauri-apps/plugin-dialog";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
@@ -172,8 +173,8 @@ function App() {
         setSelectedRepoIds(repos.map((repo) => repo.repo_id));
         setIsRepoPickerOpen(true);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to scan repos";
-        setRepoScanError(message);
+        const message = formatInvokeError(err);
+        setRepoScanError(message === "Unexpected error." ? "Failed to scan repos." : message);
         setRepoCandidates([]);
         setSelectedRepoIds([]);
         // Still open the picker to show the error

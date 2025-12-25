@@ -124,53 +124,59 @@ pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
         .renames_index_to_workdir(true)
         .renames_from_rewrites(true);
 
-    let statuses = repo.statuses(Some(&mut opts))?;
+    let statuses = match repo.statuses(Some(&mut opts)) {
+        Ok(statuses) => Some(statuses),
+        Err(err) if err.code() == ErrorCode::NotFound => None,
+        Err(err) => return Err(GitError::Git2(err)),
+    };
     let mut has_untracked = false;
     let mut has_staged = false;
     let mut has_unstaged = false;
     let mut conflicted_files = 0usize;
     let mut modified_files = Vec::new();
 
-    for entry in statuses.iter() {
-        let status = entry.status();
-        if status.contains(Status::IGNORED) || status == Status::CURRENT {
-            continue;
-        }
+    if let Some(statuses) = statuses {
+        for entry in statuses.iter() {
+            let status = entry.status();
+            if status.contains(Status::IGNORED) || status == Status::CURRENT {
+                continue;
+            }
 
-        let Some(path) = entry.path() else {
-            continue;
-        };
+            let Some(path) = entry.path() else {
+                continue;
+            };
 
-        let (staged, unstaged, conflicted) = if status.contains(Status::CONFLICTED) {
-            (Some(FileChangeType::Unmerged), Some(FileChangeType::Unmerged), true)
-        } else {
-            (map_index_status(status), map_worktree_status(status), false)
-        };
-        if conflicted {
-            conflicted_files += 1;
-            has_staged = true;
-            has_unstaged = true;
-        }
+            let (staged, unstaged, conflicted) = if status.contains(Status::CONFLICTED) {
+                (Some(FileChangeType::Unmerged), Some(FileChangeType::Unmerged), true)
+            } else {
+                (map_index_status(status), map_worktree_status(status), false)
+            };
+            if conflicted {
+                conflicted_files += 1;
+                has_staged = true;
+                has_unstaged = true;
+            }
 
-        if status.contains(Status::WT_NEW) {
-            has_untracked = true;
-        }
-        if staged.is_some() {
-            has_staged = true;
-        }
-        if unstaged.is_some() {
-            has_unstaged = true;
-        }
+            if status.contains(Status::WT_NEW) {
+                has_untracked = true;
+            }
+            if staged.is_some() {
+                has_staged = true;
+            }
+            if unstaged.is_some() {
+                has_unstaged = true;
+            }
 
-        if staged.is_none() && unstaged.is_none() {
-            continue;
-        }
+            if staged.is_none() && unstaged.is_none() {
+                continue;
+            }
 
-        modified_files.push(FileStatusDto {
-            path: path.to_string(),
-            staged,
-            unstaged,
-        });
+            modified_files.push(FileStatusDto {
+                path: path.to_string(),
+                staged,
+                unstaged,
+            });
+        }
     }
 
     Ok(RepoStatusDto {
@@ -337,10 +343,18 @@ pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
     let repo = open_repo(cwd)?;
     let mut branches = Vec::new();
     for branch in repo.branches(Some(BranchType::Local))? {
-        let (branch, _branch_type) = branch?;
+        let (branch, _branch_type) = match branch {
+            Ok(branch) => branch,
+            Err(err) if err.code() == ErrorCode::NotFound => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
         let name = branch.name()?.unwrap_or_default().to_string();
         if !name.is_empty() {
-            let last_commit = branch_last_commit(&branch)?;
+            let last_commit = match branch_last_commit(&branch) {
+                Ok(last_commit) => last_commit,
+                Err(GitError::Git2(err)) if err.code() == ErrorCode::NotFound => continue,
+                Err(err) => return Err(err),
+            };
             branches.push(BranchInfoDto {
                 name,
                 current: branch.is_head(),
@@ -355,7 +369,11 @@ pub fn list_remote_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> 
     let repo = open_repo(cwd)?;
     let mut branches = Vec::new();
     for branch in repo.branches(Some(BranchType::Remote))? {
-        let (branch, _branch_type) = branch?;
+        let (branch, _branch_type) = match branch {
+            Ok(branch) => branch,
+            Err(err) if err.code() == ErrorCode::NotFound => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
         let Some(name) = branch.name()? else {
             continue;
         };
@@ -363,7 +381,11 @@ pub fn list_remote_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> 
         if name.is_empty() || name.ends_with("/HEAD") {
             continue;
         }
-        let last_commit = branch_last_commit(&branch)?;
+        let last_commit = match branch_last_commit(&branch) {
+            Ok(last_commit) => last_commit,
+            Err(GitError::Git2(err)) if err.code() == ErrorCode::NotFound => continue,
+            Err(err) => return Err(err),
+        };
         branches.push(BranchInfoDto {
             name,
             current: false,
@@ -404,7 +426,11 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
 
     let names = repo.worktrees()?;
     for name in names.iter().flatten() {
-        let worktree = repo.find_worktree(name)?;
+        let worktree = match repo.find_worktree(name) {
+            Ok(worktree) => worktree,
+            Err(err) if err.code() == ErrorCode::NotFound => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
         let path = worktree.path();
         
         if !path.exists() {
@@ -453,7 +479,7 @@ pub fn list_commits(cwd: &Path, limit: usize, skip: Option<usize>) -> Result<Vec
         Err(err) => return Err(GitError::Git2(err)),
     };
     if let Err(err) = revwalk.push_head() {
-        if err.code() == ErrorCode::UnbornBranch {
+        if err.code() == ErrorCode::UnbornBranch || is_missing_ref_error(&err) {
             return Ok(Vec::new());
         }
         return Err(GitError::Git2(err));
@@ -461,8 +487,16 @@ pub fn list_commits(cwd: &Path, limit: usize, skip: Option<usize>) -> Result<Vec
     let mut commits = Vec::new();
     let skip = skip.unwrap_or(0);
     for oid in revwalk.skip(skip).take(limit) {
-        let oid = oid?;
-        let commit = repo.find_commit(oid)?;
+        let oid = match oid {
+            Ok(oid) => oid,
+            Err(err) if is_missing_ref_error(&err) => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
+        let commit = match repo.find_commit(oid) {
+            Ok(commit) => commit,
+            Err(err) if is_missing_ref_error(&err) => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
         let summary = commit.summary().unwrap_or_default().to_string();
         let author = commit.author().name().unwrap_or_default().to_string();
         let relative_time = format_relative_time(commit.time());
@@ -926,6 +960,9 @@ fn branch_status(repo: &Repository) -> Result<(String, i32, i32), GitError> {
         Err(err) if err.code() == ErrorCode::UnbornBranch => {
             return Ok(("HEAD".to_string(), 0, 0));
         }
+        Err(err) if err.code() == ErrorCode::NotFound => {
+            return Ok(("HEAD".to_string(), 0, 0));
+        }
         Err(err) => return Err(GitError::Git2(err)),
     };
 
@@ -966,6 +1003,9 @@ fn current_branch_from_repo(repo: &Repository) -> Result<String, GitError> {
     let head = match repo.head() {
         Ok(head) => head,
         Err(err) if err.code() == ErrorCode::UnbornBranch => {
+            return Ok("HEAD".to_string());
+        }
+        Err(err) if err.code() == ErrorCode::NotFound => {
             return Ok("HEAD".to_string());
         }
         Err(err) => return Err(GitError::Git2(err)),
@@ -1018,6 +1058,10 @@ fn diff_stats_from_diff(diff: &Diff<'_>) -> Result<DiffStatDto, GitError> {
     })
 }
 
+fn is_missing_ref_error(err: &git2::Error) -> bool {
+    err.code() == ErrorCode::NotFound || err.message().contains("reference")
+}
+
 fn is_repo_dirty(repo: &Repository) -> Result<bool, GitError> {
     let mut opts = StatusOptions::new();
     opts.show(StatusShow::IndexAndWorkdir)
@@ -1045,6 +1089,7 @@ fn latest_commit_for_repo(repo: &Repository) -> Result<Option<CommitInfoDto>, Gi
     let head = match repo.head() {
         Ok(head) => head,
         Err(err) if err.code() == ErrorCode::UnbornBranch => return Ok(None),
+        Err(err) if err.code() == ErrorCode::NotFound => return Ok(None),
         Err(err) => return Err(GitError::Git2(err)),
     };
     let Some(oid) = head.target() else {

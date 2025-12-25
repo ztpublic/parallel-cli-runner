@@ -19,6 +19,7 @@ import {
   gitUnstageAll,
   gitUnstageFiles,
 } from "../../services/tauri";
+import { formatInvokeError } from "../../services/errors";
 import type {
   BranchInfoDto,
   CommitInfoDto,
@@ -241,8 +242,8 @@ export function useGitRepos() {
           return next;
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to load git data";
-        setError(message);
+        const message = formatInvokeError(err);
+        setError(message === "Unexpected error." ? "Failed to load git data." : message);
       } finally {
         setLoading(false);
       }
