@@ -273,8 +273,6 @@ export function useGitRepos() {
       if (moreCommits.length < 10) {
         setHasMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
       }
-    } catch (err) {
-      console.error("Failed to load more commits", err);
     } finally {
       setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
     }

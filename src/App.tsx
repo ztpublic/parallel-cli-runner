@@ -9,11 +9,13 @@ import { StatusBar } from "./components/StatusBar";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
+import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 import { gitScanRepos } from "./services/tauri";
 import { formatInvokeError } from "./services/errors";
 import { open } from "@tauri-apps/plugin-dialog";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
+import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
 import type { RepoInfoDto } from "./types/git";
 import type {
   CommitItem,
@@ -76,6 +78,9 @@ function App() {
     canLoadMoreRemoteBranches,
     isLoadingMoreCommits,
   } = useGitRepos();
+
+  const { gitCommandError, clearGitCommandError, runGitCommand } =
+    useGitCommandErrorDialog();
 
   const [openedFolder, setOpenedFolder] = useState<string | null>(null);
   const [repoCandidates, setRepoCandidates] = useState<RepoInfoDto[]>([]);
@@ -305,42 +310,75 @@ function App() {
         worktreeGroups={worktreeGroups}
         remotes={activeRemotes}
         changedFiles={activeChangedFiles}
-        onRefresh={() => void refreshRepos()}
+        onRefresh={() => {
+          void runGitCommand("Refresh failed", "Failed to refresh git data.", () => refreshRepos());
+        }}
         onStageAll={() => {
-          if (activeRepoId) void stageAll(activeRepoId);
+          if (!activeRepoId) return;
+          void runGitCommand("Stage all failed", "Failed to stage all files.", () =>
+            stageAll(activeRepoId)
+          );
         }}
         onUnstageAll={() => {
-          if (activeRepoId) void unstageAll(activeRepoId);
+          if (!activeRepoId) return;
+          void runGitCommand("Unstage all failed", "Failed to unstage all files.", () =>
+            unstageAll(activeRepoId)
+          );
         }}
         onStageFile={(path) => {
-          if (activeRepoId) void stageFiles(activeRepoId, [path]);
+          if (!activeRepoId) return;
+          void runGitCommand("Stage file failed", "Failed to stage file.", () =>
+            stageFiles(activeRepoId, [path])
+          );
         }}
         onUnstageFile={(path) => {
-          if (activeRepoId) void unstageFiles(activeRepoId, [path]);
+          if (!activeRepoId) return;
+          void runGitCommand("Unstage file failed", "Failed to unstage file.", () =>
+            unstageFiles(activeRepoId, [path])
+          );
         }}
         onCommit={(message) => {
-          if (activeRepoId) void commit(activeRepoId, message);
+          if (!activeRepoId) return;
+          void runGitCommand("Commit failed", "Failed to commit changes.", () =>
+            commit(activeRepoId, message)
+          );
         }}
         onCreateBranch={(repoId, name, source) => {
-          void createBranch(repoId, name, source);
+          void runGitCommand("Create branch failed", "Failed to create branch.", () =>
+            createBranch(repoId, name, source)
+          );
         }}
         onDeleteBranch={(repoId, branchName) => {
-          void deleteBranch(repoId, branchName);
+          void runGitCommand("Delete branch failed", "Failed to delete branch.", () =>
+            deleteBranch(repoId, branchName)
+          );
         }}
         onSwitchBranch={(repoId, branchName) => {
-          void switchBranch(repoId, branchName);
+          void runGitCommand("Switch branch failed", "Failed to switch branch.", () =>
+            switchBranch(repoId, branchName)
+          );
         }}
         onReset={(repoId, commitId, mode) => {
-          void reset(repoId, commitId, mode);
+          void runGitCommand("Reset failed", "Failed to reset commit.", () =>
+            reset(repoId, commitId, mode)
+          );
         }}
         onRevert={(repoId, commitId) => {
-          void revert(repoId, commitId);
+          void runGitCommand("Revert failed", "Failed to revert commit.", () =>
+            revert(repoId, commitId)
+          );
         }}
         onCreateWorktree={(repoId, branchName, path) => {
-          void createWorktree(repoId, branchName, path);
+          void runGitCommand("Create worktree failed", "Failed to create worktree.", () =>
+            createWorktree(repoId, branchName, path)
+          );
         }}
         onOpenFolder={handleTriggerOpenFolder}
-        onLoadMoreCommits={loadMoreCommits}
+        onLoadMoreCommits={(repoId) => {
+          void runGitCommand("Load commits failed", "Failed to load more commits.", () =>
+            loadMoreCommits(repoId)
+          );
+        }}
         onLoadMoreLocalBranches={loadMoreLocalBranches}
         onLoadMoreRemoteBranches={loadMoreRemoteBranches}
         canLoadMoreCommits={canLoadMoreCommits}
@@ -381,6 +419,12 @@ function App() {
         onClear={handleClearRepos}
         onConfirm={handleConfirmRepos}
         onClose={handleCloseRepoPicker}
+      />
+      <GitErrorDialog
+        open={Boolean(gitCommandError)}
+        title={gitCommandError?.title}
+        message={gitCommandError?.message ?? ""}
+        onClose={clearGitCommandError}
       />
     </main>
   );

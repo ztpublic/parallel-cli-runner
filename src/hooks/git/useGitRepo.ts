@@ -177,8 +177,6 @@ export function useGitRepo() {
       }
       setCommits((prev) => [...prev, ...mapCommits(moreCommits)]);
       setCommitSkip(nextSkip);
-    } catch (err) {
-      console.error("Failed to load more commits", err);
     } finally {
       setLoadingMoreCommits(false);
     }
