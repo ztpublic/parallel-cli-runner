@@ -63,6 +63,7 @@ function App() {
     unstageAll,
     commit,
     createBranch,
+    deleteBranch,
     switchBranch,
     reset,
     revert,
@@ -322,6 +323,9 @@ function App() {
         }}
         onCreateBranch={(repoId, name, source) => {
           void createBranch(repoId, name, source);
+        }}
+        onDeleteBranch={(repoId, branchName) => {
+          void deleteBranch(repoId, branchName);
         }}
         onSwitchBranch={(repoId, branchName) => {
           void switchBranch(repoId, branchName);

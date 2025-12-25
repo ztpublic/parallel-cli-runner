@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateBranchDialog } from "../dialogs/CreateBranchDialog";
+import { DeleteBranchDialog } from "../dialogs/DeleteBranchDialog";
 import type { RepoBranchGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -13,6 +14,7 @@ type GitBranchesProps = {
   canLoadMoreRemote?: (repoId: string) => boolean;
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
+  onDeleteBranch?: (repoId: string, branchName: string) => void;
 };
 
 export function GitBranches({
@@ -23,12 +25,19 @@ export function GitBranches({
   canLoadMoreRemote,
   onCreateBranch,
   onSwitchBranch,
+  onDeleteBranch,
 }: GitBranchesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
     repoId: string;
     sourceBranch?: string;
   }>({ open: false, repoId: "" });
+
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    branchName: string;
+  }>({ open: false, repoId: "", branchName: "" });
 
   const nodes: TreeNode[] = branchGroups.map((group) => {
     const localChildren: TreeNode[] = group.localBranches.map((branch) => ({
@@ -57,6 +66,7 @@ export function GitBranches({
           icon: "trash",
           label: "Delete",
           intent: "danger",
+          disabled: branch.current,
         },
       ],
     }));
@@ -157,6 +167,17 @@ export function GitBranches({
         repoId,
         sourceBranch: currentBranch,
       });
+    } else if (actionId === "delete") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        setDeleteDialog({
+          open: true,
+          repoId,
+          branchName,
+        });
+      }
     }
   };
 
@@ -200,6 +221,15 @@ export function GitBranches({
         onClose={() => setCreateDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={(name) => {
           onCreateBranch?.(createDialog.repoId, name, createDialog.sourceBranch);
+        }}
+      />
+
+      <DeleteBranchDialog
+        open={deleteDialog.open}
+        branchName={deleteDialog.branchName}
+        onClose={() => setDeleteDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={() => {
+          onDeleteBranch?.(deleteDialog.repoId, deleteDialog.branchName);
         }}
       />
     </div>

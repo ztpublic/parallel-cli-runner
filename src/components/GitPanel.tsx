@@ -44,6 +44,7 @@ type GitPanelProps = {
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onOpenFolder?: () => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
+  onDeleteBranch?: (repoId: string, branchName: string) => void;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
   onRevert?: (repoId: string, commitId: string) => void;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
@@ -85,6 +86,7 @@ export function GitPanel({
   onCreateBranch,
   onOpenFolder,
   onSwitchBranch,
+  onDeleteBranch,
   onReset,
   onRevert,
   onCreateWorktree,
@@ -200,6 +202,7 @@ export function GitPanel({
                 canLoadMoreRemote={canLoadMoreRemoteBranches}
                 onCreateBranch={onCreateBranch}
                 onSwitchBranch={onSwitchBranch}
+                onDeleteBranch={onDeleteBranch}
               />
             ) : null}
 

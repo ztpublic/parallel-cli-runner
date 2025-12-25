@@ -395,6 +395,25 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const deleteBranch = useCallback(
+    async (repoId: RepoId, branchName: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitDeleteBranch({
+          repoRoot: repo.root_path,
+          branch: branchName,
+          force: false,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to delete branch", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const switchBranch = useCallback(
     async (repoId: RepoId, branchName: string) => {
       const repo = resolveRepo(repoId);
@@ -543,6 +562,7 @@ export function useGitRepos() {
     unstageAll,
     commit,
     createBranch,
+    deleteBranch,
     switchBranch,
     reset,
     revert,
