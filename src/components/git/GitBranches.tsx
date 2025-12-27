@@ -40,14 +40,29 @@ export function GitBranches({
   }>({ open: false, repoId: "", branchName: "" });
 
   const nodes: TreeNode[] = branchGroups.map((group) => {
-    const localChildren: TreeNode[] = group.localBranches.map((branch) => ({
+    const localChildren: TreeNode[] = group.localBranches.map((branch) => {
+      const isAhead = (branch.ahead ?? 0) > 0;
+      const isBehind = (branch.behind ?? 0) > 0;
+      const hasStatus = isAhead || isBehind;
+
+      const rightSlot = (
+        <div className="flex items-center gap-2">
+           {branch.current && <span className="git-badge">current</span>}
+           {hasStatus ? (
+             <span className="git-branch-status text-xs text-muted">
+               {isBehind ? `↓${branch.behind} ` : ""}
+               {isAhead ? `↑${branch.ahead}` : ""}
+             </span>
+           ) : null}
+        </div>
+      );
+
+      return {
       id: `${group.repo.repoId}:local:${branch.name}`,
       label: branch.name,
       description: branch.lastCommit,
       icon: "branch",
-      rightSlot: branch.current ? (
-        <span className="git-badge">current</span>
-      ) : undefined,
+      rightSlot,
       contextMenu: [
         {
           id: "switch-branch",
@@ -69,7 +84,7 @@ export function GitBranches({
           disabled: branch.current,
         },
       ],
-    }));
+    }});
 
     if (canLoadMoreLocal?.(group.repo.repoId)) {
       localChildren.push({

@@ -12,7 +12,7 @@ export type RepoStatusDto = { repo_id: string, root_path: string, branch: string
 
 export type DiffStatDto = { files_changed: number, insertions: number, deletions: number, };
 
-export type BranchInfoDto = { name: string, current: boolean, last_commit: string, };
+export type BranchInfoDto = { name: string, current: boolean, last_commit: string, ahead: number, behind: number, };
 
 export type RemoteInfoDto = { name: string, fetch: string, push: string, };
 

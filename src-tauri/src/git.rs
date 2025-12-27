@@ -88,6 +88,8 @@ pub struct BranchInfoDto {
     pub name: String,
     pub current: bool,
     pub last_commit: String,
+    pub ahead: i32,
+    pub behind: i32,
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
@@ -374,10 +376,15 @@ pub fn list_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> {
                 Err(GitError::Git2(err)) if err.code() == ErrorCode::NotFound => continue,
                 Err(err) => return Err(err),
             };
+            
+            let (ahead, behind) = get_branch_ahead_behind(&repo, &branch).unwrap_or((0, 0));
+
             branches.push(BranchInfoDto {
                 name,
                 current: branch.is_head(),
                 last_commit,
+                ahead: ahead as i32,
+                behind: behind as i32,
             });
         }
     }
@@ -409,6 +416,8 @@ pub fn list_remote_branches(cwd: &Path) -> Result<Vec<BranchInfoDto>, GitError> 
             name,
             current: false,
             last_commit,
+            ahead: 0,
+            behind: 0,
         });
     }
     Ok(branches)
@@ -1279,4 +1288,14 @@ fn untracked_stats(repo: &Repository) -> Result<(usize, i32), GitError> {
     }
 
     Ok((count, insertions))
+}
+
+fn get_branch_ahead_behind(repo: &Repository, branch: &git2::Branch) -> Result<(usize, usize), GitError> {
+    if let Ok(upstream) = branch.upstream() {
+        if let (Some(local_oid), Some(upstream_oid)) = (branch.get().target(), upstream.get().target()) {
+            let (ahead, behind) = repo.graph_ahead_behind(local_oid, upstream_oid)?;
+            return Ok((ahead, behind));
+        }
+    }
+    Ok((0, 0))
 }

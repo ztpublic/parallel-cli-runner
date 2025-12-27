@@ -71,6 +71,8 @@ function mapBranches(branches: BranchInfoDto[]): BranchItem[] {
     name: branch.name,
     current: branch.current,
     lastCommit: branch.last_commit || "",
+    ahead: branch.ahead,
+    behind: branch.behind,
   }));
 }
 

@@ -4,6 +4,8 @@ export type BranchItem = {
   name: string;
   current?: boolean;
   lastCommit: string;
+  ahead?: number;
+  behind?: number;
 };
 
 export type RepoHeader = {
