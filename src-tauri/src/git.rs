@@ -1302,11 +1302,33 @@ fn get_branch_ahead_behind(repo: &Repository, branch: &git2::Branch) -> Result<(
 }
 
 pub fn pull(cwd: &Path) -> Result<(), GitError> {
-    let output = Command::new("git")
-        .arg("pull")
-        .current_dir(cwd)
-        .output()
-        .map_err(GitError::Io)?;
+    let mut cmd = Command::new("git");
+    cmd.arg("pull").current_dir(cwd);
+
+    if let Ok(proxy) = sysproxy::get_system_proxy() {
+        if proxy.enable {
+            let host = proxy.host;
+            let port = proxy.port;
+            let proxy_url = if host.contains("://") {
+                format!("{}:{}", host, port)
+            } else {
+                format!("http://{}:{}", host, port)
+            };
+
+            cmd.env("http_proxy", &proxy_url);
+            cmd.env("https_proxy", &proxy_url);
+            cmd.env("HTTP_PROXY", &proxy_url);
+            cmd.env("HTTPS_PROXY", &proxy_url);
+            cmd.env("ALL_PROXY", &proxy_url);
+
+            if !proxy.bypass.is_empty() {
+                cmd.env("no_proxy", &proxy.bypass);
+                cmd.env("NO_PROXY", &proxy.bypass);
+            }
+        }
+    }
+
+    let output = cmd.output().map_err(GitError::Io)?;
 
     if !output.status.success() {
         return Err(GitError::GitFailed {
