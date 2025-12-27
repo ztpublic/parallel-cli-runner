@@ -16,6 +16,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
+import { SmartSwitchDialog } from "./components/dialogs/SmartSwitchDialog";
 import type { RepoInfoDto } from "./types/git";
 import type {
   CommitItem,
@@ -50,6 +51,7 @@ function App() {
     setRepos,
     activeRepoId,
     activeStatus,
+    statusByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
     commitsByRepo,
@@ -67,6 +69,7 @@ function App() {
     createBranch,
     deleteBranch,
     switchBranch,
+    smartSwitchBranch,
     reset,
     revert,
     createWorktree,
@@ -88,6 +91,12 @@ function App() {
   const [isRepoPickerOpen, setIsRepoPickerOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
+  
+  const [smartSwitchDialog, setSmartSwitchDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    branchName: string;
+  }>({ open: false, repoId: "", branchName: "" });
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -354,6 +363,11 @@ function App() {
           );
         }}
         onSwitchBranch={(repoId, branchName) => {
+          const status = statusByRepo[repoId];
+          if (status && (status.has_staged || status.has_unstaged)) {
+            setSmartSwitchDialog({ open: true, repoId, branchName });
+            return;
+          }
           void runGitCommand("Switch branch failed", "Failed to switch branch.", () =>
             switchBranch(repoId, branchName)
           );
@@ -425,6 +439,21 @@ function App() {
         title={gitCommandError?.title}
         message={gitCommandError?.message ?? ""}
         onClose={clearGitCommandError}
+      />
+      <SmartSwitchDialog
+        open={smartSwitchDialog.open}
+        branchName={smartSwitchDialog.branchName}
+        onClose={() => setSmartSwitchDialog((prev) => ({ ...prev, open: false }))}
+        onConfirmForce={() => {
+          void runGitCommand("Switch branch failed", "Failed to force switch branch.", () =>
+            switchBranch(smartSwitchDialog.repoId, smartSwitchDialog.branchName)
+          );
+        }}
+        onConfirmSmart={() => {
+          void runGitCommand("Smart switch failed", "Failed to smart switch branch.", () =>
+            smartSwitchBranch(smartSwitchDialog.repoId, smartSwitchDialog.branchName)
+          );
+        }}
       />
     </main>
   );

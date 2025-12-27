@@ -851,6 +851,46 @@ pub fn checkout_local_branch(repo_root: &Path, branch_name: &str) -> Result<(), 
     checkout_branch(&repo, &refname)
 }
 
+pub fn smart_checkout_branch(repo_root: &Path, branch_name: &str) -> Result<(), GitError> {
+    let mut repo = open_repo(repo_root)?;
+    let refname = local_branch_refname(branch_name);
+
+    // 1. Stash changes
+    let mut created_stash = false;
+    if is_repo_dirty(&repo)? {
+        let msg = format!("parallel-cli-runner: auto-stash before switching to {}", branch_name);
+        let sig = repo.signature()?;
+        // Include untracked files to be safe, though user only mentioned uncommitted (modified)
+        repo.stash_save(&sig, &msg, Some(StashFlags::INCLUDE_UNTRACKED))?;
+        created_stash = true;
+    }
+
+    // 2. Checkout branch
+    // Use force because we just stashed, so we expect a clean state for checkout.
+    // However, if stash failed or didn't happen, we might not want to force?
+    // But if is_repo_dirty returned false, force is safe.
+    // If stash succeeded, force is safe.
+    if let Err(err) = checkout_branch(&repo, &refname) {
+        if created_stash {
+            // Restore stash if checkout failed
+             let _ = repo.stash_pop(0, None);
+        }
+        return Err(err);
+    }
+
+    // 3. Pop stash
+    if created_stash {
+         if let Err(err) = repo.stash_pop(0, None) {
+            return Err(GitError::GitFailed {
+                code: None,
+                stderr: format!("Switch successful, but failed to restore stashed changes: {}", err),
+            });
+         }
+    }
+
+    Ok(())
+}
+
 pub fn reset(repo_root: &Path, target: &str, mode: &str) -> Result<(), GitError> {
     let repo = open_repo(repo_root)?;
     let obj = repo.revparse_single(target)?;

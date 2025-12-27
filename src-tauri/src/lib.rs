@@ -150,6 +150,12 @@ async fn git_checkout_branch(cwd: String, branch_name: String) -> Result<(), Com
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_smart_checkout_branch(cwd: String, branch_name: String) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::smart_checkout_branch(&path, &branch_name).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_reset(cwd: String, target: String, mode: String) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
     git::reset(&path, &target, &mode).map_err(CommandError::from)
@@ -223,6 +229,7 @@ pub fn run() {
             git_merge_into_branch,
             git_create_branch,
             git_checkout_branch,
+            git_smart_checkout_branch,
             git_reset,
             git_revert,
             git_add_worktree,

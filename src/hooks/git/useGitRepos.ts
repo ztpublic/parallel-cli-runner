@@ -13,6 +13,7 @@ import {
   gitRemoveWorktree,
   gitReset,
   gitRevert,
+  gitSmartCheckoutBranch,
   gitStageAll,
   gitStageFiles,
   gitStatus,
@@ -430,6 +431,24 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const smartSwitchBranch = useCallback(
+    async (repoId: RepoId, branchName: string) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitSmartCheckoutBranch({
+          cwd: repo.root_path,
+          branchName,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to smart switch branch", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const reset = useCallback(
     async (repoId: RepoId, target: string, mode: "soft" | "mixed" | "hard") => {
       const repo = resolveRepo(repoId);
@@ -562,6 +581,7 @@ export function useGitRepos() {
     createBranch,
     deleteBranch,
     switchBranch,
+    smartSwitchBranch,
     reset,
     revert,
     createWorktree,

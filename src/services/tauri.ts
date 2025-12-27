@@ -104,6 +104,13 @@ export function gitCheckoutBranch(params: {
   return invoke("git_checkout_branch", params);
 }
 
+export function gitSmartCheckoutBranch(params: {
+  cwd: string;
+  branchName: string;
+}): Promise<void> {
+  return invoke("git_smart_checkout_branch", params);
+}
+
 export function gitReset(params: {
   cwd: string;
   target: string;
