@@ -262,6 +262,116 @@ fn merge_into_branch() {
 }
 
 #[test]
+fn merge_conflict_error() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "conflict.txt", "base\n");
+    git::commit(temp.path(), "Base", true, false).expect("commit base");
+
+    git::create_branch(temp.path(), "feature/conflict", None).expect("create branch");
+    
+    // Change on master
+    write_file(temp.path(), "conflict.txt", "master change\n");
+    git::commit(temp.path(), "Master change", true, false).expect("commit master");
+
+    // Change on feature
+    git::checkout_local_branch(temp.path(), "feature/conflict").expect("checkout feature");
+    write_file(temp.path(), "conflict.txt", "feature change\n");
+    git::commit(temp.path(), "Feature change", true, false).expect("commit feature");
+
+    git::checkout_local_branch(temp.path(), "master").expect("checkout master");
+
+    // Merge feature into master should conflict
+    let result = git::merge_into_branch(temp.path(), "master", "feature/conflict");
+    assert!(result.is_err(), "expected merge conflict error");
+}
+
+#[test]
+fn reset_modes() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "v1\n");
+    git::commit(temp.path(), "Commit 1", true, false).expect("commit 1");
+    let head1 = repo.head().unwrap().target().unwrap();
+
+    write_file(temp.path(), "file.txt", "v2\n");
+    git::commit(temp.path(), "Commit 2", true, false).expect("commit 2");
+    
+    // Soft reset to commit 1
+    // Staged changes should remain (the diff between v1 and v2)
+    git::reset(temp.path(), &head1.to_string(), "soft").expect("soft reset");
+    let status = git::status(temp.path()).expect("status soft");
+    assert!(status.has_staged, "soft reset keeps changes staged");
+    assert_eq!(status.behind, 0); // We moved head back, so we are not behind? 
+    // Actually we just moved branch pointer back.
+
+    // Reset back to state for next test
+    git::commit(temp.path(), "Commit 2 again", true, false).expect("commit 2 again");
+    
+    // Mixed reset to commit 1
+    // Changes unstaged
+    git::reset(temp.path(), &head1.to_string(), "mixed").expect("mixed reset");
+    let status = git::status(temp.path()).expect("status mixed");
+    assert!(!status.has_staged, "mixed reset unstages changes");
+    assert!(status.has_unstaged, "mixed reset keeps changes in workdir");
+
+    // Reset back
+    git::commit(temp.path(), "Commit 2 again again", true, false).expect("commit 2 again again");
+
+    // Hard reset to commit 1
+    // Changes lost
+    git::reset(temp.path(), &head1.to_string(), "hard").expect("hard reset");
+    let status = git::status(temp.path()).expect("status hard");
+    assert!(!status.has_staged);
+    assert!(!status.has_unstaged);
+    let content = fs::read_to_string(temp.path().join("file.txt")).unwrap();
+    assert_eq!(content, "v1\n");
+}
+
+#[test]
+fn revert_commit() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "file.txt", "v1\n");
+    git::commit(temp.path(), "Commit 1", true, false).expect("commit 1");
+
+    write_file(temp.path(), "file.txt", "v2\n");
+    git::commit(temp.path(), "Commit 2", true, false).expect("commit 2");
+    
+    let commits = git::list_commits(temp.path(), 1, None).expect("list commits");
+    let commit2_id = &commits[0].id;
+
+    git::revert(temp.path(), commit2_id).expect("revert");
+
+    let content = fs::read_to_string(temp.path().join("file.txt")).unwrap();
+    assert_eq!(content, "v1\n");
+    
+    let commits_after = git::list_commits(temp.path(), 1, None).expect("list commits after");
+    assert!(commits_after[0].summary.starts_with("Revert \"Commit 2\""));
+}
+
+#[test]
+fn create_duplicate_branch_error() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "file.txt", "v1\n");
+    git::commit(temp.path(), "Commit 1", true, false).expect("commit 1");
+
+    git::create_branch(temp.path(), "test-branch", None).expect("create");
+    let result = git::create_branch(temp.path(), "test-branch", None);
+    assert!(result.is_err());
+}
+
+#[test]
+fn delete_current_branch_error() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "file.txt", "v1\n");
+    git::commit(temp.path(), "Commit 1", true, false).expect("commit 1");
+
+    git::create_branch(temp.path(), "test-branch", None).expect("create");
+    git::checkout_local_branch(temp.path(), "test-branch").expect("checkout");
+    
+    let result = git::delete_branch(temp.path(), "test-branch", false);
+    assert!(result.is_err());
+}
+
+#[test]
 fn pull_changes() {
     // Need a remote repo to pull from.
     // 1. Create remote repo (bare or not)
