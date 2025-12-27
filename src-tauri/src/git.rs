@@ -9,6 +9,7 @@ use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
+    process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
 use thiserror::Error;
@@ -1298,4 +1299,20 @@ fn get_branch_ahead_behind(repo: &Repository, branch: &git2::Branch) -> Result<(
         }
     }
     Ok((0, 0))
+}
+
+pub fn pull(cwd: &Path) -> Result<(), GitError> {
+    let output = Command::new("git")
+        .arg("pull")
+        .current_dir(cwd)
+        .output()
+        .map_err(GitError::Io)?;
+
+    if !output.status.success() {
+        return Err(GitError::GitFailed {
+            code: output.status.code(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+        });
+    }
+    Ok(())
 }

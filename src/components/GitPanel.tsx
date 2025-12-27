@@ -30,6 +30,7 @@ type GitPanelProps = {
   error?: string | null;
   onRefresh?: () => void;
   onCommit?: (message: string) => void;
+  onPull?: (repoId: string) => void;
   onStageAll?: () => void;
   onUnstageAll?: () => void;
   onStageFile?: (path: string) => void;
@@ -72,6 +73,7 @@ export function GitPanel({
   error,
   onRefresh,
   onCommit,
+  onPull,
   onStageAll,
   onUnstageAll,
   onStageFile,
@@ -203,6 +205,7 @@ export function GitPanel({
                 onCreateBranch={onCreateBranch}
                 onSwitchBranch={onSwitchBranch}
                 onDeleteBranch={onDeleteBranch}
+                onPull={onPull}
               />
             ) : null}
 

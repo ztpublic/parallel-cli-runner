@@ -10,6 +10,7 @@ import {
   gitListRemoteBranches,
   gitListRemotes,
   gitListWorktrees,
+  gitPull,
   gitRemoveWorktree,
   gitReset,
   gitRevert,
@@ -377,6 +378,16 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const pull = useCallback(
+    async (repoId: RepoId) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      await gitPull({ cwd: repo.root_path });
+      await refreshRepos(repo.repo_id);
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const createBranch = useCallback(
     async (repoId: RepoId, name: string, sourceBranch?: string) => {
       const repo = resolveRepo(repoId);
@@ -580,6 +591,7 @@ export function useGitRepos() {
     stageAll,
     unstageAll,
     commit,
+    pull,
     createBranch,
     deleteBranch,
     switchBranch,

@@ -56,6 +56,10 @@ export function gitListRemotes(params: { cwd: string }): Promise<RemoteInfoDto[]
   return invoke<RemoteInfoDto[]>("git_list_remotes", params);
 }
 
+export function gitPull(params: { cwd: string }): Promise<void> {
+  return invoke("git_pull", params);
+}
+
 export function gitCommit(params: {
   cwd: string;
   message: string;

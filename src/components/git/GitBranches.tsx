@@ -15,6 +15,7 @@ type GitBranchesProps = {
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
+  onPull?: (repoId: string) => void;
 };
 
 export function GitBranches({
@@ -26,6 +27,7 @@ export function GitBranches({
   onCreateBranch,
   onSwitchBranch,
   onDeleteBranch,
+  onPull,
 }: GitBranchesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -68,6 +70,11 @@ export function GitBranches({
           id: "switch-branch",
           label: "Switch Branch",
           disabled: branch.current,
+        },
+        {
+          id: "pull",
+          label: "Pull",
+          disabled: !branch.current,
         },
       ],
       actions: [
@@ -210,6 +217,14 @@ export function GitBranches({
         const repoId = parts[0];
         const branchName = parts[1];
         onSwitchBranch?.(repoId, branchName);
+      }
+    } else if (itemId === "pull") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        // branchName is not needed for pull as it pulls current branch, 
+        // but we verify it's the right node.
+        onPull?.(repoId);
       }
     }
   };

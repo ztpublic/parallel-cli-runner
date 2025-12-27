@@ -89,6 +89,12 @@ async fn git_list_remotes(cwd: String) -> Result<Vec<git::RemoteInfoDto>, Comman
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_pull(cwd: String) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::pull(&path).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_commit(
     cwd: String,
     message: String,
@@ -221,6 +227,7 @@ pub fn run() {
             git_list_commits,
             git_list_worktrees,
             git_list_remotes,
+            git_pull,
             git_commit,
             git_stage_files,
             git_unstage_files,
