@@ -1305,7 +1305,7 @@ pub fn pull(cwd: &Path) -> Result<(), GitError> {
     let mut cmd = Command::new("git");
     cmd.arg("pull").current_dir(cwd);
 
-    if let Ok(proxy) = sysproxy::get_system_proxy() {
+    if let Ok(proxy) = sysproxy::Sysproxy::get_system_proxy() {
         if proxy.enable {
             let host = proxy.host;
             let port = proxy.port;
