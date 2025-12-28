@@ -40,10 +40,18 @@ pub enum FileChangeType {
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
+pub struct FileStats {
+    pub insertions: i32,
+    pub deletions: i32,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct FileStatusDto {
     pub path: String,
     pub staged: Option<FileChangeType>,
     pub unstaged: Option<FileChangeType>,
+    pub staged_stats: Option<FileStats>,
+    pub unstaged_stats: Option<FileStats>,
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
@@ -174,10 +182,24 @@ pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
                 continue;
             }
 
+            let staged_stats = if staged.is_some() {
+                get_file_diff_stats(&repo, path, true).ok()
+            } else {
+                None
+            };
+
+            let unstaged_stats = if unstaged.is_some() {
+                get_file_diff_stats(&repo, path, false).ok()
+            } else {
+                None
+            };
+
             modified_files.push(FileStatusDto {
                 path: path.to_string(),
                 staged,
                 unstaged,
+                staged_stats,
+                unstaged_stats,
             });
         }
     }
@@ -1289,6 +1311,29 @@ fn untracked_stats(repo: &Repository) -> Result<(usize, i32), GitError> {
     }
 
     Ok((count, insertions))
+}
+
+fn get_file_diff_stats(repo: &Repository, path: &str, staged: bool) -> Result<FileStats, GitError> {
+    let mut opts = DiffOptions::new();
+    opts.pathspec(path);
+    opts.include_untracked(true);
+    opts.recurse_untracked_dirs(true);
+
+    let diff = if staged {
+        if let Ok(head_tree) = repo.head().and_then(|h| h.peel_to_tree()) {
+             repo.diff_tree_to_index(Some(&head_tree), Some(&repo.index()?), Some(&mut opts))?
+        } else {
+             repo.diff_tree_to_index(None, Some(&repo.index()?), Some(&mut opts))?
+        }
+    } else {
+        repo.diff_index_to_workdir(None, Some(&mut opts))?
+    };
+    
+    let stats = diff.stats()?;
+    Ok(FileStats {
+        insertions: stats.insertions() as i32,
+        deletions: stats.deletions() as i32,
+    })
 }
 
 fn get_branch_ahead_behind(repo: &Repository, branch: &git2::Branch) -> Result<(usize, usize), GitError> {

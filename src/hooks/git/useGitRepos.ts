@@ -47,6 +47,8 @@ function mapFileStatus(file: FileStatusDto): ChangedFile[] {
       path: file.path,
       status: mapChangeType(file.staged),
       staged: true,
+      insertions: file.staged_stats?.insertions,
+      deletions: file.staged_stats?.deletions,
     });
   }
   if (file.unstaged) {
@@ -54,6 +56,8 @@ function mapFileStatus(file: FileStatusDto): ChangedFile[] {
       path: file.path,
       status: mapChangeType(file.unstaged),
       staged: false,
+      insertions: file.unstaged_stats?.insertions,
+      deletions: file.unstaged_stats?.deletions,
     });
   }
   return entries;

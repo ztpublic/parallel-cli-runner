@@ -43,6 +43,8 @@ export type ChangedFile = {
   path: string;
   status: ChangeStatus;
   staged: boolean;
+  insertions?: number;
+  deletions?: number;
 };
 
 export type GitTabId = "repos" | "branches" | "commits" | "commit" | "worktrees" | "remotes";

@@ -2,7 +2,9 @@
 
 export type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
 
-export type FileStatusDto = { path: string, staged: FileChangeType | null, unstaged: FileChangeType | null, };
+export type FileStats = { insertions: number, deletions: number, };
+
+export type FileStatusDto = { path: string, staged: FileChangeType | null, unstaged: FileChangeType | null, staged_stats: FileStats | null, unstaged_stats: FileStats | null, };
 
 export type CommitInfoDto = { id: string, summary: string, author: string, relative_time: string, };
 

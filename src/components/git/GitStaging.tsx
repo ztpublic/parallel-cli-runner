@@ -76,9 +76,15 @@ export function GitStaging({
 
       const children: TreeNode[] = [];
 
-      const formatDescription = (status: ChangeStatus) => {
-        // Placeholder for insertion/deletion stats since backend doesn't provide them yet
-        return status.charAt(0).toUpperCase() + status.slice(1);
+      const formatDescription = (file: ChangedFile) => {
+        if (file.insertions !== undefined && file.deletions !== undefined) {
+          const parts = [];
+          if (file.insertions > 0) parts.push(`+${file.insertions}`);
+          if (file.deletions > 0) parts.push(`-${file.deletions}`);
+          if (parts.length === 0) return "No changes"; // e.g. rename only?
+          return parts.join(" ");
+        }
+        return file.status.charAt(0).toUpperCase() + file.status.slice(1);
       };
 
       if (stagedFiles.length > 0) {
@@ -95,7 +101,7 @@ export function GitStaging({
             label: file.path,
             icon: getStatusIcon(file.status),
             iconClassName: getIconClass(file.status),
-            description: formatDescription(file.status),
+            description: formatDescription(file),
             selectable: true,
             actions: [{ id: "unstage", icon: "minus", label: "Unstage" }],
           })),
@@ -116,7 +122,7 @@ export function GitStaging({
             label: file.path,
             icon: getStatusIcon(file.status),
             iconClassName: getIconClass(file.status),
-            description: formatDescription(file.status),
+            description: formatDescription(file),
             selectable: true,
             actions: [{ id: "stage", icon: "plus", label: "Stage" }],
           })),
