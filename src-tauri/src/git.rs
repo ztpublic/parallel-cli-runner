@@ -1319,7 +1319,6 @@ pub fn pull(cwd: &Path) -> Result<(), GitError> {
             cmd.env("https_proxy", &proxy_url);
             cmd.env("HTTP_PROXY", &proxy_url);
             cmd.env("HTTPS_PROXY", &proxy_url);
-            cmd.env("ALL_PROXY", &proxy_url);
 
             if !proxy.bypass.is_empty() {
                 cmd.env("no_proxy", &proxy.bypass);
@@ -1331,9 +1330,18 @@ pub fn pull(cwd: &Path) -> Result<(), GitError> {
     let output = cmd.output().map_err(GitError::Io)?;
 
     if !output.status.success() {
+        let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        // Append debug info about proxy if we attempted to use it
+        if let Ok(proxy) = sysproxy::Sysproxy::get_system_proxy() {
+             if proxy.enable {
+                 use std::fmt::Write;
+                 let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}:{}", proxy.host, proxy.port);
+             }
+        }
+
         return Err(GitError::GitFailed {
             code: output.status.code(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            stderr,
         });
     }
     Ok(())
