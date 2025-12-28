@@ -368,6 +368,8 @@ export function GitDiffView({
   const [chunkActions, setChunkActions] = useState<Record<string, MergeChunkAction>>({});
   const [selectedChunkId, setSelectedChunkId] = useState<string | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  const arrowKeyRef = useRef<string>("");
+  const controlKeyRef = useRef<string>("");
   const bumpLayout = useCallback(() => {
     setLayoutTick((tick) => tick + 1);
   }, []);
@@ -376,9 +378,18 @@ export function GitDiffView({
   const hasThreeWay =
     baseDoc.trim().length > 0 || leftDoc.trim().length > 0 || rightDoc.trim().length > 0;
 
-  const langExtension = languageExtension(languageId, filePath);
-  const extraExtensions = langExtension ? [langExtension] : [];
-  const baseExtensions = readOnlyExtensions(highlightTheme);
+  const langExtension = useMemo(
+    () => languageExtension(languageId, filePath),
+    [languageId, filePath]
+  );
+  const extraExtensions = useMemo(
+    () => (langExtension ? [langExtension] : []),
+    [langExtension]
+  );
+  const baseExtensions = useMemo(
+    () => readOnlyExtensions(highlightTheme),
+    [highlightTheme]
+  );
 
   const twoWayRef = useMergeView(
     baseDoc,
@@ -462,12 +473,15 @@ export function GitDiffView({
     }
 
     let frame = 0;
+    let scheduled = false;
 
     const measure = () => {
-      if (frame) {
-        cancelAnimationFrame(frame);
+      if (scheduled) {
+        return;
       }
+      scheduled = true;
       frame = requestAnimationFrame(() => {
+        scheduled = false;
         const overlayRect = overlay.getBoundingClientRect();
         const leftRect = leftView.dom.getBoundingClientRect();
         const baseRect = baseView.dom.getBoundingClientRect();
@@ -519,13 +533,25 @@ export function GitDiffView({
           });
         }
 
-        setArrowSegments(segments);
-        setControlItems(controls);
+        const nextArrowKey = segments.map((segment) => `${segment.id}:${segment.path}`).join("|");
+        if (nextArrowKey !== arrowKeyRef.current) {
+          arrowKeyRef.current = nextArrowKey;
+          setArrowSegments(segments);
+        }
+
+        const nextControlKey = controls
+          .map(
+            (control) =>
+              `${control.id}:${Math.round(control.left)}:${Math.round(control.top)}:${control.conflict}`
+          )
+          .join("|");
+        if (nextControlKey !== controlKeyRef.current) {
+          controlKeyRef.current = nextControlKey;
+          setControlItems(controls);
+        }
       });
     };
 
-    const scrollTargets = [leftView.scrollDOM, baseView.scrollDOM, rightView.scrollDOM];
-    scrollTargets.forEach((target) => target.addEventListener("scroll", measure));
     window.addEventListener("resize", measure);
     measure();
 
@@ -533,7 +559,6 @@ export function GitDiffView({
       if (frame) {
         cancelAnimationFrame(frame);
       }
-      scrollTargets.forEach((target) => target.removeEventListener("scroll", measure));
       window.removeEventListener("resize", measure);
     };
   }, [showThreeWay, threeWayChunks, layoutTick]);
