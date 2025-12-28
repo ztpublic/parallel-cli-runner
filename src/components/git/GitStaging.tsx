@@ -111,7 +111,7 @@ export function GitStaging({
       if (unstagedFiles.length > 0) {
         children.push({
           id: `repo:${group.repo.repoId}:unstaged`,
-          label: "Changes",
+          label: "Unstaged Changes",
           icon: "fileEdit",
           defaultExpanded: true,
           selectable: false,
