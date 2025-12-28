@@ -1,6 +1,8 @@
+import { useState, useMemo, useEffect } from "react";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
-import { useGitStaging } from "../../hooks/git/useGitStaging";
+import { TreeView } from "../TreeView";
+import type { TreeNode } from "../../types/tree";
 
 type GitStagingProps = {
   groups: RepoGroup<ChangedFile>[];
@@ -11,182 +13,161 @@ type GitStagingProps = {
   onUnstageFile: (repoId: string, path: string) => void;
 };
 
-function GitRepoStagingItem({
-  group,
+export function GitStaging({
+  groups,
   onCommit,
   onStageAll,
   onUnstageAll,
   onStageFile,
   onUnstageFile,
-}: {
-  group: RepoGroup<ChangedFile>;
-  onCommit: (repoId: string, message: string) => void;
-  onStageAll: (repoId: string) => void;
-  onUnstageAll: (repoId: string) => void;
-  onStageFile: (repoId: string, path: string) => void;
-  onUnstageFile: (repoId: string, path: string) => void;
-}) {
-  const {
-    commitMessage,
-    setCommitMessage,
-    stagedFiles,
-    unstagedFiles,
-    generateCommitMessage,
-  } = useGitStaging(group.items);
+}: GitStagingProps) {
+  const [commitMessage, setCommitMessage] = useState("");
+  // By default, check all repos that have staged changes?
+  // Or just check all visible repos?
+  // Let's default to all dirty groups.
+  const [checkedRepoIds, setCheckedRepoIds] = useState<string[]>([]);
 
-  const commitDisabled = !commitMessage.trim() || stagedFiles.length === 0;
-  const magicDisabled = stagedFiles.length === 0;
+  const dirtyGroups = useMemo(() => groups.filter(g => g.items.length > 0), [groups]);
 
-  const handleCommit = () => {
-    onCommit(group.repo.repoId, commitMessage);
-    setCommitMessage(""); 
-  };
-
-  const getStatusLabel = (status: ChangeStatus) => {
-    switch (status) {
-      case "added":
-        return "A";
-      case "deleted":
-        return "D";
-      default:
-        return "M";
-    }
-  };
+  // Sync checkedRepoIds when dirtyGroups change (e.g. new repo becomes dirty)
+  // But we don't want to reset user selection constantly if they uncheck one.
+  // Strategy: If a repo is dirty and not in state, add it? 
+  // Simple: Just initialize once or when groups length changes drastically?
+  // Let's just default to all dirty on mount, and if new ones appear, maybe add them?
+  // For now, let's keep it controlled by user, but default to all.
+  
+  // Actually, simpler: Initialize/Sync.
+  useEffect(() => {
+    setCheckedRepoIds(prev => {
+        const currentIds = new Set(dirtyGroups.map(g => g.repo.repoId));
+        // Keep existing that are still dirty
+        const next = prev.filter(id => currentIds.has(id));
+        // Add new dirty ones that weren't there?
+        // Let's just set to all dirty ones if list was empty (first load)?
+        if (prev.length === 0 && dirtyGroups.length > 0) {
+            return dirtyGroups.map(g => g.repo.repoId);
+        }
+        return next;
+    });
+  }, [dirtyGroups.length]); 
+  // Dependency on length is imperfect but avoids infinite loop if we depended on array identity.
+  // Better: separate effect for initialization.
 
   const getStatusIcon = (status: ChangeStatus) => {
     switch (status) {
-      case "added":
-        return "fileAdd";
-      case "deleted":
-        return "fileRemove";
-      default:
-        return "fileEdit";
+      case "added": return "fileAdd";
+      case "deleted": return "fileRemove";
+      default: return "fileEdit";
     }
   };
 
-  return (
-    <div className="commit-panel repo-commit-panel">
-      <div className="repo-header-small">
-        <Icon name="folder" size={14} />
-        <span>{group.repo.name}</span>
-      </div>
-      
-      <div className="commit-message">
-        <div className="commit-textarea-wrap">
-          <textarea
-            className="commit-textarea"
-            placeholder={`Commit to ${group.repo.name}...`}
-            rows={3}
-            value={commitMessage}
-            onChange={(event) => setCommitMessage(event.target.value)}
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            className="commit-magic"
-            onClick={generateCommitMessage}
-            disabled={magicDisabled}
-            title="Generate commit message"
-          >
-            <Icon name="sparkle" size={12} />
-          </button>
-        </div>
-        <button
-          type="button"
-          className="commit-button"
-          disabled={commitDisabled}
-          onClick={handleCommit}
-        >
-          <Icon name="check" size={14} />
-          Commit
-        </button>
-      </div>
+  const nodes = useMemo<TreeNode[]>(() => {
+    return dirtyGroups.map(group => {
+      const stagedFiles = group.items.filter(f => f.staged);
+      const unstagedFiles = group.items.filter(f => !f.staged);
 
-      <div className="commit-files">
-        {stagedFiles.length ? (
-          <div className="commit-section">
-            <div className="commit-section-header">
-              <div className="commit-section-title commit-section-title--staged">Staged</div>
-              <div className="commit-section-count">{stagedFiles.length}</div>
-              <button 
-                type="button" 
-                className="commit-section-action" 
-                onClick={() => onUnstageAll(group.repo.repoId)}
-              >
-                Unstage All
-              </button>
-            </div>
-            <div className="commit-file-list">
-              {stagedFiles.map((file) => (
-                <div key={`${file.path}:staged`} className="commit-file">
-                  <Icon
-                    name={getStatusIcon(file.status)}
-                    size={14}
-                    className={`commit-file-icon commit-file-icon--${file.status}`}
-                  />
-                  <span className={`commit-file-status commit-file-status--${file.status}`}>
-                    {getStatusLabel(file.status)}
-                  </span>
-                  <span className="commit-file-path">{file.path}</span>
-                  <button
-                    type="button"
-                    className="icon-button icon-button--tiny commit-file-action commit-file-action--unstage"
-                    title="Unstage file"
-                    onClick={() => onUnstageFile(group.repo.repoId, file.path)}
-                  >
-                    <Icon name="minus" size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
+      const children: TreeNode[] = [];
 
-        {unstagedFiles.length ? (
-          <div className="commit-section">
-            <div className="commit-section-header">
-              <div className="commit-section-title">Unstaged</div>
-              <div className="commit-section-count">{unstagedFiles.length}</div>
-              <button 
-                type="button" 
-                className="commit-section-action" 
-                onClick={() => onStageAll(group.repo.repoId)}
-              >
-                Stage All
-              </button>
-            </div>
-            <div className="commit-file-list">
-              {unstagedFiles.map((file) => (
-                <div key={`${file.path}:unstaged`} className="commit-file">
-                  <Icon
-                    name={getStatusIcon(file.status)}
-                    size={14}
-                    className={`commit-file-icon commit-file-icon--${file.status}`}
-                  />
-                  <span className={`commit-file-status commit-file-status--${file.status}`}>
-                    {getStatusLabel(file.status)}
-                  </span>
-                  <span className="commit-file-path">{file.path}</span>
-                  <button
-                    type="button"
-                    className="icon-button icon-button--tiny commit-file-action commit-file-action--stage"
-                    title="Stage file"
-                    onClick={() => onStageFile(group.repo.repoId, file.path)}
-                  >
-                    <Icon name="plus" size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    </div>
-  );
-}
+      if (stagedFiles.length > 0) {
+        children.push({
+          id: `repo:${group.repo.repoId}:staged`,
+          label: "Staged Changes",
+          icon: "check",
+          defaultExpanded: true,
+          selectable: false,
+          rightSlot: <span className="git-pill">{stagedFiles.length}</span>,
+          actions: [{ id: "unstage-all", icon: "minus", label: "Unstage All" }],
+          children: stagedFiles.map(file => ({
+            id: `file:${group.repo.repoId}:${file.path}:staged`,
+            label: file.path, // TODO: truncated path?
+            icon: getStatusIcon(file.status),
+            description: file.status,
+            selectable: true,
+            actions: [{ id: "unstage", icon: "minus", label: "Unstage" }],
+          })),
+        });
+      }
 
-export function GitStaging({ groups, ...props }: GitStagingProps) {
-  const dirtyGroups = groups.filter(g => g.items.length > 0);
+      if (unstagedFiles.length > 0) {
+        children.push({
+          id: `repo:${group.repo.repoId}:unstaged`,
+          label: "Changes",
+          icon: "fileEdit",
+          defaultExpanded: true,
+          selectable: false,
+          rightSlot: <span className="git-pill">{unstagedFiles.length}</span>,
+          actions: [{ id: "stage-all", icon: "plus", label: "Stage All" }],
+          children: unstagedFiles.map(file => ({
+            id: `file:${group.repo.repoId}:${file.path}:unstaged`,
+            label: file.path,
+            icon: getStatusIcon(file.status),
+            description: file.status,
+            selectable: true,
+            actions: [{ id: "stage", icon: "plus", label: "Stage" }],
+          })),
+        });
+      }
+
+      return {
+        id: group.repo.repoId, // The repoId is the node ID for checking
+        label: group.repo.name,
+        description: group.repo.path,
+        icon: "folder",
+        checkable: true, // Only repo is checkable for multi-commit
+        defaultExpanded: true,
+        selectable: false,
+        children,
+      };
+    });
+  }, [dirtyGroups]);
+
+  const handleAction = (node: TreeNode, actionId: string) => {
+    // Find repo group based on node ID structure
+    for (const group of dirtyGroups) {
+      if (node.id === `repo:${group.repo.repoId}:staged`) {
+        if (actionId === "unstage-all") onUnstageAll(group.repo.repoId);
+        return;
+      }
+      if (node.id === `repo:${group.repo.repoId}:unstaged`) {
+        if (actionId === "stage-all") onStageAll(group.repo.repoId);
+        return;
+      }
+
+      // Check files
+      // Staged
+      const stagedFile = group.items.find(
+        (f) =>
+          f.staged &&
+          `file:${group.repo.repoId}:${f.path}:staged` === node.id
+      );
+      if (stagedFile) {
+        if (actionId === "unstage")
+          onUnstageFile(group.repo.repoId, stagedFile.path);
+        return;
+      }
+      // Unstaged
+      const unstagedFile = group.items.find(
+        (f) =>
+          !f.staged &&
+          `file:${group.repo.repoId}:${f.path}:unstaged` === node.id
+      );
+      if (unstagedFile) {
+        if (actionId === "stage")
+          onStageFile(group.repo.repoId, unstagedFile.path);
+        return;
+      }
+    }
+  };
+
+  const handleCommit = () => {
+    // Commit to all checked repos
+    checkedRepoIds.forEach(repoId => {
+        onCommit(repoId, commitMessage);
+    });
+    setCommitMessage("");
+  };
+
+  const commitDisabled = !commitMessage.trim() || checkedRepoIds.length === 0;
 
   if (!dirtyGroups.length) {
     return (
@@ -198,10 +179,39 @@ export function GitStaging({ groups, ...props }: GitStagingProps) {
   }
 
   return (
-    <div className="git-staging-list">
-      {dirtyGroups.map((group) => (
-        <GitRepoStagingItem key={group.repo.repoId} group={group} {...props} />
-      ))}
+    <div className="commit-panel">
+      <div className="commit-message">
+        <div className="commit-textarea-wrap">
+          <textarea
+            className="commit-textarea"
+            placeholder="Describe your changes..."
+            rows={3}
+            value={commitMessage}
+            onChange={(event) => setCommitMessage(event.target.value)}
+            spellCheck={false}
+          />
+        </div>
+        <button
+          type="button"
+          className="commit-button"
+          disabled={commitDisabled}
+          onClick={handleCommit}
+        >
+          <Icon name="check" size={14} />
+          Commit to {checkedRepoIds.length} {checkedRepoIds.length === 1 ? 'Repo' : 'Repos'}
+        </button>
+      </div>
+
+      <div className="git-tree">
+        <TreeView
+            nodes={nodes}
+            checkedIds={checkedRepoIds}
+            onCheckChange={setCheckedRepoIds}
+            onAction={handleAction}
+            autoCheckChildren={false} // Only repos are checkable
+            toggleOnRowClick={true}
+        />
+      </div>
     </div>
   );
 }
