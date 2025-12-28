@@ -305,7 +305,11 @@ export function TreeView({
           ) : null}
 
           {node.icon ? (
-            <Icon name={node.icon} size={14} className="tree-node-icon" />
+            <Icon
+              name={node.icon}
+              size={14}
+              className={`tree-node-icon ${node.iconClassName || ""}`}
+            />
           ) : null}
 
           <div className="tree-node-body">

@@ -747,6 +747,18 @@ button {
   color: var(--text-muted);
 }
 
+.tree-node-icon--added {
+  color: #73c991;
+}
+
+.tree-node-icon--modified {
+  color: #e2c08d;
+}
+
+.tree-node-icon--deleted {
+  color: #f48771;
+}
+
 .tree-node-body {
   display: flex;
   flex-direction: column;

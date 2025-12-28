@@ -61,6 +61,14 @@ export function GitStaging({
     }
   };
 
+  const getIconClass = (status: ChangeStatus) => {
+    switch (status) {
+      case "added": return "tree-node-icon--added";
+      case "deleted": return "tree-node-icon--deleted";
+      default: return "tree-node-icon--modified";
+    }
+  };
+
   const nodes = useMemo<TreeNode[]>(() => {
     return dirtyGroups.map(group => {
       const stagedFiles = group.items.filter(f => f.staged);
@@ -86,6 +94,7 @@ export function GitStaging({
             id: `file:${group.repo.repoId}:${file.path}:staged`,
             label: file.path,
             icon: getStatusIcon(file.status),
+            iconClassName: getIconClass(file.status),
             description: formatDescription(file.status),
             selectable: true,
             actions: [{ id: "unstage", icon: "minus", label: "Unstage" }],
@@ -106,6 +115,7 @@ export function GitStaging({
             id: `file:${group.repo.repoId}:${file.path}:unstaged`,
             label: file.path,
             icon: getStatusIcon(file.status),
+            iconClassName: getIconClass(file.status),
             description: formatDescription(file.status),
             selectable: true,
             actions: [{ id: "stage", icon: "plus", label: "Stage" }],

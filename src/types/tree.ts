@@ -23,6 +23,7 @@ export type TreeNode = {
   label: string;
   description?: string;
   icon?: IconName;
+  iconClassName?: string;
   children?: TreeNode[];
   actions?: TreeNodeAction[];
   contextMenu?: TreeNodeContextMenuItem[];
