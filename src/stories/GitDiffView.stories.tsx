@@ -83,6 +83,29 @@ const meta = {
       control: { type: "inline-radio" },
       options: ["two-way", "three-way"],
     },
+    languageId: {
+      control: { type: "select" },
+      options: [
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "json",
+        "md",
+        "py",
+        "rs",
+        "css",
+        "html",
+        "yaml",
+        "cpp",
+        "go",
+        "java",
+      ],
+    },
+    highlightTheme: {
+      control: { type: "inline-radio" },
+      options: ["vscode-dark", "monokai", "dracula"],
+    },
   },
 } satisfies Meta<typeof GitDiffView>;
 
@@ -94,6 +117,9 @@ export const TwoWay: Story = {
     mode: "two-way",
     baseText: BASE_TEXT,
     compareText: COMPARE_TEXT,
+    languageId: "ts",
+    filePath: "src/api/client.ts",
+    highlightTheme: "vscode-dark",
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>
@@ -108,6 +134,9 @@ export const ThreeWay: Story = {
     baseText: BASE_TEXT,
     leftText: LEFT_TEXT,
     rightText: RIGHT_TEXT,
+    languageId: "ts",
+    filePath: "src/api/client.ts",
+    highlightTheme: "vscode-dark",
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>
@@ -121,10 +150,67 @@ export const Empty: Story = {
     mode: "two-way",
     baseText: "",
     compareText: "",
+    highlightTheme: "vscode-dark",
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>
       <GitDiffView {...args} />
+    </div>
+  ),
+};
+
+export const JsonHighlight: Story = {
+  args: {
+    mode: "two-way",
+    baseText: `{\n  \"name\": \"parallel-cli-runner\",\n  \"private\": true,\n  \"version\": \"0.1.0\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"storybook\": \"storybook dev -p 6006\"\n  }\n}\n`,
+    compareText: `{\n  \"name\": \"parallel-cli-runner\",\n  \"private\": true,\n  \"version\": \"0.2.0\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"storybook\": \"storybook dev -p 6006\",\n    \"build\": \"tsc && vite build\"\n  }\n}\n`,
+    languageId: "json",
+    filePath: "package.json",
+    highlightTheme: "vscode-dark",
+  },
+  render: (args) => (
+    <div style={{ height: "100vh", padding: "24px" }}>
+      <GitDiffView {...args} />
+    </div>
+  ),
+};
+
+export const ThemeGallery: Story = {
+  args: {
+    mode: "two-way",
+    baseText: BASE_TEXT,
+    compareText: COMPARE_TEXT,
+    languageId: "ts",
+    filePath: "src/api/client.ts",
+  },
+  render: (args) => (
+    <div
+      style={{
+        height: "100vh",
+        padding: "24px",
+        display: "grid",
+        gap: "16px",
+        gridTemplateRows: "repeat(3, minmax(0, 1fr))",
+      }}
+    >
+      <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "8px" }}>
+        <div style={{ color: "#9aa3b2", fontSize: "12px", letterSpacing: "0.08em" }}>
+          VS Code Dark+
+        </div>
+        <GitDiffView {...args} highlightTheme="vscode-dark" />
+      </div>
+      <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "8px" }}>
+        <div style={{ color: "#9aa3b2", fontSize: "12px", letterSpacing: "0.08em" }}>
+          Monokai
+        </div>
+        <GitDiffView {...args} highlightTheme="monokai" />
+      </div>
+      <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: "8px" }}>
+        <div style={{ color: "#9aa3b2", fontSize: "12px", letterSpacing: "0.08em" }}>
+          Dracula
+        </div>
+        <GitDiffView {...args} highlightTheme="dracula" />
+      </div>
     </div>
   ),
 };

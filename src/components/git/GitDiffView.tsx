@@ -2,7 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { MergeView, unifiedMergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
+import { python } from "@codemirror/lang-python";
+import { rust } from "@codemirror/lang-rust";
+import { css } from "@codemirror/lang-css";
+import { html } from "@codemirror/lang-html";
+import { yaml } from "@codemirror/lang-yaml";
+import { cpp } from "@codemirror/lang-cpp";
+import { go } from "@codemirror/lang-go";
+import { java } from "@codemirror/lang-java";
 import "./GitDiffView.css";
+
+export type HighlightTheme = "vscode-dark" | "monokai" | "dracula";
 
 export type GitDiffViewProps = {
   mode?: "two-way" | "three-way";
@@ -10,14 +25,170 @@ export type GitDiffViewProps = {
   compareText?: string;
   leftText?: string;
   rightText?: string;
+  languageId?: string;
+  filePath?: string;
+  highlightTheme?: HighlightTheme;
   className?: string;
 };
 
 const EMPTY_STATE = "Select revisions to compare.";
 
-const READONLY_EXTENSIONS = [EditorView.editable.of(false), EditorState.readOnly.of(true)];
+const HIGHLIGHT_THEMES: Record<HighlightTheme, {
+  comment: string;
+  keyword: string;
+  string: string;
+  number: string;
+  type: string;
+  function: string;
+  variable: string | null;
+  constant: string;
+}> = {
+  "vscode-dark": {
+    comment: "#6A9955",
+    keyword: "#C586C0",
+    string: "#CE9178",
+    number: "#B5CEA8",
+    type: "#4EC9B0",
+    function: "#DCDCAA",
+    variable: "#9CDCFE",
+    constant: "#569CD6",
+  },
+  monokai: {
+    comment: "#75715e",
+    keyword: "#66d9ef",
+    string: "#e6db74",
+    number: "#ae81ff",
+    type: "#a6e22e",
+    function: "#a6e22e",
+    variable: "#f8f8f2",
+    constant: "#66d9ef",
+  },
+  dracula: {
+    comment: "#6272A4",
+    keyword: "#FF79C6",
+    string: "#F1FA8C",
+    number: "#BD93F9",
+    type: "#8BE9FD",
+    function: "#50FA7B",
+    variable: null,
+    constant: "#BD93F9",
+  },
+};
 
-function useMergeView(docA: string, docB: string, active: boolean) {
+function buildHighlightStyle(theme: HighlightTheme) {
+  const tokens = HIGHLIGHT_THEMES[theme];
+  const styles = [
+    { tag: tags.comment, color: tokens.comment },
+    { tag: tags.keyword, color: tokens.keyword },
+    { tag: tags.controlKeyword, color: tokens.keyword },
+    { tag: tags.controlOperator, color: tokens.keyword },
+    { tag: tags.string, color: tokens.string },
+    { tag: tags.special(tags.string), color: tokens.string },
+    { tag: tags.number, color: tokens.number },
+    { tag: tags.typeName, color: tokens.type },
+    { tag: tags.className, color: tokens.type },
+    { tag: tags.function(tags.variableName), color: tokens.function },
+    { tag: tags.function(tags.propertyName), color: tokens.function },
+    { tag: tags.constant(tags.name), color: tokens.constant },
+    { tag: tags.constant(tags.variableName), color: tokens.constant },
+    { tag: tags.bool, color: tokens.constant },
+    { tag: tags.null, color: tokens.constant },
+    { tag: tags.atom, color: tokens.constant },
+  ];
+
+  if (tokens.variable) {
+    styles.push({ tag: tags.variableName, color: tokens.variable });
+  }
+
+  return HighlightStyle.define(styles);
+}
+
+const highlightStyles: Record<HighlightTheme, HighlightStyle> = {
+  "vscode-dark": buildHighlightStyle("vscode-dark"),
+  monokai: buildHighlightStyle("monokai"),
+  dracula: buildHighlightStyle("dracula"),
+};
+
+function readOnlyExtensions(highlightTheme: HighlightTheme) {
+  return [
+    EditorView.editable.of(false),
+    EditorState.readOnly.of(true),
+    syntaxHighlighting(highlightStyles[highlightTheme]),
+  ];
+}
+const FILE_EXTENSIONS: Record<string, string> = {
+  ts: "ts",
+  tsx: "tsx",
+  js: "js",
+  jsx: "jsx",
+  json: "json",
+  md: "md",
+  markdown: "md",
+  py: "py",
+  python: "py",
+  rs: "rs",
+  rust: "rs",
+  css: "css",
+  html: "html",
+  yml: "yaml",
+  yaml: "yaml",
+  c: "c",
+  cc: "cpp",
+  cxx: "cpp",
+  cpp: "cpp",
+  go: "go",
+  java: "java",
+};
+
+function resolveLanguageId(languageId?: string, filePath?: string) {
+  if (languageId) {
+    return FILE_EXTENSIONS[languageId.toLowerCase()] ?? languageId.toLowerCase();
+  }
+  const extension = filePath?.split(".").pop()?.toLowerCase();
+  return extension ? FILE_EXTENSIONS[extension] ?? extension : undefined;
+}
+
+function languageExtension(languageId?: string, filePath?: string) {
+  const resolved = resolveLanguageId(languageId, filePath);
+  switch (resolved) {
+    case "ts":
+    case "tsx":
+    case "js":
+    case "jsx":
+      return javascript({ typescript: resolved.startsWith("t") });
+    case "json":
+      return json();
+    case "md":
+      return markdown();
+    case "py":
+      return python();
+    case "rs":
+      return rust();
+    case "css":
+      return css();
+    case "html":
+      return html();
+    case "yaml":
+      return yaml();
+    case "cpp":
+    case "c":
+      return cpp();
+    case "go":
+      return go();
+    case "java":
+      return java();
+    default:
+      return null;
+  }
+}
+
+function useMergeView(
+  docA: string,
+  docB: string,
+  active: boolean,
+  baseExtensions: readonly unknown[],
+  extraExtensions: readonly unknown[]
+) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const viewRef = useRef<MergeView | null>(null);
 
@@ -36,8 +207,8 @@ function useMergeView(docA: string, docB: string, active: boolean) {
     }
 
     viewRef.current = new MergeView({
-      a: { doc: docA, extensions: READONLY_EXTENSIONS },
-      b: { doc: docB, extensions: READONLY_EXTENSIONS },
+      a: { doc: docA, extensions: [...baseExtensions, ...extraExtensions] },
+      b: { doc: docB, extensions: [...baseExtensions, ...extraExtensions] },
       parent: container,
       highlightChanges: true,
       gutter: true,
@@ -49,12 +220,19 @@ function useMergeView(docA: string, docB: string, active: boolean) {
         viewRef.current = null;
       }
     };
-  }, [active, container, docA, docB]);
+  }, [active, container, docA, docB, baseExtensions, extraExtensions]);
 
   return setContainer;
 }
 
-function useUnifiedView(doc: string, original: string, active: boolean, showChanges: boolean) {
+function useUnifiedView(
+  doc: string,
+  original: string,
+  active: boolean,
+  showChanges: boolean,
+  baseExtensions: readonly unknown[],
+  extraExtensions: readonly unknown[]
+) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
 
@@ -72,20 +250,23 @@ function useUnifiedView(doc: string, original: string, active: boolean, showChan
       viewRef.current = null;
     }
 
-    const extensions = showChanges
-      ? [
-          unifiedMergeView({
-            original,
-            gutter: true,
-            highlightChanges: true,
-            mergeControls: false,
-          }),
-        ]
-      : [];
+    const extensions = [
+      ...extraExtensions,
+      ...(showChanges
+        ? [
+            unifiedMergeView({
+              original,
+              gutter: true,
+              highlightChanges: true,
+              mergeControls: false,
+            }),
+          ]
+        : []),
+    ];
 
     const state = EditorState.create({
       doc,
-      extensions: [...READONLY_EXTENSIONS, ...extensions],
+      extensions: [...baseExtensions, ...extensions],
     });
 
     viewRef.current = new EditorView({
@@ -99,7 +280,7 @@ function useUnifiedView(doc: string, original: string, active: boolean, showChan
         viewRef.current = null;
       }
     };
-  }, [active, container, doc, original, showChanges]);
+  }, [active, container, doc, original, showChanges, baseExtensions, extraExtensions]);
 
   return setContainer;
 }
@@ -110,6 +291,9 @@ export function GitDiffView({
   compareText,
   leftText,
   rightText,
+  languageId,
+  filePath,
+  highlightTheme = "vscode-dark",
   className,
 }: GitDiffViewProps) {
   const showTwoWay = mode === "two-way";
@@ -124,10 +308,35 @@ export function GitDiffView({
   const hasThreeWay =
     baseDoc.trim().length > 0 || leftDoc.trim().length > 0 || rightDoc.trim().length > 0;
 
-  const twoWayRef = useMergeView(baseDoc, compareDoc, showTwoWay);
-  const leftRef = useUnifiedView(leftDoc, baseDoc, showThreeWay, true);
-  const baseRef = useUnifiedView(baseDoc, baseDoc, showThreeWay, false);
-  const rightRef = useUnifiedView(rightDoc, baseDoc, showThreeWay, true);
+  const langExtension = languageExtension(languageId, filePath);
+  const extraExtensions = langExtension ? [langExtension] : [];
+  const baseExtensions = readOnlyExtensions(highlightTheme);
+
+  const twoWayRef = useMergeView(baseDoc, compareDoc, showTwoWay, baseExtensions, extraExtensions);
+  const leftRef = useUnifiedView(
+    leftDoc,
+    baseDoc,
+    showThreeWay,
+    true,
+    baseExtensions,
+    extraExtensions
+  );
+  const baseRef = useUnifiedView(
+    baseDoc,
+    baseDoc,
+    showThreeWay,
+    false,
+    baseExtensions,
+    extraExtensions
+  );
+  const rightRef = useUnifiedView(
+    rightDoc,
+    baseDoc,
+    showThreeWay,
+    true,
+    baseExtensions,
+    extraExtensions
+  );
 
   const containerClassName = className
     ? `git-diff-view ${className}`
