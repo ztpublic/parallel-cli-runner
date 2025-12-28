@@ -357,10 +357,15 @@ function buildConnectorPaths(
   y2Top: number,
   y2Bottom: number
 ): string[] {
-  const curve = Math.max(8, Math.min(22, Math.abs(x2 - x1) * 0.12));
+  const distance = Math.abs(x2 - x1);
+  const direction = x2 >= x1 ? 1 : -1;
+  const maxCurve = Math.min(22, distance / 2);
+  const curve = Math.min(Math.max(8, distance * 0.35), maxCurve);
+  const c1x = x1 + direction * curve;
+  const c2x = x2 - direction * curve;
   return [
-    `M ${x1} ${y1Top} C ${x1 + curve} ${y1Top}, ${x2 - curve} ${y2Top}, ${x2} ${y2Top}`,
-    `M ${x1} ${y1Bottom} C ${x1 + curve} ${y1Bottom}, ${x2 - curve} ${y2Bottom}, ${x2} ${y2Bottom}`,
+    `M ${x1} ${y1Top} C ${c1x} ${y1Top}, ${c2x} ${y2Top}, ${x2} ${y2Top}`,
+    `M ${x1} ${y1Bottom} C ${c1x} ${y1Bottom}, ${c2x} ${y2Bottom}, ${x2} ${y2Bottom}`,
   ];
 }
 
@@ -519,15 +524,13 @@ export function GitDiffView({
         const baseRect = baseView.dom.getBoundingClientRect();
         const rightRect = rightView.dom.getBoundingClientRect();
 
-        const leftStartX = leftRect.right - overlayRect.left - 6;
-        const rightStartX = rightRect.left - overlayRect.left + 6;
-        const baseLeftX = baseRect.left - overlayRect.left + 6;
-        const baseRightX = baseRect.right - overlayRect.left - 6;
-        const scrollOffsets = new Map<EditorView, number>([
-          [leftView, leftView.scrollDOM.scrollTop],
-          [baseView, baseView.scrollDOM.scrollTop],
-          [rightView, rightView.scrollDOM.scrollTop],
-        ]);
+        const leftStartX = leftRect.right - overlayRect.left;
+        const rightStartX = rightRect.left - overlayRect.left;
+        const baseLeftX = baseRect.left - overlayRect.left;
+        const baseRightX = baseRect.right - overlayRect.left;
+        const leftDocTop = leftView.documentTop - overlayRect.top;
+        const baseDocTop = baseView.documentTop - overlayRect.top;
+        const rightDocTop = rightView.documentTop - overlayRect.top;
 
         const segments: ArrowSegment[] = [];
         const controls: ControlItem[] = [];
@@ -542,18 +545,10 @@ export function GitDiffView({
               paths: buildConnectorPaths(
                 leftStartX,
                 baseLeftX,
-                leftMetrics.top +
-                  (leftRect.top - overlayRect.top) -
-                  (scrollOffsets.get(leftView) ?? 0),
-                leftMetrics.bottom +
-                  (leftRect.top - overlayRect.top) -
-                  (scrollOffsets.get(leftView) ?? 0),
-                baseMetrics.top +
-                  (baseRect.top - overlayRect.top) -
-                  (scrollOffsets.get(baseView) ?? 0),
-                baseMetrics.bottom +
-                  (baseRect.top - overlayRect.top) -
-                  (scrollOffsets.get(baseView) ?? 0)
+                leftMetrics.top + leftDocTop,
+                leftMetrics.bottom + leftDocTop,
+                baseMetrics.top + baseDocTop,
+                baseMetrics.bottom + baseDocTop
               ),
             });
           }
@@ -567,27 +562,16 @@ export function GitDiffView({
               paths: buildConnectorPaths(
                 rightStartX,
                 baseRightX,
-                rightMetrics.top +
-                  (rightRect.top - overlayRect.top) -
-                  (scrollOffsets.get(rightView) ?? 0),
-                rightMetrics.bottom +
-                  (rightRect.top - overlayRect.top) -
-                  (scrollOffsets.get(rightView) ?? 0),
-                baseMetrics.top +
-                  (baseRect.top - overlayRect.top) -
-                  (scrollOffsets.get(baseView) ?? 0),
-                baseMetrics.bottom +
-                  (baseRect.top - overlayRect.top) -
-                  (scrollOffsets.get(baseView) ?? 0)
+                rightMetrics.top + rightDocTop,
+                rightMetrics.bottom + rightDocTop,
+                baseMetrics.top + baseDocTop,
+                baseMetrics.bottom + baseDocTop
               ),
             });
           }
 
           const baseMetrics = lineRangeMetrics(baseView, chunk.baseRange);
-          const baseCenter =
-            baseMetrics.center +
-            (baseRect.top - overlayRect.top) -
-            (scrollOffsets.get(baseView) ?? 0);
+          const baseCenter = baseMetrics.center + baseDocTop;
           controls.push({
             id: chunk.id,
             top: baseCenter,

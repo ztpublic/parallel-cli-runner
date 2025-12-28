@@ -121,7 +121,7 @@
 .git-diff-view__arrow {
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1;
   stroke-linecap: round;
 }
 
