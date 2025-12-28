@@ -27,6 +27,7 @@ export type TreeNode = {
   actions?: TreeNodeAction[];
   contextMenu?: TreeNodeContextMenuItem[];
   selectable?: boolean;
+  checkable?: boolean;
   defaultExpanded?: boolean;
   rightSlot?: ReactNode;
   variant?: "default" | "load-more";

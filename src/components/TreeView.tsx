@@ -13,6 +13,9 @@ type TreeViewProps = {
   selectionMode?: TreeSelectionMode;
   selectedIds?: string[];
   onSelectionChange?: (selectedIds: string[]) => void;
+  checkedIds?: string[];
+  onCheckChange?: (checkedIds: string[]) => void;
+  autoCheckChildren?: boolean;
   onNodeToggle?: (nodeId: string, expanded: boolean) => void;
   onNodeActivate?: (node: TreeNode) => void;
   onContextMenuSelect?: (node: TreeNode, itemId: string) => void;
@@ -27,6 +30,9 @@ export function TreeView({
   selectionMode = "none",
   selectedIds,
   onSelectionChange,
+  checkedIds,
+  onCheckChange,
+  autoCheckChildren = false,
   onNodeToggle,
   onNodeActivate,
   onContextMenuSelect,
@@ -36,7 +42,9 @@ export function TreeView({
   renderActions,
 }: TreeViewProps) {
   const isControlled = selectedIds !== undefined;
+  const isCheckedControlled = checkedIds !== undefined;
   const [internalSelectedIds, setInternalSelectedIds] = useState<string[]>([]);
+  const [internalCheckedIds, setInternalCheckedIds] = useState<string[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(() => {
     const expanded = new Set<string>();
     const walk = (items: TreeNode[]) => {
@@ -60,6 +68,49 @@ export function TreeView({
   } | null>(null);
 
   const resolvedSelectedIds = isControlled ? selectedIds ?? [] : internalSelectedIds;
+  const resolvedCheckedIds = isCheckedControlled ? checkedIds ?? [] : internalCheckedIds;
+
+  const setChecked = (nextChecked: string[]) => {
+    if (!isCheckedControlled) {
+      setInternalCheckedIds(nextChecked);
+    }
+    onCheckChange?.(nextChecked);
+  };
+
+  const getAllDescendantIds = (node: TreeNode): string[] => {
+    let ids: string[] = [];
+    if (node.checkable !== false) { // Assuming if checkable is undefined it defaults to false on the node but if we are walking we check children?
+      // Actually checkable property is on the node.
+      // If we are auto-checking, we usually want to check all checkable descendants.
+    }
+    if (node.children) {
+      node.children.forEach(child => {
+        if (child.checkable) {
+          ids.push(child.id);
+        }
+        ids = ids.concat(getAllDescendantIds(child));
+      });
+    }
+    return ids;
+  };
+
+  const handleCheck = (node: TreeNode, checked: boolean) => {
+    const nextChecked = new Set(resolvedCheckedIds);
+    
+    const updateSet = (id: string, isChecked: boolean) => {
+      if (isChecked) nextChecked.add(id);
+      else nextChecked.delete(id);
+    };
+
+    updateSet(node.id, checked);
+
+    if (autoCheckChildren && node.children) {
+      const descendants = getAllDescendantIds(node);
+      descendants.forEach(id => updateSet(id, checked));
+    }
+
+    setChecked(Array.from(nextChecked));
+  };
 
   const selectableNodeIds = useMemo(() => {
     const result: string[] = [];
@@ -241,6 +292,17 @@ export function TreeView({
           ) : (
             <span className="tree-toggle-placeholder" aria-hidden />
           )}
+
+          {node.checkable ? (
+            <input
+              type="checkbox"
+              className="tree-checkbox"
+              checked={resolvedCheckedIds.includes(node.id)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => handleCheck(node, e.target.checked)}
+              style={{ marginRight: "6px" }}
+            />
+          ) : null}
 
           {node.icon ? (
             <Icon name={node.icon} size={14} className="tree-node-icon" />
