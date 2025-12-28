@@ -4,6 +4,7 @@ import { useGitTabs } from "../hooks/git/useGitTabs";
 import { GitTabBar } from "./git/GitTabBar";
 import { GitBranches } from "./git/GitBranches";
 import { GitCommits } from "./git/GitCommits";
+import { GitRepos } from "./git/GitRepos";
 import { GitStaging } from "./git/GitStaging";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
@@ -14,11 +15,13 @@ import {
   RemoteItem,
   RepoBranchGroup,
   RepoGroup,
+  RepoHeader,
   WorktreeItem,
 } from "../types/git-ui";
 
 type GitPanelProps = {
   initialTabs?: GitTab[];
+  repos?: RepoHeader[];
   branchGroups?: RepoBranchGroup[];
   commitGroups?: RepoGroup<CommitItem>[];
   worktreeGroups?: RepoGroup<WorktreeItem>[];
@@ -50,9 +53,12 @@ type GitPanelProps = {
   onRevert?: (repoId: string, commitId: string) => void;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
+  onRemoveRepo?: (repoId: string) => void;
+  onActivateRepo?: (repoId: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
+  { id: "repos", label: "Repos", icon: "folder" },
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
   { id: "commit", label: "Changes", icon: "fileEdit" },
@@ -62,6 +68,7 @@ const defaultTabs: GitTab[] = [
 
 export function GitPanel({
   initialTabs,
+  repos = [],
   branchGroups = [],
   commitGroups = [],
   worktreeGroups = [],
@@ -93,6 +100,8 @@ export function GitPanel({
   onRevert,
   onCreateWorktree,
   onDeleteWorktree,
+  onRemoveRepo,
+  onActivateRepo,
 }: GitPanelProps) {
   const {
     tabs,
@@ -174,7 +183,16 @@ export function GitPanel({
       />
 
       <div className="git-panel-content">
-        {!repoRoot ? (
+        {activeTab === "repos" ? (
+          <GitRepos
+            repos={repos}
+            activeRepoId={repoRoot}
+            onActivateRepo={onActivateRepo}
+            onRemoveRepo={onRemoveRepo}
+          />
+        ) : null}
+
+        {activeTab !== "repos" && !repoRoot ? (
           <div className="git-empty">
             <Icon name="folder" size={22} />
             <button type="button" className="git-primary-button" onClick={onOpenFolder}>

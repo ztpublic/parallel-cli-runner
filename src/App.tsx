@@ -50,6 +50,7 @@ function App() {
     repos,
     setRepos,
     activeRepoId,
+    setActiveRepoId,
     activeStatus,
     statusByRepo,
     localBranchesByRepo,
@@ -245,6 +246,10 @@ function App() {
     setIsRepoPickerOpen(false);
   }, []);
 
+  const handleRemoveRepo = useCallback((repoId: string) => {
+    setRepos(repos.filter((r) => r.repo_id !== repoId));
+  }, [repos, setRepos]);
+
   const panes = useMemo(() => collectPanes(layout), [layout]);
 
   const repoHeaders = useMemo<RepoHeader[]>(
@@ -315,11 +320,14 @@ function App() {
         repoRoot={activeRepoId}
         loading={gitLoading}
         error={gitError}
+        repos={repoHeaders}
         branchGroups={branchGroups}
         commitGroups={commitGroups}
         worktreeGroups={worktreeGroups}
         remotes={activeRemotes}
         changedFiles={activeChangedFiles}
+        onRemoveRepo={handleRemoveRepo}
+        onActivateRepo={setActiveRepoId}
         onRefresh={() => {
           void runGitCommand("Refresh failed", "Failed to refresh git data.", () => refreshRepos());
         }}

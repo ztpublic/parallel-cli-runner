@@ -45,7 +45,7 @@ export type ChangedFile = {
   staged: boolean;
 };
 
-export type GitTabId = "branches" | "commits" | "commit" | "worktrees" | "remotes";
+export type GitTabId = "repos" | "branches" | "commits" | "commit" | "worktrees" | "remotes";
 
 export type GitTab = {
   id: GitTabId;
