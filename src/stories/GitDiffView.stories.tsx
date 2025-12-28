@@ -72,6 +72,30 @@ export function buildHeaders() {
 }
 `;
 
+const BASE_CONFLICT = `function pickColor(theme: string) {
+  if (theme === "dark") {
+    return "navy";
+  }
+  return "white";
+}
+`;
+
+const LEFT_CONFLICT = `function pickColor(theme: string) {
+  if (theme === "dark") {
+    return "midnightblue";
+  }
+  return "white";
+}
+`;
+
+const RIGHT_CONFLICT = `function pickColor(theme: string) {
+  if (theme === "dark") {
+    return "black";
+  }
+  return "ivory";
+}
+`;
+
 const meta = {
   title: "Components/GitDiffView",
   component: GitDiffView,
@@ -166,6 +190,23 @@ export const JsonHighlight: Story = {
     compareText: `{\n  \"name\": \"parallel-cli-runner\",\n  \"private\": true,\n  \"version\": \"0.2.0\",\n  \"scripts\": {\n    \"dev\": \"vite\",\n    \"storybook\": \"storybook dev -p 6006\",\n    \"build\": \"tsc && vite build\"\n  }\n}\n`,
     languageId: "json",
     filePath: "package.json",
+    highlightTheme: "vscode-dark",
+  },
+  render: (args) => (
+    <div style={{ height: "100vh", padding: "24px" }}>
+      <GitDiffView {...args} />
+    </div>
+  ),
+};
+
+export const ConflictExample: Story = {
+  args: {
+    mode: "three-way",
+    baseText: BASE_CONFLICT,
+    leftText: LEFT_CONFLICT,
+    rightText: RIGHT_CONFLICT,
+    languageId: "ts",
+    filePath: "src/theme.ts",
     highlightTheme: "vscode-dark",
   },
   render: (args) => (
