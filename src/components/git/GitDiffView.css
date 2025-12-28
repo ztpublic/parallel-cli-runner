@@ -137,6 +137,10 @@
   color: rgba(255, 132, 132, 0.85);
 }
 
+.git-diff-view__base-target {
+  background: rgba(255, 99, 124, 0.18);
+}
+
 .git-diff-view .cm-mergeView {
   height: 100%;
   overflow: auto;

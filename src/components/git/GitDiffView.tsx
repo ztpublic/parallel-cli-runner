@@ -1,7 +1,7 @@
 import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MergeView, unifiedMergeView } from "@codemirror/merge";
-import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorState, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
+import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { javascript } from "@codemirror/lang-javascript";
@@ -123,6 +123,25 @@ function readOnlyExtensions(highlightTheme: HighlightTheme) {
     syntaxHighlighting(highlightStyles[highlightTheme]),
   ];
 }
+
+const baseTargetEffect = StateEffect.define<DecorationSet>();
+const baseTargetField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(baseTargetEffect)) {
+        return effect.value;
+      }
+    }
+    if (tr.docChanged) {
+      return value.map(tr.changes);
+    }
+    return value;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 const FILE_EXTENSIONS: Record<string, string> = {
   ts: "ts",
   tsx: "tsx",
@@ -369,6 +388,30 @@ function buildConnectorPaths(
   ];
 }
 
+function buildBaseTargetDecorations(view: EditorView, chunks: MergeChunk[]): DecorationSet {
+  if (chunks.length === 0) {
+    return Decoration.none;
+  }
+
+  const builder = new RangeSetBuilder<Decoration>();
+  const maxLine = view.state.doc.lines;
+  const decoration = Decoration.line({ class: "git-diff-view__base-target" });
+
+  for (const chunk of chunks) {
+    if (!chunk.leftRange && !chunk.rightRange) {
+      continue;
+    }
+    const startLine = Math.max(1, Math.min(maxLine, chunk.baseRange.startLine + 1));
+    const endLine = Math.max(startLine, Math.min(maxLine, chunk.baseRange.endLine + 1));
+    for (let line = startLine; line <= endLine; line += 1) {
+      const lineInfo = view.state.doc.line(line);
+      builder.add(lineInfo.from, lineInfo.from, decoration);
+    }
+  }
+
+  return builder.finish();
+}
+
 export function GitDiffView({
   mode = "two-way",
   baseText,
@@ -420,6 +463,10 @@ export function GitDiffView({
     () => (langExtension ? [langExtension] : []),
     [langExtension]
   );
+  const baseTargetExtensions = useMemo(
+    () => [...extraExtensions, baseTargetField],
+    [extraExtensions]
+  );
   const baseExtensions = useMemo(
     () => readOnlyExtensions(highlightTheme),
     [highlightTheme]
@@ -450,7 +497,7 @@ export function GitDiffView({
     showThreeWay,
     false,
     baseExtensions,
-    extraExtensions,
+    baseTargetExtensions,
     baseViewRef,
     bumpLayout,
     baseContainerRef
@@ -475,6 +522,17 @@ export function GitDiffView({
   useEffect(() => {
     setBaseDocState(baseText ?? "");
   }, [baseText]);
+
+  useEffect(() => {
+    const baseView = baseViewRef.current;
+    if (!baseView) {
+      return;
+    }
+    const decorations = showThreeWay
+      ? buildBaseTargetDecorations(baseView, threeWayChunks)
+      : Decoration.none;
+    baseView.dispatch({ effects: baseTargetEffect.of(decorations) });
+  }, [showThreeWay, threeWayChunks, layoutTick]);
 
   useEffect(() => {
     setChunkActions((prev) => {
