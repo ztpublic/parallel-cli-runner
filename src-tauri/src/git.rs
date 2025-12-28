@@ -8,6 +8,7 @@ use serde::Serialize;
 use std::{
     collections::HashSet,
     fs,
+    io::BufRead,
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -1330,9 +1331,25 @@ fn get_file_diff_stats(repo: &Repository, path: &str, staged: bool) -> Result<Fi
     };
     
     let stats = diff.stats()?;
+    let mut insertions = stats.insertions() as i32;
+    let deletions = stats.deletions() as i32;
+
+    if !staged && insertions == 0 && deletions == 0 {
+        if let Some(delta) = diff.deltas().next() {
+            if delta.status() == git2::Delta::Untracked {
+                if let Some(workdir) = repo.workdir() {
+                    if let Ok(file) = fs::File::open(workdir.join(path)) {
+                        let reader = std::io::BufReader::new(file);
+                        insertions = reader.lines().count() as i32;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(FileStats {
-        insertions: stats.insertions() as i32,
-        deletions: stats.deletions() as i32,
+        insertions,
+        deletions,
     })
 }
 

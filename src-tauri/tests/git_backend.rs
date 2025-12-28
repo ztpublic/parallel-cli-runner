@@ -372,6 +372,33 @@ fn delete_current_branch_error() {
 }
 
 #[test]
+fn check_stats_for_added_files() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "new.txt", "line1\nline2\n");
+
+    let status = git::status(temp.path()).expect("status");
+    let file = status.modified_files.iter().find(|f| f.path == "new.txt").unwrap();
+    
+    // Untracked stats
+    if let Some(stats) = &file.unstaged_stats {
+        assert_eq!(stats.insertions, 2, "untracked file should have insertions");
+    } else {
+        panic!("untracked file should have stats");
+    }
+
+    git::stage_paths(temp.path(), &["new.txt".to_string()]).expect("stage");
+    let status = git::status(temp.path()).expect("status staged");
+    let file = status.modified_files.iter().find(|f| f.path == "new.txt").unwrap();
+
+    // Staged stats
+    if let Some(stats) = &file.staged_stats {
+        assert_eq!(stats.insertions, 2, "staged added file should have insertions");
+    } else {
+        panic!("staged added file should have stats");
+    }
+}
+
+#[test]
 fn pull_changes() {
     // Need a remote repo to pull from.
     // 1. Create remote repo (bare or not)
