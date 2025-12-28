@@ -195,7 +195,8 @@ function useMergeView(
   active: boolean,
   baseExtensions: readonly unknown[],
   extraExtensions: readonly unknown[],
-  viewRef: MutableRefObject<MergeView | null>
+  viewRef: MutableRefObject<MergeView | null>,
+  containerRef?: MutableRefObject<HTMLDivElement | null>
 ) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
@@ -229,7 +230,12 @@ function useMergeView(
     };
   }, [active, container, docA, docB, baseExtensions, extraExtensions, viewRef]);
 
-  return setContainer;
+  return (node: HTMLDivElement | null) => {
+    if (containerRef) {
+      containerRef.current = node;
+    }
+    setContainer(node);
+  };
 }
 
 function useUnifiedView(
@@ -240,7 +246,8 @@ function useUnifiedView(
   baseExtensions: readonly unknown[],
   extraExtensions: readonly unknown[],
   viewRef: MutableRefObject<EditorView | null>,
-  onReady?: () => void
+  onReady?: () => void,
+  containerRef?: MutableRefObject<HTMLDivElement | null>
 ) {
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
@@ -301,7 +308,12 @@ function useUnifiedView(
     onReady,
   ]);
 
-  return setContainer;
+  return (node: HTMLDivElement | null) => {
+    if (containerRef) {
+      containerRef.current = node;
+    }
+    setContainer(node);
+  };
 }
 
 type ArrowSegment = {
@@ -377,6 +389,9 @@ export function GitDiffView({
   const leftViewRef = useRef<EditorView | null>(null);
   const baseViewRef = useRef<EditorView | null>(null);
   const rightViewRef = useRef<EditorView | null>(null);
+  const leftContainerRef = useRef<HTMLDivElement | null>(null);
+  const baseContainerRef = useRef<HTMLDivElement | null>(null);
+  const rightContainerRef = useRef<HTMLDivElement | null>(null);
   const [arrowSegments, setArrowSegments] = useState<ArrowSegment[]>([]);
   const [controlItems, setControlItems] = useState<ControlItem[]>([]);
   const [chunkActions, setChunkActions] = useState<Record<string, MergeChunkAction>>({});
@@ -421,7 +436,8 @@ export function GitDiffView({
     baseExtensions,
     extraExtensions,
     leftViewRef,
-    bumpLayout
+    bumpLayout,
+    leftContainerRef
   );
   const baseRef = useUnifiedView(
     baseDoc,
@@ -431,7 +447,8 @@ export function GitDiffView({
     baseExtensions,
     extraExtensions,
     baseViewRef,
-    bumpLayout
+    bumpLayout,
+    baseContainerRef
   );
   const rightRef = useUnifiedView(
     rightDoc,
@@ -441,7 +458,8 @@ export function GitDiffView({
     baseExtensions,
     extraExtensions,
     rightViewRef,
-    bumpLayout
+    bumpLayout,
+    rightContainerRef
   );
 
   const threeWayChunks = useMemo<MergeChunk[]>(
@@ -505,6 +523,11 @@ export function GitDiffView({
         const rightStartX = rightRect.left - overlayRect.left + 6;
         const baseLeftX = baseRect.left - overlayRect.left + 6;
         const baseRightX = baseRect.right - overlayRect.left - 6;
+        const scrollOffsets = new Map<EditorView, number>([
+          [leftView, leftView.scrollDOM.scrollTop],
+          [baseView, baseView.scrollDOM.scrollTop],
+          [rightView, rightView.scrollDOM.scrollTop],
+        ]);
 
         const segments: ArrowSegment[] = [];
         const controls: ControlItem[] = [];
@@ -519,10 +542,18 @@ export function GitDiffView({
               paths: buildConnectorPaths(
                 leftStartX,
                 baseLeftX,
-                leftMetrics.top + (leftRect.top - overlayRect.top),
-                leftMetrics.bottom + (leftRect.top - overlayRect.top),
-                baseMetrics.top + (baseRect.top - overlayRect.top),
-                baseMetrics.bottom + (baseRect.top - overlayRect.top)
+                leftMetrics.top +
+                  (leftRect.top - overlayRect.top) -
+                  (scrollOffsets.get(leftView) ?? 0),
+                leftMetrics.bottom +
+                  (leftRect.top - overlayRect.top) -
+                  (scrollOffsets.get(leftView) ?? 0),
+                baseMetrics.top +
+                  (baseRect.top - overlayRect.top) -
+                  (scrollOffsets.get(baseView) ?? 0),
+                baseMetrics.bottom +
+                  (baseRect.top - overlayRect.top) -
+                  (scrollOffsets.get(baseView) ?? 0)
               ),
             });
           }
@@ -536,16 +567,27 @@ export function GitDiffView({
               paths: buildConnectorPaths(
                 rightStartX,
                 baseRightX,
-                rightMetrics.top + (rightRect.top - overlayRect.top),
-                rightMetrics.bottom + (rightRect.top - overlayRect.top),
-                baseMetrics.top + (baseRect.top - overlayRect.top),
-                baseMetrics.bottom + (baseRect.top - overlayRect.top)
+                rightMetrics.top +
+                  (rightRect.top - overlayRect.top) -
+                  (scrollOffsets.get(rightView) ?? 0),
+                rightMetrics.bottom +
+                  (rightRect.top - overlayRect.top) -
+                  (scrollOffsets.get(rightView) ?? 0),
+                baseMetrics.top +
+                  (baseRect.top - overlayRect.top) -
+                  (scrollOffsets.get(baseView) ?? 0),
+                baseMetrics.bottom +
+                  (baseRect.top - overlayRect.top) -
+                  (scrollOffsets.get(baseView) ?? 0)
               ),
             });
           }
 
           const baseMetrics = lineRangeMetrics(baseView, chunk.baseRange);
-          const baseCenter = baseMetrics.center + (baseRect.top - overlayRect.top);
+          const baseCenter =
+            baseMetrics.center +
+            (baseRect.top - overlayRect.top) -
+            (scrollOffsets.get(baseView) ?? 0);
           controls.push({
             id: chunk.id,
             top: baseCenter,
@@ -578,6 +620,15 @@ export function GitDiffView({
       });
     };
 
+    const scrollTargets = [
+      leftView.scrollDOM,
+      baseView.scrollDOM,
+      rightView.scrollDOM,
+      leftContainerRef.current,
+      baseContainerRef.current,
+      rightContainerRef.current,
+    ].filter((target): target is HTMLElement => Boolean(target));
+    scrollTargets.forEach((target) => target.addEventListener("scroll", measure, { passive: true }));
     window.addEventListener("resize", measure);
     measure();
 
@@ -585,6 +636,7 @@ export function GitDiffView({
       if (frame) {
         cancelAnimationFrame(frame);
       }
+      scrollTargets.forEach((target) => target.removeEventListener("scroll", measure));
       window.removeEventListener("resize", measure);
     };
   }, [showThreeWay, threeWayChunks, layoutTick]);
