@@ -19,7 +19,9 @@ import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
 import { SmartSwitchDialog } from "./components/dialogs/SmartSwitchDialog";
 import type { RepoInfoDto } from "./types/git";
 import type {
+  ChangedFile,
   CommitItem,
+  RemoteItem,
   RepoBranchGroup,
   RepoGroup,
   RepoHeader,
@@ -49,16 +51,13 @@ function App() {
   const {
     repos,
     setRepos,
-    activeRepoId,
-    setActiveRepoId,
-    activeStatus,
     statusByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
     commitsByRepo,
     worktreesByRepo,
-    activeRemotes,
-    activeChangedFiles,
+    remotesByRepo,
+    changedFilesByRepo,
     loading: gitLoading,
     error: gitError,
     refreshRepos,
@@ -174,11 +173,6 @@ function App() {
     }
   }, [refreshRepos]);
 
-  useEffect(() => {
-    if (!activeRepoId) return;
-    void refreshRepos(activeRepoId);
-  }, [activeRepoId, refreshRepos]);
-
   const handleOpenFolder = useCallback(
     async (path: string) => {
       setOpenedFolder(path);
@@ -290,16 +284,23 @@ function App() {
     [repoHeaders, worktreesByRepo]
   );
 
-  const activeRepoName = useMemo(() => {
-    if (!activeRepoId) return null;
-    const repo = repos.find((entry) => entry.repo_id === activeRepoId);
-    return repo?.name || repo?.root_path || null;
-  }, [activeRepoId, repos]);
+  const remoteGroups = useMemo<RepoGroup<RemoteItem>[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        items: remotesByRepo[repo.repoId] ?? [],
+      })),
+    [repoHeaders, remotesByRepo] // Fixed dependency
+  );
 
-  const branchLabel = useMemo(() => {
-    if (!activeRepoId && repos.length > 1) return "Multiple";
-    return activeStatus?.branch ?? "No repo";
-  }, [activeRepoId, activeStatus?.branch, repos.length]);
+  const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        items: changedFilesByRepo[repo.repoId] ?? [],
+      })),
+    [repoHeaders, changedFilesByRepo] // Fixed dependency
+  );
 
   const handleNewPane = useCallback(async () => {
     const nextIndex = panes.length + 1;
@@ -317,48 +318,41 @@ function App() {
       <div className="workspace" style={{ position: "relative" }}>
       <GitPanel
         width={sidebarWidth}
-        repoRoot={activeRepoId}
         loading={gitLoading}
         error={gitError}
         repos={repoHeaders}
         branchGroups={branchGroups}
         commitGroups={commitGroups}
         worktreeGroups={worktreeGroups}
-        remotes={activeRemotes}
-        changedFiles={activeChangedFiles}
+        remoteGroups={remoteGroups}
+        changedFileGroups={changedFileGroups}
         onRemoveRepo={handleRemoveRepo}
-        onActivateRepo={setActiveRepoId}
         onRefresh={() => {
           void runGitCommand("Refresh failed", "Failed to refresh git data.", () => refreshRepos());
         }}
-        onStageAll={() => {
-          if (!activeRepoId) return;
+        onStageAll={(repoId) => {
           void runGitCommand("Stage all failed", "Failed to stage all files.", () =>
-            stageAll(activeRepoId)
+            stageAll(repoId)
           );
         }}
-        onUnstageAll={() => {
-          if (!activeRepoId) return;
+        onUnstageAll={(repoId) => {
           void runGitCommand("Unstage all failed", "Failed to unstage all files.", () =>
-            unstageAll(activeRepoId)
+            unstageAll(repoId)
           );
         }}
-        onStageFile={(path) => {
-          if (!activeRepoId) return;
+        onStageFile={(repoId, path) => {
           void runGitCommand("Stage file failed", "Failed to stage file.", () =>
-            stageFiles(activeRepoId, [path])
+            stageFiles(repoId, [path])
           );
         }}
-        onUnstageFile={(path) => {
-          if (!activeRepoId) return;
+        onUnstageFile={(repoId, path) => {
           void runGitCommand("Unstage file failed", "Failed to unstage file.", () =>
-            unstageFiles(activeRepoId, [path])
+            unstageFiles(repoId, [path])
           );
         }}
-        onCommit={(message) => {
-          if (!activeRepoId) return;
+        onCommit={(repoId, message) => {
           void runGitCommand("Commit failed", "Failed to commit changes.", () =>
-            commit(activeRepoId, message)
+            commit(repoId, message)
           );
         }}
         onPull={(repoId) => {
@@ -429,10 +423,10 @@ function App() {
         />
       </div>
       <StatusBar
-        branch={branchLabel}
+        branch={repos.length > 1 ? "Multiple" : "Main"}
         openedFolder={openedFolder}
         repoCount={repos.length}
-        activeRepoName={activeRepoName}
+        activeRepoName={null}
         errors={0}
         warnings={3}
       />

@@ -1,33 +1,46 @@
 import { Icon } from "../Icons";
-import { ChangeStatus, ChangedFile } from "../../types/git-ui";
+import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
+import { useGitStaging } from "../../hooks/git/useGitStaging";
 
 type GitStagingProps = {
-  stagedFiles: ChangedFile[];
-  unstagedFiles: ChangedFile[];
-  commitMessage: string;
-  onCommitMessageChange: (message: string) => void;
-  onGenerateCommitMessage: () => void;
-  onStageAll: () => void;
-  onUnstageAll: () => void;
-  onStageFile: (path: string) => void;
-  onUnstageFile: (path: string) => void;
-  onCommit: () => void;
+  groups: RepoGroup<ChangedFile>[];
+  onCommit: (repoId: string, message: string) => void;
+  onStageAll: (repoId: string) => void;
+  onUnstageAll: (repoId: string) => void;
+  onStageFile: (repoId: string, path: string) => void;
+  onUnstageFile: (repoId: string, path: string) => void;
 };
 
-export function GitStaging({
-  stagedFiles,
-  unstagedFiles,
-  commitMessage,
-  onCommitMessageChange,
-  onGenerateCommitMessage,
+function GitRepoStagingItem({
+  group,
+  onCommit,
   onStageAll,
   onUnstageAll,
   onStageFile,
   onUnstageFile,
-  onCommit,
-}: GitStagingProps) {
+}: {
+  group: RepoGroup<ChangedFile>;
+  onCommit: (repoId: string, message: string) => void;
+  onStageAll: (repoId: string) => void;
+  onUnstageAll: (repoId: string) => void;
+  onStageFile: (repoId: string, path: string) => void;
+  onUnstageFile: (repoId: string, path: string) => void;
+}) {
+  const {
+    commitMessage,
+    setCommitMessage,
+    stagedFiles,
+    unstagedFiles,
+    generateCommitMessage,
+  } = useGitStaging(group.items);
+
   const commitDisabled = !commitMessage.trim() || stagedFiles.length === 0;
   const magicDisabled = stagedFiles.length === 0;
+
+  const handleCommit = () => {
+    onCommit(group.repo.repoId, commitMessage);
+    setCommitMessage(""); 
+  };
 
   const getStatusLabel = (status: ChangeStatus) => {
     switch (status) {
@@ -52,22 +65,26 @@ export function GitStaging({
   };
 
   return (
-    <div className="commit-panel">
+    <div className="commit-panel repo-commit-panel">
+      <div className="repo-header-small">
+        <Icon name="folder" size={14} />
+        <span>{group.repo.name}</span>
+      </div>
+      
       <div className="commit-message">
         <div className="commit-textarea-wrap">
           <textarea
-            id="commit-message"
             className="commit-textarea"
-            placeholder="Describe your changes..."
-            rows={4}
+            placeholder={`Commit to ${group.repo.name}...`}
+            rows={3}
             value={commitMessage}
-            onChange={(event) => onCommitMessageChange(event.target.value)}
+            onChange={(event) => setCommitMessage(event.target.value)}
             spellCheck={false}
           />
           <button
             type="button"
             className="commit-magic"
-            onClick={onGenerateCommitMessage}
+            onClick={generateCommitMessage}
             disabled={magicDisabled}
             title="Generate commit message"
           >
@@ -78,10 +95,10 @@ export function GitStaging({
           type="button"
           className="commit-button"
           disabled={commitDisabled}
-          onClick={onCommit}
+          onClick={handleCommit}
         >
           <Icon name="check" size={14} />
-          Commit Changes
+          Commit
         </button>
       </div>
 
@@ -91,7 +108,11 @@ export function GitStaging({
             <div className="commit-section-header">
               <div className="commit-section-title commit-section-title--staged">Staged</div>
               <div className="commit-section-count">{stagedFiles.length}</div>
-              <button type="button" className="commit-section-action" onClick={onUnstageAll}>
+              <button 
+                type="button" 
+                className="commit-section-action" 
+                onClick={() => onUnstageAll(group.repo.repoId)}
+              >
                 Unstage All
               </button>
             </div>
@@ -111,7 +132,7 @@ export function GitStaging({
                     type="button"
                     className="icon-button icon-button--tiny commit-file-action commit-file-action--unstage"
                     title="Unstage file"
-                    onClick={() => onUnstageFile(file.path)}
+                    onClick={() => onUnstageFile(group.repo.repoId, file.path)}
                   >
                     <Icon name="minus" size={12} />
                   </button>
@@ -126,7 +147,11 @@ export function GitStaging({
             <div className="commit-section-header">
               <div className="commit-section-title">Unstaged</div>
               <div className="commit-section-count">{unstagedFiles.length}</div>
-              <button type="button" className="commit-section-action" onClick={onStageAll}>
+              <button 
+                type="button" 
+                className="commit-section-action" 
+                onClick={() => onStageAll(group.repo.repoId)}
+              >
                 Stage All
               </button>
             </div>
@@ -146,7 +171,7 @@ export function GitStaging({
                     type="button"
                     className="icon-button icon-button--tiny commit-file-action commit-file-action--stage"
                     title="Stage file"
-                    onClick={() => onStageFile(file.path)}
+                    onClick={() => onStageFile(group.repo.repoId, file.path)}
                   >
                     <Icon name="plus" size={12} />
                   </button>
@@ -155,14 +180,28 @@ export function GitStaging({
             </div>
           </div>
         ) : null}
-
-        {!stagedFiles.length && !unstagedFiles.length ? (
-          <div className="commit-empty">
-            <Icon name="commit" size={22} />
-            <p>Working tree clean.</p>
-          </div>
-        ) : null}
       </div>
+    </div>
+  );
+}
+
+export function GitStaging({ groups, ...props }: GitStagingProps) {
+  const dirtyGroups = groups.filter(g => g.items.length > 0);
+
+  if (!dirtyGroups.length) {
+    return (
+      <div className="git-empty">
+        <Icon name="check" size={22} />
+        <p>All repositories clean.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="git-staging-list">
+      {dirtyGroups.map((group) => (
+        <GitRepoStagingItem key={group.repo.repoId} group={group} {...props} />
+      ))}
     </div>
   );
 }

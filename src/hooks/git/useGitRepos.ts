@@ -105,7 +105,6 @@ type RepoId = string;
 
 export function useGitRepos() {
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
-  const [activeRepoId, setActiveRepoId] = useState<RepoId | null>(null);
   const [statusByRepo, setStatusByRepo] = useState<Record<RepoId, RepoStatusDto | null>>({});
   
   // Store ALL fetched data
@@ -128,12 +127,6 @@ export function useGitRepos() {
 
   const setRepos = useCallback((nextRepos: RepoInfoDto[]) => {
     setReposState(nextRepos);
-    setActiveRepoId((current) => {
-      if (current && nextRepos.some((repo) => repo.repo_id === current)) {
-        return current;
-      }
-      return nextRepos[0]?.repo_id ?? null;
-    });
     
     // Cleanup removed repos from state
     const allowed = new Set(nextRepos.map((repo) => repo.repo_id));
@@ -319,13 +312,11 @@ export function useGitRepos() {
   }, [allRemoteBranchesByRepo, remoteBranchLimitByRepo]);
 
   const resolveRepo = useCallback(
-    (repoId?: RepoId) => {
-      const id = repoId ?? activeRepoId;
-      if (!id) return null;
-      const repo = repos.find((entry) => entry.repo_id === id) ?? null;
+    (repoId: RepoId) => {
+      const repo = repos.find((entry) => entry.repo_id === repoId) ?? null;
       return repo;
     },
-    [activeRepoId, repos]
+    [repos]
   );
 
   const stageFiles = useCallback(
@@ -556,19 +547,9 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo, worktreesByRepo]
   );
 
-  const activeStatus = activeRepoId ? statusByRepo[activeRepoId] ?? null : null;
-  const activeLocalBranches = activeRepoId ? localBranchesByRepo[activeRepoId] ?? [] : [];
-  const activeRemoteBranches = activeRepoId ? remoteBranchesByRepo[activeRepoId] ?? [] : [];
-  const activeCommits = activeRepoId ? commitsByRepo[activeRepoId] ?? [] : [];
-  const activeWorktrees = activeRepoId ? worktreesByRepo[activeRepoId] ?? [] : [];
-  const activeRemotes = activeRepoId ? remotesByRepo[activeRepoId] ?? [] : [];
-  const activeChangedFiles = activeRepoId ? changedFilesByRepo[activeRepoId] ?? [] : [];
-
   return {
     repos,
     setRepos,
-    activeRepoId,
-    setActiveRepoId,
     statusByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
@@ -576,13 +557,6 @@ export function useGitRepos() {
     worktreesByRepo,
     remotesByRepo,
     changedFilesByRepo,
-    activeStatus,
-    activeLocalBranches,
-    activeRemoteBranches,
-    activeCommits,
-    activeWorktrees,
-    activeRemotes,
-    activeChangedFiles,
     loading,
     error,
     refreshRepos,

@@ -1,5 +1,4 @@
 import { Icon } from "./Icons";
-import { useGitStaging } from "../hooks/git/useGitStaging";
 import { useGitTabs } from "../hooks/git/useGitTabs";
 import { GitTabBar } from "./git/GitTabBar";
 import { GitBranches } from "./git/GitBranches";
@@ -25,19 +24,18 @@ type GitPanelProps = {
   branchGroups?: RepoBranchGroup[];
   commitGroups?: RepoGroup<CommitItem>[];
   worktreeGroups?: RepoGroup<WorktreeItem>[];
-  remotes?: RemoteItem[];
-  changedFiles?: ChangedFile[];
+  changedFileGroups?: RepoGroup<ChangedFile>[];
+  remoteGroups?: RepoGroup<RemoteItem>[];
   width?: number;
-  repoRoot?: string | null;
   loading?: boolean;
   error?: string | null;
   onRefresh?: () => void;
-  onCommit?: (message: string) => void;
+  onCommit?: (repoId: string, message: string) => void;
   onPull?: (repoId: string) => void;
-  onStageAll?: () => void;
-  onUnstageAll?: () => void;
-  onStageFile?: (path: string) => void;
-  onUnstageFile?: (path: string) => void;
+  onStageAll?: (repoId: string) => void;
+  onUnstageAll?: (repoId: string) => void;
+  onStageFile?: (repoId: string, path: string) => void;
+  onUnstageFile?: (repoId: string, path: string) => void;
   onLoadMoreCommits?: (repoId: string) => void;
   onLoadMoreLocalBranches?: (repoId: string) => void;
   onLoadMoreRemoteBranches?: (repoId: string) => void;
@@ -72,10 +70,9 @@ export function GitPanel({
   branchGroups = [],
   commitGroups = [],
   worktreeGroups = [],
-  remotes = [],
-  changedFiles = [],
+  changedFileGroups = [],
+  remoteGroups = [],
   width,
-  repoRoot,
   loading = false,
   error,
   onRefresh,
@@ -116,39 +113,24 @@ export function GitPanel({
     handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
 
-  const {
-    commitMessage,
-    setCommitMessage,
-    stagedFiles,
-    unstagedFiles,
-    generateCommitMessage,
-  } = useGitStaging(changedFiles);
-
-  const canInteract = Boolean(repoRoot) && !loading;
-
-  const handleCommit = () => {
-    if (!canInteract || !onCommit) return;
-    onCommit(commitMessage);
+  const handleCommit = (repoId: string, message: string) => {
+    onCommit?.(repoId, message);
   };
 
-  const handleStageAll = () => {
-    if (!canInteract || !onStageAll) return;
-    onStageAll();
+  const handleStageAll = (repoId: string) => {
+    onStageAll?.(repoId);
   };
 
-  const handleUnstageAll = () => {
-    if (!canInteract || !onUnstageAll) return;
-    onUnstageAll();
+  const handleUnstageAll = (repoId: string) => {
+    onUnstageAll?.(repoId);
   };
 
-  const handleStageFile = (path: string) => {
-    if (!canInteract || !onStageFile) return;
-    onStageFile(path);
+  const handleStageFile = (repoId: string, path: string) => {
+    onStageFile?.(repoId, path);
   };
 
-  const handleUnstageFile = (path: string) => {
-    if (!canInteract || !onUnstageFile) return;
-    onUnstageFile(path);
+  const handleUnstageFile = (repoId: string, path: string) => {
+    onUnstageFile?.(repoId, path);
   };
 
   return (
@@ -186,22 +168,16 @@ export function GitPanel({
         {activeTab === "repos" ? (
           <GitRepos
             repos={repos}
-            activeRepoId={repoRoot}
+            // Active repo concept removed, pass null or maybe allow selection for highlighting?
+            // User requested to remove active repo concept. So we pass nothing or maybe pass selection state if managed here.
+            // For now pass null as activeRepoId.
+            activeRepoId={null} 
             onActivateRepo={onActivateRepo}
             onRemoveRepo={onRemoveRepo}
           />
         ) : null}
 
-        {activeTab !== "repos" && !repoRoot ? (
-          <div className="git-empty">
-            <Icon name="folder" size={22} />
-            <button type="button" className="git-primary-button" onClick={onOpenFolder}>
-              Open Folder
-            </button>
-          </div>
-        ) : null}
-
-        {repoRoot && error ? (
+        {error ? (
           <div className="git-empty">
             <Icon name="alert" size={22} />
             <p>{error}</p>
@@ -211,7 +187,15 @@ export function GitPanel({
           </div>
         ) : null}
 
-        {repoRoot && !error ? (
+        {!repos.length ? (
+           <div className="git-empty">
+            <Icon name="folder" size={22} />
+            <p>No repositories bound.</p>
+            <button type="button" className="git-primary-button" onClick={onOpenFolder}>
+              Open Folder
+            </button>
+          </div>
+        ) : (
           <>
             {activeTab === "branches" ? (
               <GitBranches
@@ -240,11 +224,7 @@ export function GitPanel({
 
             {activeTab === "commit" ? (
               <GitStaging
-                stagedFiles={stagedFiles}
-                unstagedFiles={unstagedFiles}
-                commitMessage={commitMessage}
-                onCommitMessageChange={setCommitMessage}
-                onGenerateCommitMessage={generateCommitMessage}
+                groups={changedFileGroups}
                 onStageAll={handleStageAll}
                 onUnstageAll={handleUnstageAll}
                 onStageFile={handleStageFile}
@@ -261,9 +241,9 @@ export function GitPanel({
               />
             ) : null}
 
-            {activeTab === "remotes" ? <GitRemotes remotes={remotes} /> : null}
+            {activeTab === "remotes" ? <GitRemotes remoteGroups={remoteGroups} /> : null}
           </>
-        ) : null}
+        )}
       </div>
     </aside>
   );

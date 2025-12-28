@@ -62,6 +62,8 @@ const betaWorktrees: WorktreeItem[] = [
   { branch: "feature/ops", path: "/home/user/projects/beta-worktrees/ops" },
 ];
 
+export const repoHeaders = [repoAlpha, repoBeta];
+
 export const initialBranchGroups: RepoBranchGroup[] = [
   {
     repo: repoAlpha,
@@ -93,6 +95,11 @@ export const initialRemotes: RemoteItem[] = [
   },
 ];
 
+export const initialRemoteGroups: RepoGroup<RemoteItem>[] = [
+  { repo: repoAlpha, items: initialRemotes },
+  { repo: repoBeta, items: [] },
+];
+
 export const initialTabs: GitTab[] = [
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
@@ -107,4 +114,9 @@ export const initialChangedFiles: ChangedFile[] = [
   { path: "src/components/TopBar.tsx", status: "added", staged: false },
   { path: "src/services/tauri.ts", status: "modified", staged: false },
   { path: "README.md", status: "deleted", staged: false },
+];
+
+export const initialChangedFileGroups: RepoGroup<ChangedFile>[] = [
+  { repo: repoAlpha, items: initialChangedFiles },
+  { repo: repoBeta, items: [] },
 ];
