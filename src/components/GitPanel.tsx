@@ -144,15 +144,25 @@ export function GitPanel({
           <Icon name="branch" size={16} />
           <span>Git Manager</span>
         </div>
-        <button
-          type="button"
-          className="icon-button icon-button--small"
-          title="Refresh"
-          onClick={onRefresh}
-          disabled={loading}
-        >
-          <Icon name="refresh" size={14} />
-        </button>
+        <div style={{ display: "flex", gap: "4px" }}>
+          <button
+            type="button"
+            className="icon-button icon-button--small"
+            title="Add Repository"
+            onClick={onOpenFolder}
+          >
+            <Icon name="plus" size={14} />
+          </button>
+          <button
+            type="button"
+            className="icon-button icon-button--small"
+            title="Refresh"
+            onClick={onRefresh}
+            disabled={loading}
+          >
+            <Icon name="refresh" size={14} />
+          </button>
+        </div>
       </div>
 
       <GitTabBar

@@ -4,8 +4,6 @@ import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
 import { useClosePaneHotkey } from "./hooks/useHotkeys";
 import { collectPanes } from "./types/layout";
-import { TopBar } from "./components/TopBar";
-import { StatusBar } from "./components/StatusBar";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
@@ -86,7 +84,6 @@ function App() {
   const { gitCommandError, clearGitCommandError, runGitCommand } =
     useGitCommandErrorDialog();
 
-  const [openedFolder, setOpenedFolder] = useState<string | null>(null);
   const [repoCandidates, setRepoCandidates] = useState<RepoInfoDto[]>([]);
   const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>([]);
   const [isRepoPickerOpen, setIsRepoPickerOpen] = useState(false);
@@ -176,7 +173,6 @@ function App() {
 
   const handleOpenFolder = useCallback(
     async (path: string) => {
-      setOpenedFolder(path);
       setRepoScanError(null);
       setIsScanning(true);
       try {
@@ -323,7 +319,6 @@ function App() {
 
   return (
     <main className="app-shell">
-      <TopBar onOpenFolder={handleOpenFolder} />
       <div className="workspace" style={{ position: "relative" }}>
       <GitPanel
         width={sidebarWidth}
@@ -433,13 +428,6 @@ function App() {
           onNewPane={() => void handleNewPane()}
         />
       </div>
-      <StatusBar
-        branch={repos.length > 1 ? "Multiple" : "Main"}
-        openedFolder={openedFolder}
-        repoCount={repos.length}
-        errors={0}
-        warnings={3}
-      />
       <ScanProgressModal open={isScanning} />
       <RepoPickerModal
         open={isRepoPickerOpen}
