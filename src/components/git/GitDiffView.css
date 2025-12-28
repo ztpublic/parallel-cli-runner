@@ -122,10 +122,7 @@
   fill: none;
   stroke: currentColor;
   stroke-width: 1.5;
-}
-
-.git-diff-view__arrows marker path {
-  fill: currentColor;
+  stroke-linecap: round;
 }
 
 .git-diff-view__arrow--left {

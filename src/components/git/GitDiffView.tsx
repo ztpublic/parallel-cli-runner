@@ -307,7 +307,7 @@ function useUnifiedView(
 type ArrowSegment = {
   id: string;
   side: "left" | "right";
-  path: string;
+  paths: string[];
   conflict: boolean;
 };
 
@@ -321,21 +321,35 @@ type ControlItem = {
   chunk: MergeChunk;
 };
 
-function lineRangeCenter(view: EditorView, range: LineRange): number {
+function lineRangeMetrics(view: EditorView, range: LineRange) {
   const startLine = Math.min(range.startLine + 1, view.state.doc.lines);
   const endLine = Math.min(range.endLine + 1, view.state.doc.lines);
   const start = view.state.doc.line(startLine);
   const end = view.state.doc.line(endLine);
   const startBlock = view.lineBlockAt(start.from);
   const endBlock = view.lineBlockAt(end.to);
-  return (startBlock.top + endBlock.top + endBlock.height) / 2;
+  const top = startBlock.top;
+  const bottom = endBlock.top + endBlock.height;
+  return {
+    top,
+    bottom,
+    center: (top + bottom) / 2,
+  };
 }
 
-function buildArrowPath(x1: number, y1: number, x2: number, y2: number): string {
-  const bend = Math.max(24, Math.min(80, Math.abs(x2 - x1) * 0.4));
-  const c1x = x1 + (x2 > x1 ? bend : -bend);
-  const c2x = x2 - (x2 > x1 ? bend : -bend);
-  return `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+function buildConnectorPaths(
+  x1: number,
+  x2: number,
+  y1Top: number,
+  y1Bottom: number,
+  y2Top: number,
+  y2Bottom: number
+): string[] {
+  const curve = Math.max(8, Math.min(22, Math.abs(x2 - x1) * 0.12));
+  return [
+    `M ${x1} ${y1Top} C ${x1 + curve} ${y1Top}, ${x2 - curve} ${y2Top}, ${x2} ${y2Top}`,
+    `M ${x1} ${y1Bottom} C ${x1 + curve} ${y1Bottom}, ${x2 - curve} ${y2Bottom}, ${x2} ${y2Bottom}`,
+  ];
 }
 
 export function GitDiffView({
@@ -496,32 +510,42 @@ export function GitDiffView({
         const controls: ControlItem[] = [];
         for (const chunk of threeWayChunks) {
           if (chunk.leftRange) {
-            const y1 =
-              lineRangeCenter(leftView, chunk.leftRange) + (leftRect.top - overlayRect.top);
-            const y2 =
-              lineRangeCenter(baseView, chunk.baseRange) + (baseRect.top - overlayRect.top);
+            const leftMetrics = lineRangeMetrics(leftView, chunk.leftRange);
+            const baseMetrics = lineRangeMetrics(baseView, chunk.baseRange);
             segments.push({
               id: `${chunk.id}-left`,
               side: "left",
               conflict: chunk.kind === "conflict",
-              path: buildArrowPath(leftStartX, y1, baseLeftX, y2),
+              paths: buildConnectorPaths(
+                leftStartX,
+                baseLeftX,
+                leftMetrics.top + (leftRect.top - overlayRect.top),
+                leftMetrics.bottom + (leftRect.top - overlayRect.top),
+                baseMetrics.top + (baseRect.top - overlayRect.top),
+                baseMetrics.bottom + (baseRect.top - overlayRect.top)
+              ),
             });
           }
           if (chunk.rightRange) {
-            const y1 =
-              lineRangeCenter(rightView, chunk.rightRange) + (rightRect.top - overlayRect.top);
-            const y2 =
-              lineRangeCenter(baseView, chunk.baseRange) + (baseRect.top - overlayRect.top);
+            const rightMetrics = lineRangeMetrics(rightView, chunk.rightRange);
+            const baseMetrics = lineRangeMetrics(baseView, chunk.baseRange);
             segments.push({
               id: `${chunk.id}-right`,
               side: "right",
               conflict: chunk.kind === "conflict",
-              path: buildArrowPath(rightStartX, y1, baseRightX, y2),
+              paths: buildConnectorPaths(
+                rightStartX,
+                baseRightX,
+                rightMetrics.top + (rightRect.top - overlayRect.top),
+                rightMetrics.bottom + (rightRect.top - overlayRect.top),
+                baseMetrics.top + (baseRect.top - overlayRect.top),
+                baseMetrics.bottom + (baseRect.top - overlayRect.top)
+              ),
             });
           }
 
-          const baseCenter =
-            lineRangeCenter(baseView, chunk.baseRange) + (baseRect.top - overlayRect.top);
+          const baseMetrics = lineRangeMetrics(baseView, chunk.baseRange);
+          const baseCenter = baseMetrics.center + (baseRect.top - overlayRect.top);
           controls.push({
             id: chunk.id,
             top: baseCenter,
@@ -533,7 +557,9 @@ export function GitDiffView({
           });
         }
 
-        const nextArrowKey = segments.map((segment) => `${segment.id}:${segment.path}`).join("|");
+        const nextArrowKey = segments
+          .map((segment) => `${segment.id}:${segment.paths.join(";")}`)
+          .join("|");
         if (nextArrowKey !== arrowKeyRef.current) {
           arrowKeyRef.current = nextArrowKey;
           setArrowSegments(segments);
@@ -670,42 +696,17 @@ export function GitDiffView({
           </div>
           <div ref={overlayRef} className="git-diff-view__overlay">
             <svg className="git-diff-view__arrows" aria-hidden="true">
-              <defs>
-                <marker
-                  id="git-diff-arrow-left"
-                  markerWidth="6"
-                  markerHeight="6"
-                  refX="5"
-                  refY="3"
-                  orient="auto"
-                >
-                  <path d="M0,0 L6,3 L0,6 Z" />
-                </marker>
-                <marker
-                  id="git-diff-arrow-right"
-                  markerWidth="6"
-                  markerHeight="6"
-                  refX="1"
-                  refY="3"
-                  orient="auto"
-                >
-                  <path d="M6,0 L0,3 L6,6 Z" />
-                </marker>
-              </defs>
-              {arrowSegments.map((segment) => (
-                <path
-                  key={segment.id}
-                  className={`git-diff-view__arrow git-diff-view__arrow--${segment.side} ${
-                    segment.conflict ? "git-diff-view__arrow--conflict" : ""
-                  }`}
-                  d={segment.path}
-                  markerEnd={
-                    segment.side === "left"
-                      ? "url(#git-diff-arrow-left)"
-                      : "url(#git-diff-arrow-right)"
-                  }
-                />
-              ))}
+              {arrowSegments.flatMap((segment) =>
+                segment.paths.map((path, index) => (
+                  <path
+                    key={`${segment.id}-${index}`}
+                    className={`git-diff-view__arrow git-diff-view__arrow--${segment.side} ${
+                      segment.conflict ? "git-diff-view__arrow--conflict" : ""
+                    }`}
+                    d={path}
+                  />
+                ))
+              )}
             </svg>
             <div className="git-diff-view__controls">
               {controlItems.map((item) => {
