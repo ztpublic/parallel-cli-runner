@@ -68,6 +68,11 @@ export function GitStaging({
 
       const children: TreeNode[] = [];
 
+      const formatDescription = (status: ChangeStatus) => {
+        // Placeholder for insertion/deletion stats since backend doesn't provide them yet
+        return status.charAt(0).toUpperCase() + status.slice(1);
+      };
+
       if (stagedFiles.length > 0) {
         children.push({
           id: `repo:${group.repo.repoId}:staged`,
@@ -79,9 +84,9 @@ export function GitStaging({
           actions: [{ id: "unstage-all", icon: "minus", label: "Unstage All" }],
           children: stagedFiles.map(file => ({
             id: `file:${group.repo.repoId}:${file.path}:staged`,
-            label: file.path, // TODO: truncated path?
+            label: file.path,
             icon: getStatusIcon(file.status),
-            description: file.status,
+            description: formatDescription(file.status),
             selectable: true,
             actions: [{ id: "unstage", icon: "minus", label: "Unstage" }],
           })),
@@ -101,7 +106,7 @@ export function GitStaging({
             id: `file:${group.repo.repoId}:${file.path}:unstaged`,
             label: file.path,
             icon: getStatusIcon(file.status),
-            description: file.status,
+            description: formatDescription(file.status),
             selectable: true,
             actions: [{ id: "stage", icon: "plus", label: "Stage" }],
           })),
