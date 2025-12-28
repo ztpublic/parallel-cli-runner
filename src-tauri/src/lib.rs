@@ -95,6 +95,12 @@ async fn git_pull(cwd: String) -> Result<(), CommandError> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_push(cwd: String, force: bool) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::push(&path, force).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_commit(
     cwd: String,
     message: String,
@@ -228,6 +234,7 @@ pub fn run() {
             git_list_worktrees,
             git_list_remotes,
             git_pull,
+            git_push,
             git_commit,
             git_stage_files,
             git_unstage_files,

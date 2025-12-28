@@ -60,6 +60,10 @@ export function gitPull(params: { cwd: string }): Promise<void> {
   return invoke("git_pull", params);
 }
 
+export function gitPush(params: { cwd: string; force: boolean }): Promise<void> {
+  return invoke("git_push", params);
+}
+
 export function gitCommit(params: {
   cwd: string;
   message: string;

@@ -65,6 +65,7 @@ function App() {
     unstageAll,
     commit,
     pull,
+    push,
     createBranch,
     deleteBranch,
     switchBranch,
@@ -364,6 +365,11 @@ function App() {
         onPull={(repoId) => {
           void runGitCommand("Pull failed", "Failed to pull changes.", () =>
             pull(repoId)
+          );
+        }}
+        onPush={(repoId, force) => {
+          void runGitCommand("Push failed", "Failed to push changes.", () =>
+            push(repoId, force)
           );
         }}
         onCreateBranch={(repoId, name, source) => {

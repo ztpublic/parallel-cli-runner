@@ -1428,12 +1428,8 @@ fn get_proxy_url() -> Option<(String, String)> {
     None
 }
 
-pub fn pull(cwd: &Path) -> Result<(), GitError> {
-    let mut cmd = Command::new("git");
-    cmd.arg("pull").current_dir(cwd);
-
+fn configure_proxy(cmd: &mut Command) -> Option<String> {
     let detected_proxy = get_proxy_url();
-
     if let Some((proxy_url, bypass)) = &detected_proxy {
         cmd.env("http_proxy", proxy_url);
         cmd.env("https_proxy", proxy_url);
@@ -1444,15 +1440,51 @@ pub fn pull(cwd: &Path) -> Result<(), GitError> {
             cmd.env("no_proxy", bypass);
             cmd.env("NO_PROXY", bypass);
         }
+        return Some(proxy_url.clone());
     }
+    None
+}
+
+pub fn pull(cwd: &Path) -> Result<(), GitError> {
+    let mut cmd = Command::new("git");
+    cmd.arg("pull").current_dir(cwd);
+
+    let proxy_url = configure_proxy(&mut cmd);
 
     let output = cmd.output().map_err(GitError::Io)?;
 
     if !output.status.success() {
         let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if let Some((proxy_url, _)) = detected_proxy {
+        if let Some(url) = proxy_url {
              use std::fmt::Write;
-             let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}", proxy_url);
+             let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}", url);
+        }
+
+        return Err(GitError::GitFailed {
+            code: output.status.code(),
+            stderr,
+        });
+    }
+    Ok(())
+}
+
+pub fn push(cwd: &Path, force: bool) -> Result<(), GitError> {
+    let mut cmd = Command::new("git");
+    cmd.arg("push").current_dir(cwd);
+    
+    if force {
+        cmd.arg("--force");
+    }
+
+    let proxy_url = configure_proxy(&mut cmd);
+
+    let output = cmd.output().map_err(GitError::Io)?;
+
+    if !output.status.success() {
+        let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if let Some(url) = proxy_url {
+             use std::fmt::Write;
+             let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}", url);
         }
 
         return Err(GitError::GitFailed {

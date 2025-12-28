@@ -34,6 +34,7 @@ type GitPanelProps = {
   onEnableRepos?: (repoIds: string[]) => void;
   onCommit?: (repoId: string, message: string) => void;
   onPull?: (repoId: string) => void;
+  onPush?: (repoId: string, force: boolean) => void;
   onStageAll?: (repoId: string) => void;
   onUnstageAll?: (repoId: string) => void;
   onStageFile?: (repoId: string, path: string) => void;
@@ -82,6 +83,7 @@ export function GitPanel({
   onEnableRepos,
   onCommit,
   onPull,
+  onPush,
   onStageAll,
   onUnstageAll,
   onStageFile,
@@ -224,6 +226,7 @@ export function GitPanel({
                 onSwitchBranch={onSwitchBranch}
                 onDeleteBranch={onDeleteBranch}
                 onPull={onPull}
+                onPush={onPush}
               />
             ) : null}
 

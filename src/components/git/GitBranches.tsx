@@ -3,6 +3,7 @@ import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateBranchDialog } from "../dialogs/CreateBranchDialog";
 import { DeleteBranchDialog } from "../dialogs/DeleteBranchDialog";
+import { ForcePushDialog } from "../dialogs/ForcePushDialog";
 import type { RepoBranchGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -16,6 +17,7 @@ type GitBranchesProps = {
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
   onPull?: (repoId: string) => void;
+  onPush?: (repoId: string, force: boolean) => void;
 };
 
 export function GitBranches({
@@ -28,6 +30,7 @@ export function GitBranches({
   onSwitchBranch,
   onDeleteBranch,
   onPull,
+  onPush,
 }: GitBranchesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -36,6 +39,12 @@ export function GitBranches({
   }>({ open: false, repoId: "" });
 
   const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    branchName: string;
+  }>({ open: false, repoId: "", branchName: "" });
+
+  const [forcePushDialog, setForcePushDialog] = useState<{
     open: boolean;
     repoId: string;
     branchName: string;
@@ -74,6 +83,16 @@ export function GitBranches({
         {
           id: "pull",
           label: "Pull",
+          disabled: !branch.current,
+        },
+        {
+          id: "push",
+          label: "Push",
+          disabled: !branch.current,
+        },
+        {
+          id: "force-push",
+          label: "Force Push",
           disabled: !branch.current,
         },
       ],
@@ -226,6 +245,19 @@ export function GitBranches({
         // but we verify it's the right node.
         onPull?.(repoId);
       }
+    } else if (itemId === "push") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        onPush?.(repoId, false);
+      }
+    } else if (itemId === "force-push") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        setForcePushDialog({ open: true, repoId, branchName });
+      }
     }
   };
 
@@ -260,6 +292,15 @@ export function GitBranches({
         onClose={() => setDeleteDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={() => {
           onDeleteBranch?.(deleteDialog.repoId, deleteDialog.branchName);
+        }}
+      />
+
+      <ForcePushDialog
+        open={forcePushDialog.open}
+        branchName={forcePushDialog.branchName}
+        onClose={() => setForcePushDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={() => {
+          onPush?.(forcePushDialog.repoId, true);
         }}
       />
     </div>
