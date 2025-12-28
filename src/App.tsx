@@ -255,8 +255,9 @@ function App() {
         repoId: repo.repo_id,
         name: repo.name || repo.root_path,
         path: repo.root_path,
+        activeBranch: statusByRepo[repo.repo_id]?.branch,
       })),
-    [repos]
+    [repos, statusByRepo]
   );
 
   const enabledRepoHeaders = useMemo<RepoHeader[]>(

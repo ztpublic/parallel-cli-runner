@@ -66,7 +66,9 @@ export function GitCommits({
     return {
       id: group.repo.repoId,
       label: group.repo.name,
-      description: group.repo.path,
+      description: group.repo.activeBranch
+        ? `${group.repo.activeBranch} • ${group.repo.path}`
+        : group.repo.path,
       icon: "folder",
       defaultExpanded: true,
       selectable: false,

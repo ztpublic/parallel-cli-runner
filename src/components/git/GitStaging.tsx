@@ -132,7 +132,9 @@ export function GitStaging({
       return {
         id: group.repo.repoId, // The repoId is the node ID for checking
         label: group.repo.name,
-        description: group.repo.path,
+        description: group.repo.activeBranch
+          ? `${group.repo.activeBranch} • ${group.repo.path}`
+          : group.repo.path,
         icon: "folder",
         checkable: true, // Only repo is checkable for multi-commit
         defaultExpanded: true,

@@ -12,6 +12,7 @@ export type RepoHeader = {
   repoId: string;
   name: string;
   path: string;
+  activeBranch?: string;
 };
 
 export type RepoGroup<T> = {
