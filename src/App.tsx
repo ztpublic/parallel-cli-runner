@@ -426,7 +426,6 @@ function App() {
         branch={repos.length > 1 ? "Multiple" : "Main"}
         openedFolder={openedFolder}
         repoCount={repos.length}
-        activeRepoName={null}
         errors={0}
         warnings={3}
       />
