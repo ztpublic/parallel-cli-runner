@@ -5,7 +5,7 @@ mod command_error;
 use crate::command_error::CommandError;
 
 pub mod git;
-use crate::git::{RepoInfoDto, RepoStatusDto};
+use crate::git::{DiffRequestDto, DiffResponseDto, RepoInfoDto, RepoStatusDto};
 mod pty;
 use crate::pty::PtyManager;
 
@@ -48,6 +48,11 @@ async fn git_status(cwd: String) -> Result<RepoStatusDto, CommandError> {
 async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, CommandError> {
     let path = PathBuf::from(cwd);
     git::diff(&path, &pathspecs).map_err(CommandError::from)
+}
+
+#[tauri::command]
+async fn git_unified_diff(req: DiffRequestDto) -> Result<DiffResponseDto, CommandError> {
+    git::get_unified_diff(req).map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -228,6 +233,7 @@ pub fn run() {
             git_scan_repos,
             git_status,
             git_diff,
+            git_unified_diff,
             git_list_branches,
             git_list_remote_branches,
             git_list_commits,

@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BranchInfoDto,
   CommitInfoDto,
+  DiffRequestDto,
+  DiffResponseDto,
   RemoteInfoDto,
   RepoInfoDto,
   RepoStatusDto,
@@ -157,4 +159,8 @@ export function gitDeleteBranch(params: {
   force: boolean;
 }): Promise<void> {
   return invoke("git_delete_branch", params);
+}
+
+export function gitUnifiedDiff(params: DiffRequestDto): Promise<DiffResponseDto> {
+  return invoke<DiffResponseDto>("git_unified_diff", params);
 }

@@ -1,0 +1,118 @@
+.git-diff-view {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: #14161a;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--text);
+}
+
+.git-diff-view__empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 240px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-muted);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+.git-diff-view__merge {
+  height: 100%;
+  overflow: auto;
+  border: 1px solid #262b33;
+  border-radius: 10px;
+  background: #0f1115;
+}
+
+.git-diff-view__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+  height: 100%;
+}
+
+.git-diff-view__grid--three {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.git-diff-view .cm-mergeView {
+  height: 100%;
+  overflow: auto;
+}
+
+.git-diff-view .cm-mergeViewEditors {
+  background: #0f1115;
+}
+
+.git-diff-view .cm-editor {
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: #0f1115;
+  color: #e3e7ef;
+}
+
+.git-diff-view .cm-content {
+  color: #e3e7ef;
+}
+
+.git-diff-view .cm-gutters {
+  background: #0b0d11;
+  color: #7b8493;
+  border-right: 1px solid #1f242c;
+}
+
+.git-diff-view .cm-lineNumbers .cm-gutterElement {
+  padding: 0 10px 0 8px;
+}
+
+.git-diff-view .cm-selectionBackground {
+  background: rgba(72, 105, 180, 0.35) !important;
+}
+
+.git-diff-view .cm-focused .cm-cursor {
+  border-left-color: #b0c6ff;
+}
+
+.git-diff-view .cm-mergeView .cm-changedLine {
+  background: rgba(86, 148, 255, 0.16);
+}
+
+.git-diff-view .cm-mergeView .cm-deletedLine {
+  background: rgba(255, 99, 124, 0.18);
+}
+
+.git-diff-view .cm-mergeView .cm-insertedLine {
+  background: rgba(68, 201, 138, 0.18);
+}
+
+.git-diff-view .cm-mergeView .cm-deletedChunk,
+.git-diff-view .cm-mergeView .cm-insertedChunk {
+  background: rgba(10, 12, 16, 0.9);
+}
+
+.git-diff-view .cm-mergeView .cm-changeGutter,
+.git-diff-view .cm-mergeView .cm-changeGutterElement {
+  background: #0b0d11;
+}
+
+.git-diff-view .cm-mergeView .cm-changeGutterElement {
+  border-right: 1px solid #1f242c;
+}
+
+.git-diff-view .cm-mergeView .cm-changeGutter .cm-changeMarker {
+  background: #4b7bff;
+}
+
+.git-diff-view .cm-mergeViewEditors {
+  height: 100%;
+}
+
+.git-diff-view .cm-mergeViewEditor {
+  height: 100%;
+}

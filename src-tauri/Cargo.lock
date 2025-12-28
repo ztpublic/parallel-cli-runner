@@ -2642,6 +2642,7 @@ dependencies = [
  "portable-pty",
  "serde",
  "serde_json",
+ "sha2",
  "sysproxy",
  "tauri",
  "tauri-build",

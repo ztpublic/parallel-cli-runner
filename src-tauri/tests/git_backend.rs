@@ -29,6 +29,10 @@ fn init_repo_at(path: &Path) -> Repository {
     Repository::init(path).expect("init repo")
 }
 
+fn commit_all(repo_root: &Path, message: &str) {
+    git::commit(repo_root, message, true, false).expect("commit")
+}
+
 #[test]
 fn detect_repo_from_subdir() {
     let (temp, _repo) = init_repo();
@@ -283,6 +287,128 @@ fn merge_conflict_error() {
     // Merge feature into master should conflict
     let result = git::merge_into_branch(temp.path(), "master", "feature/conflict");
     assert!(result.is_err(), "expected merge conflict error");
+}
+
+#[test]
+fn unified_diff_worktree_head_is_stable() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "hello.txt", "one\n");
+    commit_all(temp.path(), "Initial commit");
+
+    write_file(temp.path(), "hello.txt", "one\ntwo\n");
+
+    let req = git::DiffRequestDto {
+        repo_path: temp.path().to_string_lossy().to_string(),
+        compare_kind: git::DiffCompareKind::WorktreeHead,
+        left: None,
+        right: None,
+        paths: None,
+        options: Some(git::DiffRequestOptionsDto {
+            context_lines: Some(3),
+            show_binary: Some(true),
+            include_untracked: Some(true),
+        }),
+    };
+
+    let first = git::get_unified_diff(req.clone()).expect("diff");
+    let second = git::get_unified_diff(req).expect("diff again");
+
+    assert!(!first.diff_text.is_empty());
+    assert!(first.diff_text.contains("hello.txt"));
+    assert_eq!(first.diff_hash, second.diff_hash);
+    assert_eq!(first.meta.context_lines, 3);
+    assert_eq!(first.meta.compare_kind, git::DiffCompareKind::WorktreeHead);
+    assert!(first
+        .meta
+        .file_summaries
+        .iter()
+        .any(|summary| summary.path == "hello.txt"));
+}
+
+#[test]
+fn unified_diff_ref_ref_matches_commits() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "note.txt", "one\n");
+    commit_all(temp.path(), "Commit one");
+    let left = repo.head().unwrap().target().unwrap().to_string();
+
+    write_file(temp.path(), "note.txt", "two\n");
+    commit_all(temp.path(), "Commit two");
+    let right = repo.head().unwrap().target().unwrap().to_string();
+
+    let req = git::DiffRequestDto {
+        repo_path: temp.path().to_string_lossy().to_string(),
+        compare_kind: git::DiffCompareKind::RefRef,
+        left: Some(left),
+        right: Some(right),
+        paths: None,
+        options: None,
+    };
+
+    let response = git::get_unified_diff(req).expect("ref diff");
+    assert!(!response.diff_text.is_empty());
+    assert!(response.diff_text.contains("note.txt"));
+    assert!(response.diff_text.contains("one"));
+    assert!(response.diff_text.contains("two"));
+}
+
+#[test]
+fn unified_diff_pathspec_scopes_files() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "one.txt", "one\n");
+    write_file(temp.path(), "two.txt", "two\n");
+    commit_all(temp.path(), "Initial commit");
+
+    write_file(temp.path(), "one.txt", "one updated\n");
+    write_file(temp.path(), "two.txt", "two updated\n");
+
+    let req = git::DiffRequestDto {
+        repo_path: temp.path().to_string_lossy().to_string(),
+        compare_kind: git::DiffCompareKind::WorktreeHead,
+        left: None,
+        right: None,
+        paths: Some(vec!["one.txt".to_string()]),
+        options: None,
+    };
+
+    let response = git::get_unified_diff(req).expect("scoped diff");
+    assert!(response.diff_text.contains("one.txt"));
+    assert!(!response.diff_text.contains("two.txt"));
+}
+
+#[test]
+fn unified_diff_reports_conflicts() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "conflict.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    git::create_branch(temp.path(), "feature/conflict", None).expect("create branch");
+
+    write_file(temp.path(), "conflict.txt", "master change\n");
+    commit_all(temp.path(), "Master change");
+
+    git::checkout_local_branch(temp.path(), "feature/conflict").expect("checkout feature");
+    write_file(temp.path(), "conflict.txt", "feature change\n");
+    commit_all(temp.path(), "Feature change");
+
+    git::checkout_local_branch(temp.path(), "master").expect("checkout master");
+    let _ = git::merge_into_branch(temp.path(), "master", "feature/conflict");
+
+    let req = git::DiffRequestDto {
+        repo_path: temp.path().to_string_lossy().to_string(),
+        compare_kind: git::DiffCompareKind::IndexHead,
+        left: None,
+        right: None,
+        paths: None,
+        options: None,
+    };
+
+    let response = git::get_unified_diff(req).expect("conflict diff");
+    assert!(response
+        .meta
+        .conflicted_paths
+        .iter()
+        .any(|path| path == "conflict.txt"));
 }
 
 #[test]

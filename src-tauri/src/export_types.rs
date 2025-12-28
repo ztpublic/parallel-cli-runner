@@ -1,8 +1,9 @@
 #[cfg(test)]
 mod tests {
     use crate::git::{
-        BranchInfoDto, CommitInfoDto, DiffStatDto, FileChangeType, FileStatusDto, RemoteInfoDto,
-        RepoInfoDto, RepoStatusDto, WorktreeInfoDto,
+        BranchInfoDto, CommitInfoDto, DiffCompareKind, DiffDeltaStatus, DiffFileSummaryDto,
+        DiffMetaDto, DiffRequestDto, DiffRequestOptionsDto, DiffResponseDto, DiffStatDto,
+        FileChangeType, FileStatusDto, RemoteInfoDto, RepoInfoDto, RepoStatusDto, WorktreeInfoDto,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -29,6 +30,20 @@ mod tests {
         git_ts.push_str(&RepoStatusDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");
         git_ts.push_str(&DiffStatDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffCompareKind::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffDeltaStatus::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffRequestOptionsDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffRequestDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffFileSummaryDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffMetaDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&DiffResponseDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");
         git_ts.push_str(&BranchInfoDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");

@@ -2,8 +2,6 @@
 
 export type FileChangeType = "added" | "modified" | "deleted" | "renamed" | "unmerged";
 
-export type FileStats = { insertions: number, deletions: number, };
-
 export type FileStatusDto = { path: string, staged: FileChangeType | null, unstaged: FileChangeType | null, staged_stats: FileStats | null, unstaged_stats: FileStats | null, };
 
 export type CommitInfoDto = { id: string, summary: string, author: string, relative_time: string, };
@@ -13,6 +11,20 @@ export type RepoInfoDto = { repo_id: string, root_path: string, name: string, is
 export type RepoStatusDto = { repo_id: string, root_path: string, branch: string, ahead: number, behind: number, has_untracked: boolean, has_staged: boolean, has_unstaged: boolean, conflicted_files: number, modified_files: Array<FileStatusDto>, latest_commit: CommitInfoDto | null, };
 
 export type DiffStatDto = { files_changed: number, insertions: number, deletions: number, };
+
+export type DiffCompareKind = "worktree_head" | "ref_ref" | "index_head";
+
+export type DiffDeltaStatus = "unmodified" | "added" | "deleted" | "modified" | "renamed" | "copied" | "ignored" | "untracked" | "typechange" | "unreadable" | "conflicted";
+
+export type DiffRequestOptionsDto = { context_lines: number | null, show_binary: boolean | null, include_untracked: boolean | null, };
+
+export type DiffRequestDto = { repo_path: string, compare_kind: DiffCompareKind, left: string | null, right: string | null, paths: Array<string> | null, options: DiffRequestOptionsDto | null, };
+
+export type DiffFileSummaryDto = { path: string, status: DiffDeltaStatus, is_binary: boolean, };
+
+export type DiffMetaDto = { compare_kind: DiffCompareKind, left: string | null, right: string | null, paths: Array<string>, context_lines: number, file_summaries: Array<DiffFileSummaryDto>, conflicted_paths: Array<string>, };
+
+export type DiffResponseDto = { diff_text: string, diff_hash: string, meta: DiffMetaDto, };
 
 export type BranchInfoDto = { name: string, current: boolean, last_commit: string, ahead: number, behind: number, };
 
