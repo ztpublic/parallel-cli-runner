@@ -704,6 +704,10 @@ button {
   background: rgba(0, 122, 204, 0.18);
 }
 
+.tree-row--selected:hover {
+  background: rgba(0, 122, 204, 0.25);
+}
+
 .tree-row--selected .tree-node-label {
   color: var(--text);
 }
