@@ -5,17 +5,27 @@ import type { TreeNode } from "../../types/tree";
 
 type GitReposProps = {
   repos: RepoHeader[];
+  enabledRepoIds?: string[];
+  onEnableRepos?: (repoIds: string[]) => void;
   activeRepoId?: string | null;
   onActivateRepo?: (repoId: string) => void;
   onRemoveRepo?: (repoId: string) => void;
 };
 
-export function GitRepos({ repos, activeRepoId, onActivateRepo, onRemoveRepo }: GitReposProps) {
+export function GitRepos({
+  repos,
+  enabledRepoIds,
+  onEnableRepos,
+  activeRepoId,
+  onActivateRepo,
+  onRemoveRepo,
+}: GitReposProps) {
   const nodes: TreeNode[] = repos.map((repo) => ({
     id: repo.repoId,
     label: repo.name,
     description: repo.path,
     icon: "folder",
+    checkable: true,
     rightSlot: repo.repoId === activeRepoId ? <span className="git-badge">active</span> : undefined,
     actions: [
       {
@@ -41,8 +51,11 @@ export function GitRepos({ repos, activeRepoId, onActivateRepo, onRemoveRepo }: 
     <div className="git-tree">
       <TreeView
         nodes={nodes}
+        checkedIds={enabledRepoIds}
+        onCheckChange={onEnableRepos}
         onNodeActivate={handleNodeActivate}
         onAction={handleAction}
+        toggleOnRowClick={false}
       />
       {!repos.length ? (
         <div className="git-empty">

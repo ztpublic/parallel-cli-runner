@@ -92,6 +92,7 @@ function App() {
   const [isRepoPickerOpen, setIsRepoPickerOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
+  const [enabledRepoIds, setEnabledRepoIds] = useState<string[]>([]);
   
   const [smartSwitchDialog, setSmartSwitchDialog] = useState<{
     open: boolean;
@@ -233,6 +234,7 @@ function App() {
       selectedRepoIds.includes(repo.repo_id)
     );
     setRepos(selected);
+    setEnabledRepoIds(selected.map((r) => r.repo_id));
     setIsRepoPickerOpen(false);
   }, [repoCandidates, selectedRepoIds, setRepos]);
 
@@ -242,6 +244,7 @@ function App() {
 
   const handleRemoveRepo = useCallback((repoId: string) => {
     setRepos(repos.filter((r) => r.repo_id !== repoId));
+    setEnabledRepoIds((prev) => prev.filter((id) => id !== repoId));
   }, [repos, setRepos]);
 
   const panes = useMemo(() => collectPanes(layout), [layout]);
@@ -256,50 +259,55 @@ function App() {
     [repos]
   );
 
+  const enabledRepoHeaders = useMemo<RepoHeader[]>(
+    () => repoHeaders.filter((r) => enabledRepoIds.includes(r.repoId)),
+    [repoHeaders, enabledRepoIds]
+  );
+
   const branchGroups = useMemo<RepoBranchGroup[]>(
     () =>
-      repoHeaders.map((repo) => ({
+      enabledRepoHeaders.map((repo) => ({
         repo,
         localBranches: localBranchesByRepo[repo.repoId] ?? [],
         remoteBranches: remoteBranchesByRepo[repo.repoId] ?? [],
       })),
-    [localBranchesByRepo, remoteBranchesByRepo, repoHeaders]
+    [localBranchesByRepo, remoteBranchesByRepo, enabledRepoHeaders]
   );
 
   const commitGroups = useMemo<RepoGroup<CommitItem>[]>(
     () =>
-      repoHeaders.map((repo) => ({
+      enabledRepoHeaders.map((repo) => ({
         repo,
         items: commitsByRepo[repo.repoId] ?? [],
       })),
-    [commitsByRepo, repoHeaders]
+    [commitsByRepo, enabledRepoHeaders]
   );
 
   const worktreeGroups = useMemo<RepoGroup<WorktreeItem>[]>(
     () =>
-      repoHeaders.map((repo) => ({
+      enabledRepoHeaders.map((repo) => ({
         repo,
         items: worktreesByRepo[repo.repoId] ?? [],
       })),
-    [repoHeaders, worktreesByRepo]
+    [enabledRepoHeaders, worktreesByRepo]
   );
 
   const remoteGroups = useMemo<RepoGroup<RemoteItem>[]>(
     () =>
-      repoHeaders.map((repo) => ({
+      enabledRepoHeaders.map((repo) => ({
         repo,
         items: remotesByRepo[repo.repoId] ?? [],
       })),
-    [repoHeaders, remotesByRepo] // Fixed dependency
+    [enabledRepoHeaders, remotesByRepo]
   );
 
   const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(
     () =>
-      repoHeaders.map((repo) => ({
+      enabledRepoHeaders.map((repo) => ({
         repo,
         items: changedFilesByRepo[repo.repoId] ?? [],
       })),
-    [repoHeaders, changedFilesByRepo] // Fixed dependency
+    [enabledRepoHeaders, changedFilesByRepo]
   );
 
   const handleNewPane = useCallback(async () => {
@@ -321,6 +329,8 @@ function App() {
         loading={gitLoading}
         error={gitError}
         repos={repoHeaders}
+        enabledRepoIds={enabledRepoIds}
+        onEnableRepos={setEnabledRepoIds}
         branchGroups={branchGroups}
         commitGroups={commitGroups}
         worktreeGroups={worktreeGroups}

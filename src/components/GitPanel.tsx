@@ -21,6 +21,7 @@ import {
 type GitPanelProps = {
   initialTabs?: GitTab[];
   repos?: RepoHeader[];
+  enabledRepoIds?: string[];
   branchGroups?: RepoBranchGroup[];
   commitGroups?: RepoGroup<CommitItem>[];
   worktreeGroups?: RepoGroup<WorktreeItem>[];
@@ -30,6 +31,7 @@ type GitPanelProps = {
   loading?: boolean;
   error?: string | null;
   onRefresh?: () => void;
+  onEnableRepos?: (repoIds: string[]) => void;
   onCommit?: (repoId: string, message: string) => void;
   onPull?: (repoId: string) => void;
   onStageAll?: (repoId: string) => void;
@@ -67,6 +69,7 @@ const defaultTabs: GitTab[] = [
 export function GitPanel({
   initialTabs,
   repos = [],
+  enabledRepoIds,
   branchGroups = [],
   commitGroups = [],
   worktreeGroups = [],
@@ -76,6 +79,7 @@ export function GitPanel({
   loading = false,
   error,
   onRefresh,
+  onEnableRepos,
   onCommit,
   onPull,
   onStageAll,
@@ -168,6 +172,8 @@ export function GitPanel({
         {activeTab === "repos" ? (
           <GitRepos
             repos={repos}
+            enabledRepoIds={enabledRepoIds}
+            onEnableRepos={onEnableRepos}
             // Active repo concept removed, pass null or maybe allow selection for highlighting?
             // User requested to remove active repo concept. So we pass nothing or maybe pass selection state if managed here.
             // For now pass null as activeRepoId.
