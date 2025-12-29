@@ -75,9 +75,12 @@ export function ThreeWayOverlay({
       frame = requestAnimationFrame(() => {
         scheduled = false;
         const overlayRect = overlay.getBoundingClientRect();
-        const leftRect = leftView.dom.getBoundingClientRect();
-        const baseRect = baseView.dom.getBoundingClientRect();
-        const rightRect = rightView.dom.getBoundingClientRect();
+        const leftRect =
+          leftContainerRef.current?.getBoundingClientRect() ?? leftView.dom.getBoundingClientRect();
+        const baseRect =
+          baseContainerRef.current?.getBoundingClientRect() ?? baseView.dom.getBoundingClientRect();
+        const rightRect =
+          rightContainerRef.current?.getBoundingClientRect() ?? rightView.dom.getBoundingClientRect();
 
         const leftStartX = leftRect.right - overlayRect.left;
         const rightStartX = rightRect.left - overlayRect.left;
