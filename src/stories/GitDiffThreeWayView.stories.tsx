@@ -42,6 +42,9 @@ const meta = {
       control: { type: "inline-radio" },
       options: ["vscode-dark", "monokai", "dracula"],
     },
+    syncScroll: {
+      control: { type: "boolean" },
+    },
   },
 } satisfies Meta<typeof GitDiffThreeWayView>;
 
@@ -56,6 +59,7 @@ export const ThreeWay: Story = {
     languageId: "ts",
     filePath: "src/api/client.ts",
     highlightTheme: "vscode-dark",
+    syncScroll: true,
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>
@@ -72,6 +76,7 @@ export const ConflictExample: Story = {
     languageId: "ts",
     filePath: "src/theme.ts",
     highlightTheme: "vscode-dark",
+    syncScroll: true,
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>
@@ -88,6 +93,7 @@ export const LongComplexDiff: Story = {
     languageId: "ts",
     filePath: "src/theme.ts",
     highlightTheme: "vscode-dark",
+    syncScroll: true,
   },
   render: (args) => (
     <div style={{ height: "100vh", padding: "24px" }}>

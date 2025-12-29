@@ -7,6 +7,7 @@ import {
   buildBaseTargetDecorations,
 } from "./merge/baseTargetDecorations";
 import { useThreeWayMergeState } from "./hooks/useThreeWayMergeState";
+import { useThreeWayScrollSync } from "./hooks/useThreeWayScrollSync";
 import { useUnifiedView } from "./hooks/useUnifiedView";
 import { ThreeWayOverlay } from "./ThreeWayOverlay";
 import "./GitDiffView.css";
@@ -18,6 +19,7 @@ export type GitDiffThreeWayViewProps = {
   languageId?: string;
   filePath?: string;
   highlightTheme?: HighlightTheme;
+  syncScroll?: boolean;
   className?: string;
 };
 
@@ -30,6 +32,7 @@ export function GitDiffThreeWayView({
   languageId,
   filePath,
   highlightTheme = "vscode-dark",
+  syncScroll = true,
   className,
 }: GitDiffThreeWayViewProps) {
   const leftViewRef = useRef<EditorView | null>(null);
@@ -115,6 +118,15 @@ export function GitDiffThreeWayView({
     bumpLayout,
     rightContainerRef
   );
+
+  useThreeWayScrollSync({
+    enabled: syncScroll,
+    chunks: threeWayChunks,
+    leftViewRef,
+    baseViewRef,
+    rightViewRef,
+    layoutTick,
+  });
 
   useEffect(() => {
     const baseView = baseViewRef.current;
