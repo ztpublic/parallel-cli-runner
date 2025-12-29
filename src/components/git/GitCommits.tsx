@@ -103,6 +103,7 @@ export function GitCommits({
     <div className="git-tree">
       <TreeView
         nodes={nodes}
+        selectionMode="multiple"
         toggleOnRowClick
         onNodeActivate={handleNodeActivate}
         onContextMenuSelect={handleContextMenuSelect}
