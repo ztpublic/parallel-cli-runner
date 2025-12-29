@@ -7,6 +7,9 @@
   border-radius: 12px;
   padding: 12px;
   color: var(--text);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .git-diff-view__empty {
@@ -23,10 +26,13 @@
 
 .git-diff-view__merge {
   height: 100%;
-  overflow: auto;
+  overflow: hidden;
   border: 1px solid #262b33;
   border-radius: 10px;
   background: #0f1115;
+  display: flex;
+  min-height: 0;
+  flex: 1;
 }
 
 .git-diff-view__grid {
@@ -34,6 +40,7 @@
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 12px;
   height: 100%;
+  min-height: 0;
 }
 
 .git-diff-view__grid--three {
@@ -43,6 +50,8 @@
 .git-diff-view__three-way {
   position: relative;
   height: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .git-diff-view__overlay {
@@ -146,6 +155,11 @@
   overflow: auto;
 }
 
+.git-diff-view__merge .cm-mergeView {
+  flex: 1;
+  min-height: 0;
+}
+
 .git-diff-view .cm-mergeViewEditors {
   background: #0f1115;
 }
@@ -208,12 +222,4 @@
 
 .git-diff-view .cm-mergeView .cm-changeGutter .cm-changeMarker {
   background: #4b7bff;
-}
-
-.git-diff-view .cm-mergeViewEditors {
-  height: 100%;
-}
-
-.git-diff-view .cm-mergeViewEditor {
-  height: 100%;
 }

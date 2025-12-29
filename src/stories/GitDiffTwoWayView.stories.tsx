@@ -2,6 +2,46 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { GitDiffTwoWayView } from "../components/git/GitDiffTwoWayView";
 import { BASE_TEXT, COMPARE_TEXT } from "./gitDiffStoryData";
 
+const LONG_ADDED_LINES = Array.from({ length: 120 }, (_, index) =>
+  `  payload.push({ id: ${index}, name: "item-${index}", flags: { hot: ${index} % 2 === 0 } });`
+).join("\n");
+
+const LONG_ADDED_COMPARE = `${BASE_TEXT}
+export function buildLongPayload(count: number) {
+  const payload = [];
+  for (let index = 0; index < count; index += 1) {
+    payload.push({
+      id: index,
+      name: "item-" + index,
+      timestamp: new Date().toISOString(),
+      tags: ["alpha", "beta", "gamma", "delta"],
+      metadata: {
+        owner: "storybook",
+        source: "two-way",
+        priority: index % 5,
+        flags: { pinned: index % 3 === 0, stale: index % 7 === 0 },
+      },
+    });
+  }
+${LONG_ADDED_LINES}
+  return payload;
+}
+
+export function buildLongConfig() {
+  return {
+    retry: { max: 5, delayMs: 250 },
+    cache: { ttlMs: 120000, jitterMs: 3500 },
+    limits: { soft: 2000, hard: 5000 },
+    featureFlags: {
+      enableMetrics: true,
+      enableRetry: true,
+      enableTracing: true,
+      enableCompression: true,
+    },
+  };
+}
+`;
+
 const meta = {
   title: "Components/GitDiffTwoWayView",
   component: GitDiffTwoWayView,
@@ -91,6 +131,21 @@ export const JsonHighlight: Story = {
 `,
     languageId: "json",
     filePath: "package.json",
+    highlightTheme: "vscode-dark",
+  },
+  render: (args) => (
+    <div style={{ height: "100vh", padding: "24px" }}>
+      <GitDiffTwoWayView {...args} />
+    </div>
+  ),
+};
+
+export const LongAddedBlocks: Story = {
+  args: {
+    baseText: BASE_TEXT,
+    compareText: LONG_ADDED_COMPARE,
+    languageId: "ts",
+    filePath: "src/api/client.ts",
     highlightTheme: "vscode-dark",
   },
   render: (args) => (
