@@ -22,6 +22,7 @@ type UseThreeWayScrollSyncProps = {
 };
 
 const SIDES: Side[] = ["left", "base", "right"];
+const MAX_ALIGN_CHUNKS = 12;
 
 function getRange(chunk: MergeChunk, side: Side): LineRange | undefined {
   switch (side) {
@@ -51,6 +52,20 @@ function median(values: number[]): number {
 function clampScrollTop(scrollDOM: HTMLElement, nextTop: number) {
   const max = Math.max(0, scrollDOM.scrollHeight - scrollDOM.clientHeight);
   return Math.min(Math.max(nextTop, 0), max);
+}
+
+function rangesOverlap(a: LineRange, b: LineRange): boolean {
+  return a.startLine <= b.endLine && b.startLine <= a.endLine;
+}
+
+function rangeCenterLine(range: LineRange): number {
+  return (range.startLine + range.endLine) / 2;
+}
+
+function getViewportLineRange(view: EditorView): LineRange {
+  const startLine = view.state.doc.lineAt(view.viewport.from).number - 1;
+  const endLine = view.state.doc.lineAt(view.viewport.to).number - 1;
+  return { startLine, endLine };
 }
 
 function buildRangePairs(
@@ -91,18 +106,31 @@ function computeAlignmentDelta(
 }
 
 function getVisibleChunks(chunks: MergeChunk[], side: Side, view: EditorView) {
-  const viewport = view.scrollDOM.getBoundingClientRect();
-  const docTop = view.documentTop;
-  return chunks.filter((chunk) => {
+  const viewportRange = getViewportLineRange(view);
+  const visible = chunks.filter((chunk) => {
     const range = getRange(chunk, side);
     if (!range) {
       return false;
     }
-    const metrics = lineRangeMetrics(view, range);
-    const top = docTop + metrics.top;
-    const bottom = docTop + metrics.bottom;
-    return bottom >= viewport.top && top <= viewport.bottom;
+    return rangesOverlap(range, viewportRange);
   });
+
+  if (visible.length <= MAX_ALIGN_CHUNKS) {
+    return visible;
+  }
+
+  const viewportCenter = rangeCenterLine(viewportRange);
+  return visible
+    .map((chunk) => {
+      const range = getRange(chunk, side);
+      return {
+        chunk,
+        distance: range ? Math.abs(rangeCenterLine(range) - viewportCenter) : Number.POSITIVE_INFINITY,
+      };
+    })
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, MAX_ALIGN_CHUNKS)
+    .map((entry) => entry.chunk);
 }
 
 export function useThreeWayScrollSync({
@@ -114,7 +142,6 @@ export function useThreeWayScrollSync({
   layoutTick,
 }: UseThreeWayScrollSyncProps) {
   const chunksRef = useRef(chunks);
-  const syncingRef = useRef(false);
   const lastScrollRef = useRef<ScrollState>({ left: 0, base: 0, right: 0 });
   const pendingSourceRef = useRef<Side | null>(null);
   const frameRef = useRef<number | null>(null);
@@ -175,23 +202,8 @@ export function useThreeWayScrollSync({
       targetView.scrollDOM.scrollTop = nextTop;
     };
 
-    const syncFrom = (source: Side) => {
+    const alignFrom = (source: Side) => {
       const sourceView = views[source];
-      const sourceScrollTop = sourceView.scrollDOM.scrollTop;
-      const delta = sourceScrollTop - lastScrollRef.current[source];
-
-      syncingRef.current = true;
-
-      SIDES.forEach((side) => {
-        if (side === source) {
-          return;
-        }
-        const targetView = views[side];
-        const nextTop = clampScrollTop(targetView.scrollDOM, targetView.scrollDOM.scrollTop + delta);
-        suppressScroll(side);
-        targetView.scrollDOM.scrollTop = nextTop;
-      });
-
       const visibleChunks = getVisibleChunks(chunksRef.current, source, sourceView);
 
       if (source === "base") {
@@ -202,12 +214,9 @@ export function useThreeWayScrollSync({
         const otherSide: Side = source === "left" ? "right" : "left";
         alignTarget("base", otherSide, visibleChunks);
       }
-
-      syncState();
-      syncingRef.current = false;
     };
 
-    const scheduleSync = (source: Side) => {
+    const scheduleAlignment = (source: Side) => {
       pendingSourceRef.current = source;
       if (frameRef.current !== null) {
         return;
@@ -219,7 +228,8 @@ export function useThreeWayScrollSync({
         if (!pending) {
           return;
         }
-        syncFrom(pending);
+        alignFrom(pending);
+        syncState();
       });
     };
 
@@ -229,11 +239,28 @@ export function useThreeWayScrollSync({
         lastScrollRef.current[side] = views[side].scrollDOM.scrollTop;
         return;
       }
-      if (syncingRef.current) {
-        lastScrollRef.current[side] = views[side].scrollDOM.scrollTop;
+      const sourceView = views[side];
+      const sourceScrollTop = sourceView.scrollDOM.scrollTop;
+      const delta = sourceScrollTop - lastScrollRef.current[side];
+      if (delta === 0) {
         return;
       }
-      scheduleSync(side);
+
+      SIDES.forEach((targetSide) => {
+        if (targetSide === side) {
+          return;
+        }
+        const targetView = views[targetSide];
+        const nextTop = clampScrollTop(targetView.scrollDOM, targetView.scrollDOM.scrollTop + delta);
+        if (nextTop !== targetView.scrollDOM.scrollTop) {
+          suppressScroll(targetSide);
+          targetView.scrollDOM.scrollTop = nextTop;
+        }
+        lastScrollRef.current[targetSide] = targetView.scrollDOM.scrollTop;
+      });
+
+      lastScrollRef.current[side] = sourceScrollTop;
+      scheduleAlignment(side);
     };
 
     const handlers: Record<Side, () => void> = {
@@ -257,7 +284,6 @@ export function useThreeWayScrollSync({
         frameRef.current = null;
       }
       pendingSourceRef.current = null;
-      syncingRef.current = false;
     };
   }, [enabled, layoutTick, leftViewRef, baseViewRef, rightViewRef]);
 }
