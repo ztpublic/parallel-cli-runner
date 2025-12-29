@@ -31,3 +31,5 @@ export type BranchInfoDto = { name: string, current: boolean, last_commit: strin
 export type RemoteInfoDto = { name: string, fetch: string, push: string, };
 
 export type WorktreeInfoDto = { branch: string, path: string, };
+
+export type StashInfoDto = { index: number, message: string, id: string, relative_time: string, };

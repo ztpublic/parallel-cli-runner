@@ -3,6 +3,7 @@ import {
   CommitItem,
   WorktreeItem,
   RemoteItem,
+  StashItem,
   GitTab,
   ChangedFile,
   RepoBranchGroup,
@@ -62,6 +63,30 @@ const betaWorktrees: WorktreeItem[] = [
   { branch: "feature/ops", path: "/home/user/projects/beta-worktrees/ops" },
 ];
 
+const alphaStashes: StashItem[] = [
+  {
+    index: 0,
+    message: "WIP on feature/new-ui: polish settings panel",
+    id: "0f1a2b3c",
+    relativeTime: "2 hours ago",
+  },
+  {
+    index: 1,
+    message: "WIP on main: bump deps",
+    id: "7c9d8e6f",
+    relativeTime: "1 day ago",
+  },
+];
+
+const betaStashes: StashItem[] = [
+  {
+    index: 0,
+    message: "WIP on main: cleanup ci config",
+    id: "2a4b6c8d",
+    relativeTime: "3 days ago",
+  },
+];
+
 export const repoHeaders = [repoAlpha, repoBeta];
 
 export const initialBranchGroups: RepoBranchGroup[] = [
@@ -100,10 +125,16 @@ export const initialRemoteGroups: RepoGroup<RemoteItem>[] = [
   { repo: repoBeta, items: [] },
 ];
 
+export const initialStashGroups: RepoGroup<StashItem>[] = [
+  { repo: repoAlpha, items: alphaStashes },
+  { repo: repoBeta, items: betaStashes },
+];
+
 export const initialTabs: GitTab[] = [
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
   { id: "commit", label: "Changes", icon: "fileEdit" },
+  { id: "stashes", label: "Stashes", icon: "archive" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];

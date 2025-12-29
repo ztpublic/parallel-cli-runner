@@ -93,6 +93,12 @@ async fn git_list_remotes(cwd: String) -> Result<Vec<git::RemoteInfoDto>, Comman
     git::list_remotes(&path).map_err(CommandError::from)
 }
 
+#[tauri::command]
+async fn git_list_stashes(cwd: String) -> Result<Vec<git::StashInfoDto>, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::list_stashes(&path).map_err(CommandError::from)
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn git_pull(cwd: String) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
@@ -239,6 +245,7 @@ pub fn run() {
             git_list_commits,
             git_list_worktrees,
             git_list_remotes,
+            git_list_stashes,
             git_pull,
             git_push,
             git_commit,

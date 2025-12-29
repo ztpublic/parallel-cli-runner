@@ -5,6 +5,7 @@ import { GitBranches } from "./git/GitBranches";
 import { GitCommits } from "./git/GitCommits";
 import { GitRepos } from "./git/GitRepos";
 import { GitStaging } from "./git/GitStaging";
+import { GitStashes } from "./git/GitStashes";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
 import {
@@ -15,6 +16,7 @@ import {
   RepoBranchGroup,
   RepoGroup,
   RepoHeader,
+  StashItem,
   WorktreeItem,
 } from "../types/git-ui";
 
@@ -27,6 +29,7 @@ type GitPanelProps = {
   worktreeGroups?: RepoGroup<WorktreeItem>[];
   changedFileGroups?: RepoGroup<ChangedFile>[];
   remoteGroups?: RepoGroup<RemoteItem>[];
+  stashGroups?: RepoGroup<StashItem>[];
   width?: number;
   loading?: boolean;
   error?: string | null;
@@ -63,6 +66,7 @@ const defaultTabs: GitTab[] = [
   { id: "branches", label: "Branches", icon: "branch" },
   { id: "commits", label: "Commits", icon: "commit" },
   { id: "commit", label: "Changes", icon: "fileEdit" },
+  { id: "stashes", label: "Stashes", icon: "archive" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];
@@ -76,6 +80,7 @@ export function GitPanel({
   worktreeGroups = [],
   changedFileGroups = [],
   remoteGroups = [],
+  stashGroups = [],
   width,
   loading = false,
   error,
@@ -251,6 +256,8 @@ export function GitPanel({
                 onCommit={handleCommit}
               />
             ) : null}
+
+            {activeTab === "stashes" ? <GitStashes stashGroups={stashGroups} /> : null}
 
             {activeTab === "worktrees" ? (
               <GitWorktrees

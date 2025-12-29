@@ -98,11 +98,6 @@ export function GitBranches({
       ],
       actions: [
         {
-          id: "merge",
-          icon: "merge",
-          label: "Merge",
-        },
-        {
           id: "delete",
           icon: "trash",
           label: "Delete",
@@ -126,13 +121,7 @@ export function GitBranches({
       label: branch.name,
       description: branch.lastCommit,
       icon: "cloud",
-      actions: [
-        {
-          id: "open-pr",
-          icon: "pull",
-          label: "Open PR",
-        },
-      ],
+      actions: [],
     }));
 
     if (canLoadMoreRemote?.(group.repo.repoId)) {
@@ -177,7 +166,7 @@ export function GitBranches({
           id: `${group.repo.repoId}:remote`,
           label: "Remote Branches",
           icon: "cloud",
-          defaultExpanded: true,
+          defaultExpanded: false,
           selectable: false,
           rightSlot: <span className="git-pill">{group.remoteBranches.length}</span>,
           children: remoteChildren,

@@ -23,6 +23,7 @@ import type {
   RepoBranchGroup,
   RepoGroup,
   RepoHeader,
+  StashItem,
   WorktreeItem,
 } from "./types/git-ui";
 
@@ -55,6 +56,7 @@ function App() {
     commitsByRepo,
     worktreesByRepo,
     remotesByRepo,
+    stashesByRepo,
     changedFilesByRepo,
     loading: gitLoading,
     error: gitError,
@@ -73,6 +75,7 @@ function App() {
     reset,
     revert,
     createWorktree,
+    removeWorktree,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -299,6 +302,15 @@ function App() {
     [enabledRepoHeaders, remotesByRepo]
   );
 
+  const stashGroups = useMemo<RepoGroup<StashItem>[]>(
+    () =>
+      enabledRepoHeaders.map((repo) => ({
+        repo,
+        items: stashesByRepo[repo.repoId] ?? [],
+      })),
+    [enabledRepoHeaders, stashesByRepo]
+  );
+
   const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(
     () =>
       enabledRepoHeaders.map((repo) => ({
@@ -332,6 +344,7 @@ function App() {
         commitGroups={commitGroups}
         worktreeGroups={worktreeGroups}
         remoteGroups={remoteGroups}
+        stashGroups={stashGroups}
         changedFileGroups={changedFileGroups}
         onRemoveRepo={handleRemoveRepo}
         onRefresh={() => {
@@ -405,6 +418,11 @@ function App() {
         onCreateWorktree={(repoId, branchName, path) => {
           void runGitCommand("Create worktree failed", "Failed to create worktree.", () =>
             createWorktree(repoId, branchName, path)
+          );
+        }}
+        onDeleteWorktree={(repoId, branchName) => {
+          void runGitCommand("Delete worktree failed", "Failed to delete worktree.", () =>
+            removeWorktree(repoId, branchName)
           );
         }}
         onOpenFolder={handleTriggerOpenFolder}

@@ -7,6 +7,7 @@ import type {
   RemoteInfoDto,
   RepoInfoDto,
   RepoStatusDto,
+  StashInfoDto,
   WorktreeInfoDto,
 } from "../types/git";
 
@@ -56,6 +57,10 @@ export function gitListWorktrees(params: { cwd: string }): Promise<WorktreeInfoD
 
 export function gitListRemotes(params: { cwd: string }): Promise<RemoteInfoDto[]> {
   return invoke<RemoteInfoDto[]>("git_list_remotes", params);
+}
+
+export function gitListStashes(params: { cwd: string }): Promise<StashInfoDto[]> {
+  return invoke<StashInfoDto[]>("git_list_stashes", params);
 }
 
 export function gitPull(params: { cwd: string }): Promise<void> {

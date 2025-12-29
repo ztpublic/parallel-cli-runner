@@ -3,7 +3,8 @@ mod tests {
     use crate::git::{
         BranchInfoDto, CommitInfoDto, DiffCompareKind, DiffDeltaStatus, DiffFileSummaryDto,
         DiffMetaDto, DiffRequestDto, DiffRequestOptionsDto, DiffResponseDto, DiffStatDto,
-        FileChangeType, FileStatusDto, RemoteInfoDto, RepoInfoDto, RepoStatusDto, WorktreeInfoDto,
+        FileChangeType, FileStatusDto, RemoteInfoDto, RepoInfoDto, RepoStatusDto, StashInfoDto,
+        WorktreeInfoDto,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -50,6 +51,8 @@ mod tests {
         git_ts.push_str(&RemoteInfoDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");
         git_ts.push_str(&WorktreeInfoDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&StashInfoDto::decl().replace("type ", "export type "));
         
         fs::write(types_dir.join("git.ts"), git_ts).unwrap();
 

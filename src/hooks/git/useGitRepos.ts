@@ -9,6 +9,7 @@ import {
   gitListCommits,
   gitListRemoteBranches,
   gitListRemotes,
+  gitListStashes,
   gitListWorktrees,
   gitPull,
   gitPush,
@@ -30,6 +31,7 @@ import type {
   RemoteInfoDto,
   RepoInfoDto,
   RepoStatusDto,
+  StashInfoDto,
   WorktreeInfoDto,
 } from "../../types/git";
 import type {
@@ -37,6 +39,7 @@ import type {
   ChangedFile,
   CommitItem,
   RemoteItem,
+  StashItem,
   WorktreeItem,
 } from "../../types/git-ui";
 
@@ -106,6 +109,15 @@ function mapRemotes(remotes: RemoteInfoDto[]): RemoteItem[] {
   }));
 }
 
+function mapStashes(stashes: StashInfoDto[]): StashItem[] {
+  return stashes.map((stash) => ({
+    index: stash.index,
+    message: stash.message,
+    id: stash.id,
+    relativeTime: stash.relative_time,
+  }));
+}
+
 type RepoId = string;
 
 export function useGitRepos() {
@@ -119,6 +131,7 @@ export function useGitRepos() {
   const [commitsByRepo, setCommitsByRepo] = useState<Record<RepoId, CommitItem[]>>({});
   const [worktreesByRepo, setWorktreesByRepo] = useState<Record<RepoId, WorktreeItem[]>>({});
   const [remotesByRepo, setRemotesByRepo] = useState<Record<RepoId, RemoteItem[]>>({});
+  const [stashesByRepo, setStashesByRepo] = useState<Record<RepoId, StashItem[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,6 +157,7 @@ export function useGitRepos() {
     setCommitsByRepo(filterState);
     setWorktreesByRepo(filterState);
     setRemotesByRepo(filterState);
+    setStashesByRepo(filterState);
     
     setCommitsSkipByRepo(filterState);
     setHasMoreCommitsByRepo(filterState);
@@ -186,7 +200,7 @@ export function useGitRepos() {
 
         const results = await Promise.all(
           targets.map(async (repo) => {
-            const [statusDto, local, remote, commitDtos, worktreeDtos, remoteDtos] =
+            const [statusDto, local, remote, commitDtos, worktreeDtos, remoteDtos, stashDtos] =
               await Promise.all([
                 gitStatus({ cwd: repo.root_path }),
                 gitListBranches({ cwd: repo.root_path }),
@@ -194,6 +208,7 @@ export function useGitRepos() {
                 gitListCommits({ cwd: repo.root_path, limit: 10, skip: 0 }),
                 gitListWorktrees({ cwd: repo.root_path }),
                 gitListRemotes({ cwd: repo.root_path }),
+                gitListStashes({ cwd: repo.root_path }),
               ]);
             return {
               repoId: repo.repo_id,
@@ -204,6 +219,7 @@ export function useGitRepos() {
               hasMoreCommits: commitDtos.length === 10,
               worktrees: mapWorktrees(worktreeDtos),
               remotes: mapRemotes(remoteDtos),
+              stashes: mapStashes(stashDtos),
             };
           })
         );
@@ -241,6 +257,11 @@ export function useGitRepos() {
         setRemotesByRepo((prev) => {
           const next = { ...prev };
           for (const result of results) next[result.repoId] = result.remotes;
+          return next;
+        });
+        setStashesByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.stashes;
           return next;
         });
       } catch (err) {
@@ -571,6 +592,7 @@ export function useGitRepos() {
     commitsByRepo,
     worktreesByRepo,
     remotesByRepo,
+    stashesByRepo,
     changedFilesByRepo,
     loading,
     error,

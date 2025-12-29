@@ -5,6 +5,7 @@ import {
   initialChangedFileGroups,
   initialCommitGroups,
   initialRemoteGroups,
+  initialStashGroups,
   initialTabs,
   initialWorktreeGroups,
   repoHeaders,
@@ -29,6 +30,7 @@ export const Default: Story = {
     commitGroups: initialCommitGroups,
     worktreeGroups: initialWorktreeGroups,
     remoteGroups: initialRemoteGroups,
+    stashGroups: initialStashGroups,
     changedFileGroups: initialChangedFileGroups,
   },
 };

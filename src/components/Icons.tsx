@@ -2,6 +2,7 @@ import type { SVGProps, ReactNode } from "react";
 
 export type IconName =
   | "alert"
+  | "archive"
   | "bell"
   | "bolt"
   | "branch"
@@ -39,6 +40,13 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M10.3 4.9 3.3 17a1.5 1.5 0 0 0 1.3 2.3h14.8a1.5 1.5 0 0 0 1.3-2.3l-7-12.1a1.5 1.5 0 0 0-2.6 0z" />
       <line x1="12" y1="9" x2="12" y2="13" />
       <circle cx="12" cy="17" r="1" />
+    </>
+  ),
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="7" rx="1" />
+      <path d="M5 11v8a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-8" />
+      <line x1="10" y1="15" x2="14" y2="15" />
     </>
   ),
   bell: (

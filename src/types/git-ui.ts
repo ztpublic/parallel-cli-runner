@@ -38,6 +38,13 @@ export type WorktreeItem = {
   path: string;
 };
 
+export type StashItem = {
+  index: number;
+  message: string;
+  id: string;
+  relativeTime: string;
+};
+
 export type ChangeStatus = "modified" | "added" | "deleted";
 
 export type ChangedFile = {
@@ -48,7 +55,14 @@ export type ChangedFile = {
   deletions?: number;
 };
 
-export type GitTabId = "repos" | "branches" | "commits" | "commit" | "worktrees" | "remotes";
+export type GitTabId =
+  | "repos"
+  | "branches"
+  | "commits"
+  | "commit"
+  | "worktrees"
+  | "remotes"
+  | "stashes";
 
 export type GitTab = {
   id: GitTabId;

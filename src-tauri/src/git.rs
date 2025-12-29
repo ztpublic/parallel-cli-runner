@@ -115,6 +115,14 @@ pub struct WorktreeInfoDto {
     pub path: String,
 }
 
+#[derive(Clone, Debug, Serialize, TS)]
+pub struct StashInfoDto {
+    pub index: i32,
+    pub message: String,
+    pub id: String,
+    pub relative_time: String,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DiffCompareKind {
@@ -799,6 +807,32 @@ pub fn list_commits(cwd: &Path, limit: usize, skip: Option<usize>) -> Result<Vec
         });
     }
     Ok(commits)
+}
+
+pub fn list_stashes(cwd: &Path) -> Result<Vec<StashInfoDto>, GitError> {
+    let mut repo = open_repo(cwd)?;
+    let mut stashes = Vec::new();
+    let mut stashes_raw: Vec<(i32, String, git2::Oid)> = Vec::new();
+
+    repo.stash_foreach(|index, message, oid| {
+        stashes_raw.push((index as i32, message.to_string(), *oid));
+        true
+    })?;
+
+    for (index, message, oid) in stashes_raw {
+        let relative_time = repo
+            .find_commit(oid)
+            .map(|commit| format_relative_time(commit.time()))
+            .unwrap_or_default();
+        stashes.push(StashInfoDto {
+            index,
+            message,
+            id: oid.to_string(),
+            relative_time,
+        });
+    }
+
+    Ok(stashes)
 }
 
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
