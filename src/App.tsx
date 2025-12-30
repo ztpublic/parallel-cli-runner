@@ -63,6 +63,7 @@ function App() {
     refreshRepos,
     stageFiles,
     unstageFiles,
+    discardFiles,
     stageAll,
     unstageAll,
     commit,
@@ -369,6 +370,11 @@ function App() {
         onUnstageFile={(repoId, path) => {
           void runGitCommand("Unstage file failed", "Failed to unstage file.", () =>
             unstageFiles(repoId, [path])
+          );
+        }}
+        onRollbackFile={(repoId, path) => {
+          void runGitCommand("Roll back failed", "Failed to roll back file.", () =>
+            discardFiles(repoId, [path])
           );
         }}
         onCommit={(repoId, message) => {

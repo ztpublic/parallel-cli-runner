@@ -11,6 +11,7 @@ type GitStagingProps = {
   onUnstageAll: (repoId: string) => void;
   onStageFile: (repoId: string, path: string) => void;
   onUnstageFile: (repoId: string, path: string) => void;
+  onRollbackFile: (repoId: string, path: string) => void;
 };
 
 export function GitStaging({
@@ -20,6 +21,7 @@ export function GitStaging({
   onUnstageAll,
   onStageFile,
   onUnstageFile,
+  onRollbackFile,
 }: GitStagingProps) {
   const [commitMessage, setCommitMessage] = useState("");
   // By default, check all repos that have staged changes?
@@ -103,7 +105,10 @@ export function GitStaging({
             iconClassName: getIconClass(file.status),
             description: formatDescription(file),
             selectable: true,
-            actions: [{ id: "unstage", icon: "minus", label: "Unstage" }],
+            actions: [
+              { id: "unstage", icon: "minus", label: "Unstage" },
+              { id: "rollback", icon: "trash", label: "Roll back", intent: "danger" },
+            ],
           })),
         });
       }
@@ -124,7 +129,10 @@ export function GitStaging({
             iconClassName: getIconClass(file.status),
             description: formatDescription(file),
             selectable: true,
-            actions: [{ id: "stage", icon: "plus", label: "Stage" }],
+            actions: [
+              { id: "stage", icon: "plus", label: "Stage" },
+              { id: "rollback", icon: "trash", label: "Roll back", intent: "danger" },
+            ],
           })),
         });
       }
@@ -166,6 +174,8 @@ export function GitStaging({
       if (stagedFile) {
         if (actionId === "unstage")
           onUnstageFile(group.repo.repoId, stagedFile.path);
+        if (actionId === "rollback")
+          onRollbackFile(group.repo.repoId, stagedFile.path);
         return;
       }
       // Unstaged
@@ -177,6 +187,8 @@ export function GitStaging({
       if (unstagedFile) {
         if (actionId === "stage")
           onStageFile(group.repo.repoId, unstagedFile.path);
+        if (actionId === "rollback")
+          onRollbackFile(group.repo.repoId, unstagedFile.path);
         return;
       }
     }

@@ -5,6 +5,7 @@ import {
   gitCommit,
   gitCreateBranch,
   gitDeleteBranch,
+  gitDiscardFiles,
   gitListBranches,
   gitListCommits,
   gitListRemoteBranches,
@@ -366,6 +367,16 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const discardFiles = useCallback(
+    async (repoId: RepoId, paths: string[]) => {
+      const repo = resolveRepo(repoId);
+      if (!repo || !paths.length) return;
+      await gitDiscardFiles({ cwd: repo.root_path, paths });
+      await refreshRepos(repo.repo_id);
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const stageAll = useCallback(
     async (repoId: RepoId) => {
       const repo = resolveRepo(repoId);
@@ -618,6 +629,7 @@ export function useGitRepos() {
     refreshRepos,
     stageFiles,
     unstageFiles,
+    discardFiles,
     stageAll,
     unstageAll,
     commit,

@@ -922,6 +922,73 @@ pub fn unstage_paths(cwd: &Path, paths: &[String]) -> Result<(), GitError> {
     Ok(())
 }
 
+pub fn discard_paths(cwd: &Path, paths: &[String]) -> Result<(), GitError> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let repo = open_repo(cwd)?;
+    let head_oid = match repo.head() {
+        Ok(head) => head.target(),
+        Err(err) if err.code() == ErrorCode::UnbornBranch => None,
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+
+    let (head_obj, head_tree) = if let Some(oid) = head_oid {
+        (
+            Some(repo.find_object(oid, None)?),
+            Some(repo.find_commit(oid)?.tree()?),
+        )
+    } else {
+        (None, None)
+    };
+
+    if let Some(ref obj) = head_obj {
+        repo.reset_default(Some(obj), paths.iter().map(|path| path.as_str()))?;
+    } else {
+        let mut index = repo.index()?;
+        for path in paths {
+            match index.remove_path(Path::new(path)) {
+                Ok(()) => {}
+                Err(err) if err.code() == ErrorCode::NotFound => {}
+                Err(err) => return Err(GitError::Git2(err)),
+            }
+        }
+        index.write()?;
+    }
+
+    let workdir = repo.workdir().ok_or_else(|| GitError::GitFailed {
+        code: None,
+        stderr: "cannot discard files in bare repo".to_string(),
+    })?;
+    let mut checkout = CheckoutBuilder::new();
+    checkout.force();
+    let mut should_checkout = false;
+
+    for path in paths {
+        let tracked = head_tree
+            .as_ref()
+            .map(|tree| tree.get_path(Path::new(path)).is_ok())
+            .unwrap_or(false);
+        if tracked {
+            checkout.path(path);
+            should_checkout = true;
+        } else {
+            let full_path = workdir.join(path);
+            if full_path.is_dir() {
+                fs::remove_dir_all(&full_path)?;
+            } else if full_path.exists() {
+                fs::remove_file(&full_path)?;
+            }
+        }
+    }
+
+    if should_checkout {
+        repo.checkout_head(Some(&mut checkout))?;
+    }
+
+    Ok(())
+}
+
 pub fn stage_all(cwd: &Path) -> Result<(), GitError> {
     let repo = open_repo(cwd)?;
     let mut index = repo.index()?;

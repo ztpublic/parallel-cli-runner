@@ -88,6 +88,10 @@ export function gitUnstageFiles(params: { cwd: string; paths: string[] }): Promi
   return invoke("git_unstage_files", params);
 }
 
+export function gitDiscardFiles(params: { cwd: string; paths: string[] }): Promise<void> {
+  return invoke("git_discard_files", params);
+}
+
 export function gitStageAll(params: { cwd: string }): Promise<void> {
   return invoke("git_stage_all", params);
 }

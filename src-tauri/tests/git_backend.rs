@@ -88,6 +88,77 @@ fn stage_all_and_unstage_all() {
 }
 
 #[test]
+fn discard_paths_clears_staged_and_unstaged_changes() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "file1.txt", "one\n");
+    write_file(temp.path(), "file2.txt", "two\n");
+    commit_all(temp.path(), "Initial commit");
+
+    write_file(temp.path(), "file1.txt", "one edited\n");
+    git::stage_paths(temp.path(), &["file1.txt".to_string()]).expect("stage file1");
+
+    write_file(temp.path(), "file2.txt", "two edited\n");
+
+    let status = git::status(temp.path()).expect("status before discard");
+    assert!(status.has_staged, "expected staged changes");
+    assert!(status.has_unstaged, "expected unstaged changes");
+
+    git::discard_paths(
+        temp.path(),
+        &["file1.txt".to_string(), "file2.txt".to_string()],
+    )
+    .expect("discard paths");
+
+    let status = git::status(temp.path()).expect("status after discard");
+    assert!(!status.has_staged, "expected no staged changes");
+    assert!(!status.has_unstaged, "expected no unstaged changes");
+
+    let file1 = fs::read_to_string(temp.path().join("file1.txt")).expect("read file1");
+    let file2 = fs::read_to_string(temp.path().join("file2.txt")).expect("read file2");
+    assert_eq!(file1, "one\n");
+    assert_eq!(file2, "two\n");
+}
+
+#[test]
+fn discard_paths_removes_new_files() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "base.txt", "base\n");
+    commit_all(temp.path(), "Initial commit");
+
+    write_file(temp.path(), "added.txt", "added\n");
+    git::stage_paths(temp.path(), &["added.txt".to_string()]).expect("stage added file");
+    write_file(temp.path(), "untracked.txt", "untracked\n");
+
+    git::discard_paths(
+        temp.path(),
+        &["added.txt".to_string(), "untracked.txt".to_string()],
+    )
+    .expect("discard new files");
+
+    assert!(!temp.path().join("added.txt").exists());
+    assert!(!temp.path().join("untracked.txt").exists());
+
+    let status = git::status(temp.path()).expect("status after discard");
+    assert!(!status.has_staged, "expected no staged changes");
+    assert!(!status.has_unstaged, "expected no unstaged changes");
+    assert!(!status.has_untracked, "expected no untracked files");
+}
+
+#[test]
+fn discard_paths_on_unborn_branch() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "draft.txt", "draft\n");
+    git::stage_paths(temp.path(), &["draft.txt".to_string()]).expect("stage draft");
+
+    git::discard_paths(temp.path(), &["draft.txt".to_string()]).expect("discard draft");
+
+    assert!(!temp.path().join("draft.txt").exists());
+    let status = git::status(temp.path()).expect("status after discard");
+    assert!(!status.has_staged, "expected no staged changes");
+    assert!(!status.has_untracked, "expected no untracked files");
+}
+
+#[test]
 fn commit_and_list_commits() {
     let (temp, _repo) = init_repo();
     write_file(temp.path(), "README.md", "hello\n");

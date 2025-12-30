@@ -134,6 +134,12 @@ async fn git_unstage_files(cwd: String, paths: Vec<String>) -> Result<(), Comman
     git::unstage_paths(&path, &paths).map_err(CommandError::from)
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn git_discard_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::discard_paths(&path, &paths).map_err(CommandError::from)
+}
+
 #[tauri::command]
 async fn git_stage_all(cwd: String) -> Result<(), CommandError> {
     let path = PathBuf::from(cwd);
@@ -257,6 +263,7 @@ pub fn run() {
             git_commit,
             git_stage_files,
             git_unstage_files,
+            git_discard_files,
             git_stage_all,
             git_unstage_all,
             git_merge_into_branch,
