@@ -27,7 +27,8 @@ export type IconName =
   | "sparkle"
   | "split"
   | "terminal"
-  | "trash";
+  | "trash"
+  | "undo";
 
 type IconProps = SVGProps<SVGSVGElement> & {
   name: IconName;
@@ -187,6 +188,13 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M10 11v6" />
       <path d="M14 11v6" />
       <path d="M9 6l1-3h4l1 3" />
+    </>
+  ),
+  undo: (
+    <>
+      <path d="M9 7H5v4" />
+      <path d="M5 11l4-4" />
+      <path d="M5 11h9a5 5 0 0 1 0 10h-3" />
     </>
   ),
 };

@@ -11,7 +11,7 @@ type GitStagingProps = {
   onUnstageAll: (repoId: string) => void;
   onStageFile: (repoId: string, path: string) => void;
   onUnstageFile: (repoId: string, path: string) => void;
-  onRollbackFile: (repoId: string, path: string) => void;
+  onRollbackFiles: (repoId: string, paths: string[]) => void;
 };
 
 export function GitStaging({
@@ -21,7 +21,7 @@ export function GitStaging({
   onUnstageAll,
   onStageFile,
   onUnstageFile,
-  onRollbackFile,
+  onRollbackFiles,
 }: GitStagingProps) {
   const [commitMessage, setCommitMessage] = useState("");
   // By default, check all repos that have staged changes?
@@ -97,7 +97,10 @@ export function GitStaging({
           defaultExpanded: true,
           selectable: false,
           rightSlot: <span className="git-pill">{stagedFiles.length}</span>,
-          actions: [{ id: "unstage-all", icon: "minus", label: "Unstage All" }],
+          actions: [
+            { id: "unstage-all", icon: "minus", label: "Unstage All" },
+            { id: "rollback-all", icon: "undo", label: "Roll back All", intent: "danger" },
+          ],
           children: stagedFiles.map(file => ({
             id: `file:${group.repo.repoId}:${file.path}:staged`,
             label: file.path,
@@ -107,7 +110,7 @@ export function GitStaging({
             selectable: true,
             actions: [
               { id: "unstage", icon: "minus", label: "Unstage" },
-              { id: "rollback", icon: "trash", label: "Roll back", intent: "danger" },
+              { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
           })),
         });
@@ -121,7 +124,10 @@ export function GitStaging({
           defaultExpanded: true,
           selectable: false,
           rightSlot: <span className="git-pill">{unstagedFiles.length}</span>,
-          actions: [{ id: "stage-all", icon: "plus", label: "Stage All" }],
+          actions: [
+            { id: "stage-all", icon: "plus", label: "Stage All" },
+            { id: "rollback-all", icon: "undo", label: "Roll back All", intent: "danger" },
+          ],
           children: unstagedFiles.map(file => ({
             id: `file:${group.repo.repoId}:${file.path}:unstaged`,
             label: file.path,
@@ -131,7 +137,7 @@ export function GitStaging({
             selectable: true,
             actions: [
               { id: "stage", icon: "plus", label: "Stage" },
-              { id: "rollback", icon: "trash", label: "Roll back", intent: "danger" },
+              { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
           })),
         });
@@ -157,10 +163,18 @@ export function GitStaging({
     for (const group of dirtyGroups) {
       if (node.id === `repo:${group.repo.repoId}:staged`) {
         if (actionId === "unstage-all") onUnstageAll(group.repo.repoId);
+        if (actionId === "rollback-all") {
+          const paths = group.items.filter((file) => file.staged).map((file) => file.path);
+          onRollbackFiles(group.repo.repoId, paths);
+        }
         return;
       }
       if (node.id === `repo:${group.repo.repoId}:unstaged`) {
         if (actionId === "stage-all") onStageAll(group.repo.repoId);
+        if (actionId === "rollback-all") {
+          const paths = group.items.filter((file) => !file.staged).map((file) => file.path);
+          onRollbackFiles(group.repo.repoId, paths);
+        }
         return;
       }
 
@@ -175,7 +189,7 @@ export function GitStaging({
         if (actionId === "unstage")
           onUnstageFile(group.repo.repoId, stagedFile.path);
         if (actionId === "rollback")
-          onRollbackFile(group.repo.repoId, stagedFile.path);
+          onRollbackFiles(group.repo.repoId, [stagedFile.path]);
         return;
       }
       // Unstaged
@@ -188,7 +202,7 @@ export function GitStaging({
         if (actionId === "stage")
           onStageFile(group.repo.repoId, unstagedFile.path);
         if (actionId === "rollback")
-          onRollbackFile(group.repo.repoId, unstagedFile.path);
+          onRollbackFiles(group.repo.repoId, [unstagedFile.path]);
         return;
       }
     }

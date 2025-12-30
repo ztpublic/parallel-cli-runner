@@ -372,9 +372,9 @@ function App() {
             unstageFiles(repoId, [path])
           );
         }}
-        onRollbackFile={(repoId, path) => {
-          void runGitCommand("Roll back failed", "Failed to roll back file.", () =>
-            discardFiles(repoId, [path])
+        onRollbackFiles={(repoId, paths) => {
+          void runGitCommand("Roll back failed", "Failed to roll back files.", () =>
+            discardFiles(repoId, paths)
           );
         }}
         onCommit={(repoId, message) => {

@@ -42,7 +42,7 @@ type GitPanelProps = {
   onUnstageAll?: (repoId: string) => void;
   onStageFile?: (repoId: string, path: string) => void;
   onUnstageFile?: (repoId: string, path: string) => void;
-  onRollbackFile?: (repoId: string, path: string) => void;
+  onRollbackFiles?: (repoId: string, paths: string[]) => void;
   onLoadMoreCommits?: (repoId: string) => void;
   onLoadMoreLocalBranches?: (repoId: string) => void;
   onLoadMoreRemoteBranches?: (repoId: string) => void;
@@ -95,7 +95,7 @@ export function GitPanel({
   onUnstageAll,
   onStageFile,
   onUnstageFile,
-  onRollbackFile,
+  onRollbackFiles,
   onLoadMoreCommits,
   onLoadMoreLocalBranches,
   onLoadMoreRemoteBranches,
@@ -148,8 +148,8 @@ export function GitPanel({
     onUnstageFile?.(repoId, path);
   };
 
-  const handleRollbackFile = (repoId: string, path: string) => {
-    onRollbackFile?.(repoId, path);
+  const handleRollbackFiles = (repoId: string, paths: string[]) => {
+    onRollbackFiles?.(repoId, paths);
   };
 
   return (
@@ -262,7 +262,7 @@ export function GitPanel({
                 onUnstageAll={handleUnstageAll}
                 onStageFile={handleStageFile}
                 onUnstageFile={handleUnstageFile}
-                onRollbackFile={handleRollbackFile}
+                onRollbackFiles={handleRollbackFiles}
                 onCommit={handleCommit}
               />
             ) : null}
