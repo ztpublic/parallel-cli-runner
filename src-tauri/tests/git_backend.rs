@@ -590,7 +590,7 @@ fn squash_commits_linear_range() {
 }
 
 #[test]
-fn squash_commits_requires_clean_worktree() {
+fn squash_commits_restores_dirty_worktree() {
     let (temp, repo) = init_repo();
     write_file(temp.path(), "file.txt", "base\n");
     commit_all(temp.path(), "Base");
@@ -605,8 +605,12 @@ fn squash_commits_requires_clean_worktree() {
 
     write_file(temp.path(), "file.txt", "dirty\n");
 
-    let result = git::squash_commits(temp.path(), &[commit_a, commit_b]);
-    assert!(result.is_err());
+    git::squash_commits(temp.path(), &[commit_a, commit_b]).expect("squash with dirty worktree");
+
+    let content = fs::read_to_string(temp.path().join("file.txt")).unwrap();
+    assert_eq!(content, "dirty\n");
+    let status = git::status(temp.path()).expect("status after squash");
+    assert!(status.has_unstaged);
 }
 
 #[test]
