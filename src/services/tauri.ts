@@ -141,6 +141,13 @@ export function gitRevert(params: {
   return invoke("git_revert", params);
 }
 
+export function gitSquashCommits(params: {
+  cwd: string;
+  commits: string[];
+}): Promise<void> {
+  return invoke("git_squash_commits", params);
+}
+
 export function gitAddWorktree(params: {
   repoRoot: string;
   path: string;

@@ -191,6 +191,12 @@ async fn git_revert(cwd: String, commit: String) -> Result<(), CommandError> {
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_squash_commits(cwd: String, commits: Vec<String>) -> Result<(), CommandError> {
+    let path = PathBuf::from(cwd);
+    git::squash_commits(&path, &commits).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_add_worktree(
     repo_root: String,
     path: String,
@@ -259,6 +265,7 @@ pub fn run() {
             git_smart_checkout_branch,
             git_reset,
             git_revert,
+            git_squash_commits,
             git_add_worktree,
             git_remove_worktree,
             git_delete_branch

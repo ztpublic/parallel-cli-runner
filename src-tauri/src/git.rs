@@ -1,12 +1,13 @@
 use git2::{
     build::CheckoutBuilder, BranchType, Delta, Diff, DiffFindOptions, DiffFormat, DiffOptions,
-    DiffStatsFormat, ErrorCode, IndexAddOption, MergeOptions, Repository, ResetType, RevertOptions,
-    StashFlags, Status, StatusOptions, StatusShow, WorktreeAddOptions, WorktreePruneOptions,
+    DiffStatsFormat, ErrorCode, IndexAddOption, MergeOptions, Oid, Repository, ResetType,
+    RevertOptions, Signature, Sort, StashFlags, Status, StatusOptions, StatusShow,
+    WorktreeAddOptions, WorktreePruneOptions,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     io::BufRead,
     path::{Path, PathBuf},
@@ -1258,6 +1259,230 @@ pub fn revert(repo_root: &Path, commit_str: &str) -> Result<(), GitError> {
     )?;
     
     repo.cleanup_state()?;
+    Ok(())
+}
+
+fn signature_from_commit(commit: &git2::Commit<'_>) -> Result<Signature<'static>, GitError> {
+    let author = commit.author();
+    let name = author.name().unwrap_or("unknown");
+    let email = author.email().unwrap_or("unknown");
+    let time = author.when();
+    Signature::new(name, email, &time).map_err(GitError::Git2)
+}
+
+fn resolve_commit_oid(repo: &Repository, commit_str: &str) -> Result<Oid, GitError> {
+    let obj = repo.revparse_single(commit_str)?;
+    let commit = obj.peel_to_commit()?;
+    Ok(commit.id())
+}
+
+fn ensure_clean_working_tree(repo: &Repository) -> Result<(), GitError> {
+    let mut status_opts = StatusOptions::new();
+    status_opts.include_untracked(true).recurse_untracked_dirs(true);
+    let statuses = repo.statuses(Some(&mut status_opts))?;
+    let is_clean = statuses
+        .iter()
+        .all(|entry| entry.status() == Status::CURRENT);
+
+    if !is_clean {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "working tree has uncommitted changes".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+pub fn squash_commits(repo_root: &Path, commit_ids: &[String]) -> Result<(), GitError> {
+    if commit_ids.len() < 2 {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "select at least two commits to squash".to_string(),
+        });
+    }
+
+    let repo = open_repo(repo_root)?;
+    ensure_clean_working_tree(&repo)?;
+
+    let mut parent_map: HashMap<Oid, Option<Oid>> = HashMap::new();
+    let mut selected_set = HashSet::new();
+
+    for commit_str in commit_ids {
+        let oid = resolve_commit_oid(&repo, commit_str)?;
+        if selected_set.contains(&oid) {
+            continue;
+        }
+        let commit = repo.find_commit(oid)?;
+        if commit.parent_count() > 1 {
+            return Err(GitError::GitFailed {
+                code: None,
+                stderr: "cannot squash merge commits".to_string(),
+            });
+        }
+        let parent = if commit.parent_count() == 1 {
+            commit.parent_id(0).ok()
+        } else {
+            None
+        };
+        parent_map.insert(oid, parent);
+        selected_set.insert(oid);
+    }
+
+    let parent_set: HashSet<Oid> = parent_map
+        .values()
+        .filter_map(|parent| parent.as_ref().copied())
+        .filter(|parent| selected_set.contains(parent))
+        .collect();
+
+    let newest_candidates: Vec<Oid> = selected_set
+        .iter()
+        .copied()
+        .filter(|oid| !parent_set.contains(oid))
+        .collect();
+
+    if newest_candidates.len() != 1 {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "selected commits must be a single linear range".to_string(),
+        });
+    }
+
+    let mut ordered_newest = Vec::new();
+    let mut cursor = newest_candidates[0];
+    loop {
+        ordered_newest.push(cursor);
+        let parent = parent_map
+            .get(&cursor)
+            .and_then(|parent| *parent);
+        if let Some(parent_oid) = parent {
+            if selected_set.contains(&parent_oid) {
+                cursor = parent_oid;
+                continue;
+            }
+        }
+        break;
+    }
+
+    if ordered_newest.len() != selected_set.len() {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "selected commits must be contiguous".to_string(),
+        });
+    }
+
+    ordered_newest.reverse();
+    let oldest = ordered_newest[0];
+    let base_oid = parent_map
+        .get(&oldest)
+        .and_then(|parent| *parent)
+        .ok_or_else(|| GitError::GitFailed {
+            code: None,
+            stderr: "cannot squash the root commit".to_string(),
+        })?;
+
+    let mut revwalk = repo.revwalk()?;
+    revwalk.push_head()?;
+    revwalk.hide(base_oid)?;
+    revwalk.set_sorting(Sort::TOPOLOGICAL | Sort::REVERSE)?;
+    let commits_to_replay: Vec<Oid> = revwalk.filter_map(Result::ok).collect();
+
+    let commits_to_replay_set: HashSet<Oid> =
+        commits_to_replay.iter().copied().collect();
+    if !selected_set.is_subset(&commits_to_replay_set) {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "selected commits are not on the current branch".to_string(),
+        });
+    }
+
+    let committer = repo.signature()?;
+    let mut current_oid = base_oid;
+    let mut squashing = false;
+    let mut squash_parent = base_oid;
+    let mut squash_messages: Vec<String> = Vec::new();
+    let mut squash_author: Option<Signature<'static>> = None;
+
+    for oid in commits_to_replay {
+        let commit = repo.find_commit(oid)?;
+        let current_commit = repo.find_commit(current_oid)?;
+        let mut index = repo.cherrypick_commit(&commit, &current_commit, 0, None)?;
+        if index.has_conflicts() {
+            return Err(GitError::GitFailed {
+                code: None,
+                stderr: "squash resulted in conflicts; resolve them manually".to_string(),
+            });
+        }
+
+        let tree_id = index.write_tree_to(&repo)?;
+        let tree = repo.find_tree(tree_id)?;
+
+        if selected_set.contains(&oid) {
+            if !squashing {
+                squashing = true;
+                squash_parent = current_oid;
+                squash_messages.clear();
+                squash_messages.push(commit.message().unwrap_or("").trim_end().to_string());
+                squash_author = Some(signature_from_commit(&commit)?);
+            } else {
+                squash_messages.push(commit.message().unwrap_or("").trim_end().to_string());
+            }
+
+            let message = squash_messages.join("\n\n");
+            let author = squash_author.as_ref().ok_or_else(|| GitError::GitFailed {
+                code: None,
+                stderr: "failed to resolve squash author".to_string(),
+            })?;
+            let parent_commit = repo.find_commit(squash_parent)?;
+            let new_oid = repo.commit(
+                None,
+                author,
+                &committer,
+                &message,
+                &tree,
+                &[&parent_commit],
+            )?;
+            current_oid = new_oid;
+        } else {
+            squashing = false;
+            squash_messages.clear();
+            squash_author = None;
+
+            let author = signature_from_commit(&commit)?;
+            let message = commit.message().unwrap_or("").to_string();
+            let parent_commit = repo.find_commit(current_oid)?;
+            let new_oid = repo.commit(
+                None,
+                &author,
+                &committer,
+                &message,
+                &tree,
+                &[&parent_commit],
+            )?;
+            current_oid = new_oid;
+        }
+    }
+
+    let head = repo.head()?;
+    let head_name = head.name().ok_or_else(|| GitError::GitFailed {
+        code: None,
+        stderr: "HEAD is detached".to_string(),
+    })?;
+    if !head.is_branch() {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "squash requires an attached branch".to_string(),
+        });
+    }
+
+    let mut reference = repo.find_reference(head_name)?;
+    reference.set_target(current_oid, "squash commits")?;
+    repo.set_head(head_name)?;
+
+    let mut checkout = CheckoutBuilder::new();
+    checkout.force();
+    repo.checkout_head(Some(&mut checkout))?;
+
     Ok(())
 }
 

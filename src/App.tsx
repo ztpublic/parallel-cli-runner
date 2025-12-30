@@ -74,6 +74,7 @@ function App() {
     smartSwitchBranch,
     reset,
     revert,
+    squashCommits,
     createWorktree,
     removeWorktree,
     loadMoreCommits,
@@ -413,6 +414,11 @@ function App() {
         onRevert={(repoId, commitId) => {
           void runGitCommand("Revert failed", "Failed to revert commit.", () =>
             revert(repoId, commitId)
+          );
+        }}
+        onSquashCommits={(repoId, commitIds) => {
+          void runGitCommand("Squash failed", "Failed to squash commits.", () =>
+            squashCommits(repoId, commitIds)
           );
         }}
         onCreateWorktree={(repoId, branchName, path) => {

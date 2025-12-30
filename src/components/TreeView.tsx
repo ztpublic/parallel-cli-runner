@@ -19,6 +19,10 @@ type TreeViewProps = {
   onNodeToggle?: (nodeId: string, expanded: boolean) => void;
   onNodeActivate?: (node: TreeNode) => void;
   onContextMenuSelect?: (node: TreeNode, itemId: string) => void;
+  getContextMenuItems?: (
+    node: TreeNode,
+    selectedIds: string[]
+  ) => TreeNodeContextMenuItem[];
   onAction?: (node: TreeNode, actionId: string) => void;
   toggleOnRowClick?: boolean;
   renderRightSlot?: (node: TreeNode) => ReactNode;
@@ -36,6 +40,7 @@ export function TreeView({
   onNodeToggle,
   onNodeActivate,
   onContextMenuSelect,
+  getContextMenuItems,
   onAction,
   toggleOnRowClick = false,
   renderRightSlot,
@@ -202,18 +207,26 @@ export function TreeView({
   };
 
   const handleContextMenu = (node: TreeNode, event: ReactMouseEvent) => {
-    if (!node.contextMenu?.length) return;
+    const selectable = selectionMode !== "none" && node.selectable !== false;
+    const isSelected = resolvedSelectedIds.includes(node.id);
+    const nextSelectedIds =
+      selectable && !isSelected ? [node.id] : resolvedSelectedIds;
+    const items = getContextMenuItems
+      ? getContextMenuItems(node, nextSelectedIds)
+      : node.contextMenu ?? [];
+
+    if (!items.length) return;
+
     event.preventDefault();
     event.stopPropagation();
 
-    const selectable = selectionMode !== "none" && node.selectable !== false;
-    if (selectable && !resolvedSelectedIds.includes(node.id)) {
-      setSelection([node.id]);
+    if (selectable && !isSelected) {
+      setSelection(nextSelectedIds);
       setLastSelectedId(node.id);
     }
 
     setContextMenu({
-      items: node.contextMenu,
+      items,
       position: { x: event.clientX, y: event.clientY },
       node,
     });

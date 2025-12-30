@@ -33,6 +33,14 @@ fn commit_all(repo_root: &Path, message: &str) {
     git::commit(repo_root, message, true, false).expect("commit")
 }
 
+fn head_oid(repo: &Repository) -> String {
+    repo.head()
+        .expect("head")
+        .target()
+        .expect("head target")
+        .to_string()
+}
+
 #[test]
 fn detect_repo_from_subdir() {
     let (temp, _repo) = init_repo();
@@ -471,6 +479,63 @@ fn revert_commit() {
     
     let commits_after = git::list_commits(temp.path(), 1, None).expect("list commits after");
     assert!(commits_after[0].summary.starts_with("Revert \"Commit 2\""));
+}
+
+#[test]
+fn squash_commits_linear_range() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+    let base_id = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "a\n");
+    commit_all(temp.path(), "Commit A");
+    let commit_a = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "b\n");
+    commit_all(temp.path(), "Commit B");
+    let commit_b = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "c\n");
+    commit_all(temp.path(), "Commit C");
+    let commit_c = head_oid(&repo);
+
+    git::squash_commits(temp.path(), &[commit_b.clone(), commit_c.clone()])
+        .expect("squash commits");
+
+    let head_commit = repo
+        .find_commit(repo.head().unwrap().target().unwrap())
+        .expect("head commit");
+    assert_eq!(head_commit.parent_id(0).unwrap().to_string(), commit_a);
+    assert!(head_commit.message().unwrap().contains("Commit B"));
+    assert!(head_commit.message().unwrap().contains("Commit C"));
+
+    let commits = git::list_commits(temp.path(), 10, None).expect("list commits");
+    assert_eq!(commits.len(), 3);
+    assert!(commits.iter().any(|commit| commit.id == base_id));
+
+    let content = fs::read_to_string(temp.path().join("file.txt")).unwrap();
+    assert_eq!(content, "c\n");
+}
+
+#[test]
+fn squash_commits_requires_clean_worktree() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    write_file(temp.path(), "file.txt", "a\n");
+    commit_all(temp.path(), "Commit A");
+    let commit_a = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "b\n");
+    commit_all(temp.path(), "Commit B");
+    let commit_b = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "dirty\n");
+
+    let result = git::squash_commits(temp.path(), &[commit_a, commit_b]);
+    assert!(result.is_err());
 }
 
 #[test]

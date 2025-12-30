@@ -16,6 +16,7 @@ import {
   gitRemoveWorktree,
   gitReset,
   gitRevert,
+  gitSquashCommits,
   gitSmartCheckoutBranch,
   gitStageAll,
   gitStageFiles,
@@ -526,6 +527,24 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const squashCommits = useCallback(
+    async (repoId: RepoId, commitIds: string[]) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      try {
+        await gitSquashCommits({
+          cwd: repo.root_path,
+          commits: commitIds,
+        });
+        await refreshRepos(repo.repo_id);
+      } catch (err) {
+        console.error("Failed to squash commits", err);
+        throw err;
+      }
+    },
+    [refreshRepos, resolveRepo]
+  );
+
   const createWorktree = useCallback(
     async (repoId: RepoId, branchName: string, path: string) => {
       const repo = resolveRepo(repoId);
@@ -610,6 +629,7 @@ export function useGitRepos() {
     smartSwitchBranch,
     reset,
     revert,
+    squashCommits,
     createWorktree,
     removeWorktree,
     loadMoreCommits,

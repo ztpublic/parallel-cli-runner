@@ -55,6 +55,7 @@ type GitPanelProps = {
   onDeleteBranch?: (repoId: string, branchName: string) => void;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
   onRevert?: (repoId: string, commitId: string) => void;
+  onSquashCommits?: (repoId: string, commitIds: string[]) => void;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onRemoveRepo?: (repoId: string) => void;
@@ -106,6 +107,7 @@ export function GitPanel({
   onDeleteBranch,
   onReset,
   onRevert,
+  onSquashCommits,
   onCreateWorktree,
   onDeleteWorktree,
   onRemoveRepo,
@@ -243,6 +245,7 @@ export function GitPanel({
                 isLoadingMore={isLoadingMoreCommits}
                 onReset={onReset}
                 onRevert={onRevert}
+                onSquashCommits={onSquashCommits}
               />
             ) : null}
 
