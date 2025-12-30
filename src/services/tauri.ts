@@ -152,6 +152,13 @@ export function gitSquashCommits(params: {
   return invoke("git_squash_commits", params);
 }
 
+export function gitCommitsInRemote(params: {
+  cwd: string;
+  commits: string[];
+}): Promise<boolean> {
+  return invoke<boolean>("git_commits_in_remote", params);
+}
+
 export function gitAddWorktree(params: {
   repoRoot: string;
   path: string;

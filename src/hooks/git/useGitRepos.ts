@@ -3,6 +3,7 @@ import {
   gitAddWorktree,
   gitCheckoutBranch,
   gitCommit,
+  gitCommitsInRemote,
   gitCreateBranch,
   gitDeleteBranch,
   gitDiscardFiles,
@@ -556,6 +557,23 @@ export function useGitRepos() {
     [refreshRepos, resolveRepo]
   );
 
+  const commitsInRemote = useCallback(
+    async (repoId: RepoId, commitIds: string[]) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return false;
+      try {
+        return await gitCommitsInRemote({
+          cwd: repo.root_path,
+          commits: commitIds,
+        });
+      } catch (err) {
+        console.error("Failed to check commits in remote", err);
+        throw err;
+      }
+    },
+    [resolveRepo]
+  );
+
   const createWorktree = useCallback(
     async (repoId: RepoId, branchName: string, path: string) => {
       const repo = resolveRepo(repoId);
@@ -642,6 +660,7 @@ export function useGitRepos() {
     reset,
     revert,
     squashCommits,
+    commitsInRemote,
     createWorktree,
     removeWorktree,
     loadMoreCommits,

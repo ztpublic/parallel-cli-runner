@@ -203,6 +203,12 @@ async fn git_squash_commits(cwd: String, commits: Vec<String>) -> Result<(), Com
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_commits_in_remote(cwd: String, commits: Vec<String>) -> Result<bool, CommandError> {
+    let path = PathBuf::from(cwd);
+    git::commits_in_remote(&path, &commits).map_err(CommandError::from)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_add_worktree(
     repo_root: String,
     path: String,
@@ -273,6 +279,7 @@ pub fn run() {
             git_reset,
             git_revert,
             git_squash_commits,
+            git_commits_in_remote,
             git_add_worktree,
             git_remove_worktree,
             git_delete_branch

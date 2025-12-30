@@ -1553,6 +1553,38 @@ pub fn squash_commits(repo_root: &Path, commit_ids: &[String]) -> Result<(), Git
     Ok(())
 }
 
+pub fn commits_in_remote(repo_root: &Path, commit_ids: &[String]) -> Result<bool, GitError> {
+    if commit_ids.is_empty() {
+        return Ok(false);
+    }
+
+    let repo = open_repo(repo_root)?;
+    let mut remote_refs = repo.references_glob("refs/remotes/*")?;
+    let mut remote_heads = Vec::new();
+
+    while let Some(reference) = remote_refs.next() {
+        let reference = reference?;
+        if let Ok(commit) = reference.peel_to_commit() {
+            remote_heads.push(commit.id());
+        }
+    }
+
+    if remote_heads.is_empty() {
+        return Ok(false);
+    }
+
+    for commit_str in commit_ids {
+        let oid = resolve_commit_oid(&repo, commit_str)?;
+        for remote_oid in &remote_heads {
+            if *remote_oid == oid || repo.graph_descendant_of(*remote_oid, oid)? {
+                return Ok(true);
+            }
+        }
+    }
+
+    Ok(false)
+}
+
 pub fn delete_branch(repo_root: &Path, branch: &str, force: bool) -> Result<(), GitError> {
     let repo = open_repo(repo_root)?;
     if force {

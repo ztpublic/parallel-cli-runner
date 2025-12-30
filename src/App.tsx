@@ -15,6 +15,7 @@ import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
 import { SmartSwitchDialog } from "./components/dialogs/SmartSwitchDialog";
+import { SquashCommitsDialog } from "./components/dialogs/SquashCommitsDialog";
 import type { RepoInfoDto } from "./types/git";
 import type {
   ChangedFile,
@@ -76,6 +77,7 @@ function App() {
     reset,
     revert,
     squashCommits,
+    commitsInRemote,
     createWorktree,
     removeWorktree,
     loadMoreCommits,
@@ -102,6 +104,11 @@ function App() {
     repoId: string;
     branchName: string;
   }>({ open: false, repoId: "", branchName: "" });
+  const [squashDialog, setSquashDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    commitIds: string[];
+  }>({ open: false, repoId: "", commitIds: [] });
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -423,9 +430,14 @@ function App() {
           );
         }}
         onSquashCommits={(repoId, commitIds) => {
-          void runGitCommand("Squash failed", "Failed to squash commits.", () =>
-            squashCommits(repoId, commitIds)
-          );
+          void runGitCommand("Squash failed", "Failed to squash commits.", async () => {
+            const alreadyInRemote = await commitsInRemote(repoId, commitIds);
+            if (alreadyInRemote) {
+              setSquashDialog({ open: true, repoId, commitIds });
+              return;
+            }
+            await squashCommits(repoId, commitIds);
+          });
         }}
         onCreateWorktree={(repoId, branchName, path) => {
           void runGitCommand("Create worktree failed", "Failed to create worktree.", () =>
@@ -494,6 +506,16 @@ function App() {
         onConfirmSmart={() => {
           void runGitCommand("Smart switch failed", "Failed to smart switch branch.", () =>
             smartSwitchBranch(smartSwitchDialog.repoId, smartSwitchDialog.branchName)
+          );
+        }}
+      />
+      <SquashCommitsDialog
+        open={squashDialog.open}
+        commitCount={squashDialog.commitIds.length}
+        onClose={() => setSquashDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={() => {
+          void runGitCommand("Squash failed", "Failed to squash commits.", () =>
+            squashCommits(squashDialog.repoId, squashDialog.commitIds)
           );
         }}
       />
