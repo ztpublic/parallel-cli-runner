@@ -1,7 +1,39 @@
 import { type MutableRefObject, useEffect, useState } from "react";
-import { unifiedMergeView } from "@codemirror/merge";
-import { EditorState } from "@codemirror/state";
+import { getOriginalDoc, unifiedMergeView, updateOriginalDoc } from "@codemirror/merge";
+import { ChangeSet, EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+
+function toText(value: string) {
+  return Text.of(value.split(/\r\n|\r|\n/));
+}
+
+function updateEditorDoc(view: EditorView, nextDoc: string) {
+  const currentDoc = view.state.doc.toString();
+  if (currentDoc === nextDoc) {
+    return;
+  }
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
+  });
+}
+
+function updateOriginalDocIfNeeded(view: EditorView, nextOriginal: string) {
+  const currentOriginal = getOriginalDoc(view.state);
+  const currentText = currentOriginal.toString();
+  if (currentText === nextOriginal) {
+    return;
+  }
+  const changes = ChangeSet.of(
+    [{ from: 0, to: currentOriginal.length, insert: nextOriginal }],
+    currentOriginal.length
+  );
+  view.dispatch({
+    effects: updateOriginalDoc.of({
+      doc: toText(nextOriginal),
+      changes,
+    }),
+  });
+}
 
 export function useUnifiedView(
   doc: string,
@@ -64,14 +96,21 @@ export function useUnifiedView(
   }, [
     active,
     container,
-    doc,
-    original,
     showChanges,
     baseExtensions,
     extraExtensions,
     viewRef,
     onReady,
   ]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+    updateEditorDoc(view, doc);
+    updateOriginalDocIfNeeded(view, original);
+  }, [doc, original]);
 
   return (node: HTMLDivElement | null) => {
     if (containerRef) {

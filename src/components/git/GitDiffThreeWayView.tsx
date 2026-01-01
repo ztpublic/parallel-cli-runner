@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EditorView } from "@codemirror/view";
-import { languageExtension, readOnlyExtensions, type HighlightTheme } from "./editorConfig";
+import { type HighlightTheme } from "./editorConfig";
 import {
   baseTargetEffect,
   baseTargetField,
@@ -10,6 +10,7 @@ import { useThreeWayMergeState } from "./hooks/useThreeWayMergeState";
 import { useThreeWayScrollSync } from "./hooks/useThreeWayScrollSync";
 import { useUnifiedView } from "./hooks/useUnifiedView";
 import { ThreeWayOverlay } from "./ThreeWayOverlay";
+import { DiffViewEmptyState, useDiffViewSetup } from "./diffViewUtils";
 import "./GitDiffView.css";
 
 export type GitDiffThreeWayViewProps = {
@@ -22,8 +23,6 @@ export type GitDiffThreeWayViewProps = {
   syncScroll?: boolean;
   className?: string;
 };
-
-const EMPTY_STATE = "Select revisions to compare.";
 
 export function GitDiffThreeWayView({
   baseText,
@@ -38,6 +37,7 @@ export function GitDiffThreeWayView({
   const leftViewRef = useRef<EditorView | null>(null);
   const baseViewRef = useRef<EditorView | null>(null);
   const rightViewRef = useRef<EditorView | null>(null);
+  const containerRef = useRef<HTMLElement | null>(null);
   const leftContainerRef = useRef<HTMLDivElement | null>(null);
   const baseContainerRef = useRef<HTMLDivElement | null>(null);
   const rightContainerRef = useRef<HTMLDivElement | null>(null);
@@ -59,6 +59,7 @@ export function GitDiffThreeWayView({
     leftText: leftText ?? "",
     rightText: rightText ?? "",
     baseViewRef,
+    containerRef,
   });
 
   const baseDoc = baseDocState ?? "";
@@ -68,21 +69,15 @@ export function GitDiffThreeWayView({
   const hasThreeWay =
     baseDoc.trim().length > 0 || leftDoc.trim().length > 0 || rightDoc.trim().length > 0;
 
-  const langExtension = useMemo(
-    () => languageExtension(languageId, filePath),
-    [languageId, filePath]
-  );
-  const extraExtensions = useMemo(
-    () => (langExtension ? [langExtension] : []),
-    [langExtension]
-  );
+  const { extraExtensions, baseExtensions, containerClassName } = useDiffViewSetup({
+    languageId,
+    filePath,
+    highlightTheme,
+    className,
+  });
   const baseTargetExtensions = useMemo(
     () => [...extraExtensions, baseTargetField],
     [extraExtensions]
-  );
-  const baseExtensions = useMemo(
-    () => readOnlyExtensions(highlightTheme),
-    [highlightTheme]
   );
 
   const leftRef = useUnifiedView(
@@ -137,20 +132,12 @@ export function GitDiffThreeWayView({
     baseView.dispatch({ effects: baseTargetEffect.of(decorations) });
   }, [threeWayChunks, layoutTick]);
 
-  const containerClassName = className
-    ? `git-diff-view ${className}`
-    : "git-diff-view";
-
   if (!hasThreeWay) {
-    return (
-      <section className={containerClassName}>
-        <div className="git-diff-view__empty">{EMPTY_STATE}</div>
-      </section>
-    );
+    return <DiffViewEmptyState className={containerClassName} />;
   }
 
   return (
-    <section className={containerClassName}>
+    <section className={containerClassName} ref={containerRef}>
       <div className="git-diff-view__three-way">
         <div className="git-diff-view__grid git-diff-view__grid--three">
           <div ref={leftRef} className="git-diff-view__merge" />

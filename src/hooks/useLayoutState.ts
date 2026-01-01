@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { LayoutNode, PaneNode } from "../types/layout";
+import type { LayoutNode, Orientation, PaneNode } from "../types/layout";
 import {
   collectPanes,
-  buildLayoutFromPanes,
   countPanes,
   findPane,
   getFirstPane,
+  getLayoutOrientation,
+  appendPaneToLayout,
   removePane,
+  splitPane,
 } from "../types/layout";
 import { killSession, writeToSession } from "../services/tauri";
 
@@ -33,11 +35,27 @@ export function useLayoutState() {
 
   const appendPane = useCallback((pane: PaneNode) => {
     setLayout((prev) => {
-      const panes = collectPanes(prev);
-      return buildLayoutFromPanes([...panes, pane]);
+      const orientation = getLayoutOrientation(prev);
+      return appendPaneToLayout(prev, pane, orientation);
     });
     setActivePaneId(pane.id);
   }, []);
+
+  const splitPaneInLayout = useCallback(
+    (pane: PaneNode, targetPaneId: string, orientation: Orientation) => {
+      setLayout((prev) => {
+        if (!prev) return prev;
+        const next = splitPane(prev, targetPaneId, pane, orientation);
+        if (next === prev) {
+          const fallbackOrientation = getLayoutOrientation(prev);
+          return appendPaneToLayout(prev, pane, fallbackOrientation);
+        }
+        return next;
+      });
+      setActivePaneId(pane.id);
+    },
+    []
+  );
 
   const closePane = useCallback(async (paneId: string) => {
     const currentLayout = layoutRef.current;
@@ -87,6 +105,7 @@ export function useLayoutState() {
     resetLayoutState,
     getLayoutSnapshot,
     appendPane,
+    splitPaneInLayout,
     closePane,
     closeActivePane,
     broadcastPaneInput,

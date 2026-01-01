@@ -23,6 +23,7 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
   const termRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const onInputRef = useRef(onInput);
+  const resizeTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     onInputRef.current = onInput;
@@ -38,6 +39,14 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
     const rows = term.rows;
     await invoke("resize_session", { id: pane.sessionId, cols, rows });
   }, [pane.sessionId]);
+
+  const scheduleSyncSize = useCallback(() => {
+    if (resizeTimeoutRef.current !== null) return;
+    resizeTimeoutRef.current = window.setTimeout(() => {
+      resizeTimeoutRef.current = null;
+      void syncSize();
+    }, 100);
+  }, [syncSize]);
 
   useEffect(() => {
     const term = new Terminal({
@@ -78,23 +87,27 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
     void syncSize();
 
     const resizeObserver = new ResizeObserver(() => {
-      void syncSize();
+      scheduleSyncSize();
     });
     if (containerRef.current) {
       resizeObserver.observe(containerRef.current);
     }
-    window.addEventListener("resize", syncSize);
+    window.addEventListener("resize", scheduleSyncSize);
 
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener("resize", syncSize);
+      window.removeEventListener("resize", scheduleSyncSize);
+      if (resizeTimeoutRef.current !== null) {
+        window.clearTimeout(resizeTimeoutRef.current);
+        resizeTimeoutRef.current = null;
+      }
       unsubscribeData.dispose();
       term.dispose();
       if (unlisten) {
         unlisten();
       }
     };
-  }, [pane.sessionId, syncSize]);
+  }, [pane.sessionId, scheduleSyncSize, syncSize]);
 
   useEffect(() => {
     if (isActive && termRef.current) {

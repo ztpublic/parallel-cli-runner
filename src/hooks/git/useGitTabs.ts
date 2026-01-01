@@ -159,6 +159,27 @@ export function useGitTabs(initialTabs: GitTab[]) {
       window.addEventListener("pointercancel", handlePointerEnd);
     };
 
+  useEffect(() => {
+    return () => {
+      if (pointerCaptureRef.current) {
+        const { element, pointerId } = pointerCaptureRef.current;
+        try {
+          element.releasePointerCapture(pointerId);
+        } catch {
+          // Ignore release errors; capture may not be active in some webviews.
+        }
+        pointerCaptureRef.current = null;
+      }
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
+      draggedTabRef.current = null;
+      lastPointerTargetRef.current = null;
+      setDraggedTabId(null);
+      setDragOverTabId(null);
+    };
+  }, [handlePointerEnd, handlePointerMove]);
+
   return {
     tabs,
     activeTab,

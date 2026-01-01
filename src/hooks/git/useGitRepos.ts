@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   gitAddWorktree,
   gitCheckoutBranch,
@@ -122,8 +122,14 @@ function mapStashes(stashes: StashInfoDto[]): StashItem[] {
 }
 
 type RepoId = string;
+type WithRepoOptions = {
+  refresh?: boolean;
+  errorMessage?: string;
+};
 
 export function useGitRepos() {
+  const refreshSeqRef = useRef(0);
+  const loadMoreSeqRef = useRef<Record<RepoId, number>>({});
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
   const [statusByRepo, setStatusByRepo] = useState<Record<RepoId, RepoStatusDto | null>>({});
   
@@ -175,6 +181,7 @@ export function useGitRepos() {
         ? repos.filter((repo) => repo.repo_id === repoId)
         : repos;
       if (!targets.length) return;
+      const requestId = ++refreshSeqRef.current;
       setLoading(true);
       setError(null);
 
@@ -227,6 +234,10 @@ export function useGitRepos() {
           })
         );
 
+        if (requestId !== refreshSeqRef.current) {
+          return;
+        }
+
         setStatusByRepo((prev) => {
           const next = { ...prev };
           for (const result of results) next[result.repoId] = result.status;
@@ -268,10 +279,15 @@ export function useGitRepos() {
           return next;
         });
       } catch (err) {
+        if (requestId !== refreshSeqRef.current) {
+          return;
+        }
         const message = formatInvokeError(err);
         setError(message === "Unexpected error." ? "Failed to load git data." : message);
       } finally {
-        setLoading(false);
+        if (requestId === refreshSeqRef.current) {
+          setLoading(false);
+        }
       }
     },
     [repos]
@@ -281,6 +297,8 @@ export function useGitRepos() {
     const repo = repos.find((r) => r.repo_id === repoId);
     if (!repo || !hasMoreCommitsByRepo[repoId] || loadingMoreCommitsByRepo[repoId]) return;
 
+    const requestId = (loadMoreSeqRef.current[repoId] ?? 0) + 1;
+    loadMoreSeqRef.current[repoId] = requestId;
     setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: true }));
     try {
       const skip = commitsSkipByRepo[repoId] ?? 0;
@@ -290,7 +308,11 @@ export function useGitRepos() {
         limit: 10,
         skip: nextSkip,
       });
-      
+
+      if (loadMoreSeqRef.current[repoId] !== requestId) {
+        return;
+      }
+
       setCommitsByRepo((prev) => ({
         ...prev,
         [repoId]: [...(prev[repoId] ?? []), ...mapCommits(moreCommits)],
@@ -300,7 +322,9 @@ export function useGitRepos() {
         setHasMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
       }
     } finally {
-      setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
+      if (loadMoreSeqRef.current[repoId] === requestId) {
+        setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
+      }
     }
   }, [repos, hasMoreCommitsByRepo, loadingMoreCommitsByRepo, commitsSkipByRepo]);
 
@@ -348,287 +372,266 @@ export function useGitRepos() {
     [repos]
   );
 
-  const stageFiles = useCallback(
-    async (repoId: RepoId, paths: string[]) => {
+  const withRepo = useCallback(
+    async function <T>(
+      repoId: RepoId,
+      task: (repo: RepoInfoDto) => Promise<T>,
+      options: WithRepoOptions = {}
+    ) {
       const repo = resolveRepo(repoId);
-      if (!repo || !paths.length) return;
-      await gitStageFiles({ cwd: repo.root_path, paths });
-      await refreshRepos(repo.repo_id);
+      if (!repo) return;
+
+      const { refresh = true, errorMessage } = options;
+
+      try {
+        const result = await task(repo);
+        if (refresh) {
+          await refreshRepos(repo.repo_id);
+        }
+        return result;
+      } catch (err) {
+        if (errorMessage) {
+          console.error(errorMessage, err);
+        }
+        throw err;
+      }
     },
     [refreshRepos, resolveRepo]
+  );
+
+  const stageFiles = useCallback(
+    async (repoId: RepoId, paths: string[]) => {
+      if (!paths.length) return;
+      await withRepo(repoId, (repo) => gitStageFiles({ cwd: repo.root_path, paths }));
+    },
+    [withRepo]
   );
 
   const unstageFiles = useCallback(
     async (repoId: RepoId, paths: string[]) => {
-      const repo = resolveRepo(repoId);
-      if (!repo || !paths.length) return;
-      await gitUnstageFiles({ cwd: repo.root_path, paths });
-      await refreshRepos(repo.repo_id);
+      if (!paths.length) return;
+      await withRepo(repoId, (repo) => gitUnstageFiles({ cwd: repo.root_path, paths }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const discardFiles = useCallback(
     async (repoId: RepoId, paths: string[]) => {
-      const repo = resolveRepo(repoId);
-      if (!repo || !paths.length) return;
-      await gitDiscardFiles({ cwd: repo.root_path, paths });
-      await refreshRepos(repo.repo_id);
+      if (!paths.length) return;
+      await withRepo(repoId, (repo) => gitDiscardFiles({ cwd: repo.root_path, paths }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const stageAll = useCallback(
     async (repoId: RepoId) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      await gitStageAll({ cwd: repo.root_path });
-      await refreshRepos(repo.repo_id);
+      await withRepo(repoId, (repo) => gitStageAll({ cwd: repo.root_path }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const unstageAll = useCallback(
     async (repoId: RepoId) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      await gitUnstageAll({ cwd: repo.root_path });
-      await refreshRepos(repo.repo_id);
+      await withRepo(repoId, (repo) => gitUnstageAll({ cwd: repo.root_path }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const commit = useCallback(
     async (repoId: RepoId, message: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      await gitCommit({ cwd: repo.root_path, message, stageAll: false, amend: false });
-      await refreshRepos(repo.repo_id);
+      await withRepo(repoId, (repo) =>
+        gitCommit({ cwd: repo.root_path, message, stageAll: false, amend: false })
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const pull = useCallback(
     async (repoId: RepoId) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      await gitPull({ cwd: repo.root_path });
-      await refreshRepos(repo.repo_id);
+      await withRepo(repoId, (repo) => gitPull({ cwd: repo.root_path }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const push = useCallback(
     async (repoId: RepoId, force: boolean) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      await gitPush({ cwd: repo.root_path, force });
-      await refreshRepos(repo.repo_id);
+      await withRepo(repoId, (repo) => gitPush({ cwd: repo.root_path, force }));
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const createBranch = useCallback(
     async (repoId: RepoId, name: string, sourceBranch?: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitCreateBranch({
-          cwd: repo.root_path,
-          branchName: name,
-          sourceBranch,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to create branch", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitCreateBranch({
+            cwd: repo.root_path,
+            branchName: name,
+            sourceBranch,
+          }),
+        { errorMessage: "Failed to create branch" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const deleteBranch = useCallback(
     async (repoId: RepoId, branchName: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitDeleteBranch({
-          repoRoot: repo.root_path,
-          branch: branchName,
-          force: false,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to delete branch", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitDeleteBranch({
+            repoRoot: repo.root_path,
+            branch: branchName,
+            force: false,
+          }),
+        { errorMessage: "Failed to delete branch" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const switchBranch = useCallback(
     async (repoId: RepoId, branchName: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitCheckoutBranch({
-          cwd: repo.root_path,
-          branchName,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to switch branch", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitCheckoutBranch({
+            cwd: repo.root_path,
+            branchName,
+          }),
+        { errorMessage: "Failed to switch branch" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const smartSwitchBranch = useCallback(
     async (repoId: RepoId, branchName: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitSmartCheckoutBranch({
-          cwd: repo.root_path,
-          branchName,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to smart switch branch", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitSmartCheckoutBranch({
+            cwd: repo.root_path,
+            branchName,
+          }),
+        { errorMessage: "Failed to smart switch branch" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const reset = useCallback(
     async (repoId: RepoId, target: string, mode: "soft" | "mixed" | "hard") => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitReset({
-          cwd: repo.root_path,
-          target,
-          mode,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to reset", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitReset({
+            cwd: repo.root_path,
+            target,
+            mode,
+          }),
+        { errorMessage: "Failed to reset" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const revert = useCallback(
     async (repoId: RepoId, commitId: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitRevert({
-          cwd: repo.root_path,
-          commit: commitId,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to revert commit", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitRevert({
+            cwd: repo.root_path,
+            commit: commitId,
+          }),
+        { errorMessage: "Failed to revert commit" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const squashCommits = useCallback(
     async (repoId: RepoId, commitIds: string[]) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitSquashCommits({
-          cwd: repo.root_path,
-          commits: commitIds,
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to squash commits", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitSquashCommits({
+            cwd: repo.root_path,
+            commits: commitIds,
+          }),
+        { errorMessage: "Failed to squash commits" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const commitsInRemote = useCallback(
     async (repoId: RepoId, commitIds: string[]) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return false;
-      try {
-        return await gitCommitsInRemote({
-          cwd: repo.root_path,
-          commits: commitIds,
-        });
-      } catch (err) {
-        console.error("Failed to check commits in remote", err);
-        throw err;
-      }
+      const result = await withRepo(
+        repoId,
+        (repo) =>
+          gitCommitsInRemote({
+            cwd: repo.root_path,
+            commits: commitIds,
+          }),
+        { refresh: false, errorMessage: "Failed to check commits in remote" }
+      );
+      return result ?? false;
     },
-    [resolveRepo]
+    [withRepo]
   );
 
   const createWorktree = useCallback(
     async (repoId: RepoId, branchName: string, path: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      try {
-        await gitAddWorktree({
-          repoRoot: repo.root_path,
-          path,
-          branch: branchName,
-          startPoint: "HEAD",
-        });
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to create worktree", err);
-        throw err;
-      }
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitAddWorktree({
+            repoRoot: repo.root_path,
+            path,
+            branch: branchName,
+            startPoint: "HEAD",
+          }),
+        { errorMessage: "Failed to create worktree" }
+      );
     },
-    [refreshRepos, resolveRepo]
+    [withRepo]
   );
 
   const removeWorktree = useCallback(
     async (repoId: RepoId, branchName: string) => {
-      const repo = resolveRepo(repoId);
-      if (!repo) return;
-      
-      const worktrees = worktreesByRepo[repoId] || [];
-      const worktree = worktrees.find((wt) => wt.branch === branchName);
-      
-      if (!worktree) {
-        console.error("Worktree not found for branch", branchName);
-        return;
-      }
+      await withRepo(
+        repoId,
+        async (repo) => {
+          const worktrees = worktreesByRepo[repoId] || [];
+          const worktree = worktrees.find((wt) => wt.branch === branchName);
 
-      try {
-        // Force removal to ensure cleanup
-        await gitRemoveWorktree({
-          repoRoot: repo.root_path,
-          path: worktree.path,
-          force: true,
-        });
-        
-        // Also delete the branch
-        await gitDeleteBranch({
-          repoRoot: repo.root_path,
-          branch: branchName,
-          force: true,
-        });
-        
-        await refreshRepos(repo.repo_id);
-      } catch (err) {
-        console.error("Failed to remove worktree", err);
-        throw err;
-      }
+          if (!worktree) {
+            console.error("Worktree not found for branch", branchName);
+            return;
+          }
+
+          // Force removal to ensure cleanup
+          await gitRemoveWorktree({
+            repoRoot: repo.root_path,
+            path: worktree.path,
+            force: true,
+          });
+
+          // Also delete the branch
+          await gitDeleteBranch({
+            repoRoot: repo.root_path,
+            branch: branchName,
+            force: true,
+          });
+        },
+        { errorMessage: "Failed to remove worktree" }
+      );
     },
-    [refreshRepos, resolveRepo, worktreesByRepo]
+    [withRepo, worktreesByRepo]
   );
 
   return {

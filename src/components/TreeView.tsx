@@ -75,6 +75,9 @@ export function TreeView({
   const resolvedSelectedIds = isControlled ? selectedIds ?? [] : internalSelectedIds;
   const resolvedCheckedIds = isCheckedControlled ? checkedIds ?? [] : internalCheckedIds;
 
+  // Only nodes with checkable === true render a checkbox and participate in auto-check.
+  const isNodeCheckable = (node: TreeNode) => node.checkable === true;
+
   const setChecked = (nextChecked: string[]) => {
     if (!isCheckedControlled) {
       setInternalCheckedIds(nextChecked);
@@ -82,20 +85,17 @@ export function TreeView({
     onCheckChange?.(nextChecked);
   };
 
-  const getAllDescendantIds = (node: TreeNode): string[] => {
-    let ids: string[] = [];
-    if (node.checkable !== false) { // Assuming if checkable is undefined it defaults to false on the node but if we are walking we check children?
-      // Actually checkable property is on the node.
-      // If we are auto-checking, we usually want to check all checkable descendants.
+  const getCheckableDescendantIds = (node: TreeNode): string[] => {
+    const ids: string[] = [];
+    if (!node.children?.length) {
+      return ids;
     }
-    if (node.children) {
-      node.children.forEach(child => {
-        if (child.checkable) {
-          ids.push(child.id);
-        }
-        ids = ids.concat(getAllDescendantIds(child));
-      });
-    }
+    node.children.forEach((child) => {
+      if (isNodeCheckable(child)) {
+        ids.push(child.id);
+      }
+      ids.push(...getCheckableDescendantIds(child));
+    });
     return ids;
   };
 
@@ -110,7 +110,7 @@ export function TreeView({
     updateSet(node.id, checked);
 
     if (autoCheckChildren && node.children) {
-      const descendants = getAllDescendantIds(node);
+      const descendants = getCheckableDescendantIds(node);
       descendants.forEach(id => updateSet(id, checked));
     }
 
@@ -306,7 +306,7 @@ export function TreeView({
             <span className="tree-toggle-placeholder" aria-hidden />
           )}
 
-          {node.checkable ? (
+          {isNodeCheckable(node) ? (
             <input
               type="checkbox"
               className="tree-checkbox"

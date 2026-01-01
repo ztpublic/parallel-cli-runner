@@ -9,6 +9,7 @@ type TerminalPanelProps = {
   onSetActivePane: (id: string) => void;
   onClosePane: (id: string) => void;
   onNewPane: () => void;
+  onSplitPane: () => void;
 };
 
 export function TerminalPanel({
@@ -18,6 +19,7 @@ export function TerminalPanel({
   onSetActivePane,
   onClosePane,
   onNewPane,
+  onSplitPane,
 }: TerminalPanelProps) {
   return (
     <section className="terminal-panel">
@@ -72,7 +74,7 @@ export function TerminalPanel({
             type="button"
             className="icon-button"
             title="Split terminal"
-            onClick={onNewPane}
+            onClick={onSplitPane}
           >
             <Icon name="split" size={16} />
           </button>

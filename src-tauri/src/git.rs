@@ -2053,19 +2053,26 @@ fn configure_proxy(cmd: &mut Command) -> Option<String> {
     None
 }
 
-pub fn pull(cwd: &Path) -> Result<(), GitError> {
+fn run_git_command<I, S>(cwd: &Path, args: I) -> Result<std::process::Output, GitError>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
     let mut cmd = Command::new("git");
-    cmd.arg("pull").current_dir(cwd);
+    cmd.args(args).current_dir(cwd);
 
     let proxy_url = configure_proxy(&mut cmd);
-
     let output = cmd.output().map_err(GitError::Io)?;
 
     if !output.status.success() {
         let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
         if let Some(url) = proxy_url {
-             use std::fmt::Write;
-             let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}", url);
+            use std::fmt::Write;
+            let _ = write!(
+                stderr,
+                "\n[parallel-cli-runner] System proxy detected and used: {}",
+                url
+            );
         }
 
         return Err(GitError::GitFailed {
@@ -2073,32 +2080,19 @@ pub fn pull(cwd: &Path) -> Result<(), GitError> {
             stderr,
         });
     }
+    Ok(output)
+}
+
+pub fn pull(cwd: &Path) -> Result<(), GitError> {
+    let _ = run_git_command(cwd, ["pull"])?;
     Ok(())
 }
 
 pub fn push(cwd: &Path, force: bool) -> Result<(), GitError> {
-    let mut cmd = Command::new("git");
-    cmd.arg("push").current_dir(cwd);
-    
+    let mut args = vec!["push"];
     if force {
-        cmd.arg("--force");
+        args.push("--force");
     }
-
-    let proxy_url = configure_proxy(&mut cmd);
-
-    let output = cmd.output().map_err(GitError::Io)?;
-
-    if !output.status.success() {
-        let mut stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if let Some(url) = proxy_url {
-             use std::fmt::Write;
-             let _ = write!(stderr, "\n[parallel-cli-runner] System proxy detected and used: {}", url);
-        }
-
-        return Err(GitError::GitFailed {
-            code: output.status.code(),
-            stderr,
-        });
-    }
+    let _ = run_git_command(cwd, args)?;
     Ok(())
 }

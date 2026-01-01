@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 mod command_error;
@@ -12,6 +12,22 @@ use crate::pty::PtyManager;
 #[cfg(test)]
 mod export_types;
 
+fn with_cwd<T>(
+    cwd: String,
+    f: impl FnOnce(&Path) -> Result<T, git::GitError>,
+) -> Result<T, CommandError> {
+    let path = PathBuf::from(cwd);
+    f(&path).map_err(CommandError::from)
+}
+
+fn with_repo_root<T>(
+    repo_root: String,
+    f: impl FnOnce(&Path) -> Result<T, git::GitError>,
+) -> Result<T, CommandError> {
+    let path = PathBuf::from(repo_root);
+    f(&path).map_err(CommandError::from)
+}
+
 // Re-export commands from pty module so tauri::generate_handler! can find them
 // Note: In a larger app we might register them directly from the module or use a macro
 // but for now re-exporting or wrapping them is fine. The generate_handler macro needs
@@ -20,10 +36,9 @@ mod export_types;
 
 #[tauri::command]
 async fn git_detect_repo(cwd: String) -> Result<Option<String>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::detect_repo(&path)
-        .map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
-        .map_err(CommandError::from)
+    with_cwd(cwd, |path| {
+        git::detect_repo(path).map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
+    })
 }
 
 #[tauri::command]
@@ -31,23 +46,21 @@ async fn git_scan_repos(
     app: tauri::AppHandle,
     cwd: String,
 ) -> Result<Vec<RepoInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::scan_repos(&path, |p| {
-        let _ = app.emit("scan-progress", p);
+    with_cwd(cwd, |path| {
+        git::scan_repos(path, |p| {
+            let _ = app.emit("scan-progress", p);
+        })
     })
-    .map_err(CommandError::from)
 }
 
 #[tauri::command]
 async fn git_status(cwd: String) -> Result<RepoStatusDto, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::status(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::status)
 }
 
 #[tauri::command]
 async fn git_diff(cwd: String, pathspecs: Vec<String>) -> Result<String, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::diff(&path, &pathspecs).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::diff(path, &pathspecs))
 }
 
 #[tauri::command]
@@ -57,16 +70,14 @@ async fn git_unified_diff(req: DiffRequestDto) -> Result<DiffResponseDto, Comman
 
 #[tauri::command]
 async fn git_list_branches(cwd: String) -> Result<Vec<git::BranchInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_branches(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::list_branches)
 }
 
 #[tauri::command]
 async fn git_list_remote_branches(
     cwd: String,
 ) -> Result<Vec<git::BranchInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_remote_branches(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::list_remote_branches)
 }
 
 #[tauri::command]
@@ -75,40 +86,34 @@ async fn git_list_commits(
     limit: usize,
     skip: Option<usize>,
 ) -> Result<Vec<git::CommitInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_commits(&path, limit, skip).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::list_commits(path, limit, skip))
 }
 
 #[tauri::command]
 async fn git_list_worktrees(
     cwd: String,
 ) -> Result<Vec<git::WorktreeInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_worktrees(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::list_worktrees)
 }
 
 #[tauri::command]
 async fn git_list_remotes(cwd: String) -> Result<Vec<git::RemoteInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_remotes(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::list_remotes)
 }
 
 #[tauri::command]
 async fn git_list_stashes(cwd: String) -> Result<Vec<git::StashInfoDto>, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::list_stashes(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::list_stashes)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_pull(cwd: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::pull(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::pull)
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_push(cwd: String, force: bool) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::push(&path, force).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::push(path, force))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -118,38 +123,32 @@ async fn git_commit(
     stage_all: bool,
     amend: bool,
 ) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::commit(&path, &message, stage_all, amend).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::commit(path, &message, stage_all, amend))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_stage_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::stage_paths(&path, &paths).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::stage_paths(path, &paths))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_unstage_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::unstage_paths(&path, &paths).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::unstage_paths(path, &paths))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_discard_files(cwd: String, paths: Vec<String>) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::discard_paths(&path, &paths).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::discard_paths(path, &paths))
 }
 
 #[tauri::command]
 async fn git_stage_all(cwd: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::stage_all(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::stage_all)
 }
 
 #[tauri::command]
 async fn git_unstage_all(cwd: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::unstage_all(&path).map_err(CommandError::from)
+    with_cwd(cwd, git::unstage_all)
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -158,8 +157,9 @@ async fn git_merge_into_branch(
     target_branch: String,
     source_branch: String,
 ) -> Result<(), CommandError> {
-    let path = PathBuf::from(repo_root);
-    git::merge_into_branch(&path, &target_branch, &source_branch).map_err(CommandError::from)
+    with_repo_root(repo_root, |path| {
+        git::merge_into_branch(path, &target_branch, &source_branch)
+    })
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -168,44 +168,37 @@ async fn git_create_branch(
     branch_name: String,
     source_branch: Option<String>,
 ) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::create_branch(&path, &branch_name, source_branch).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::create_branch(path, &branch_name, source_branch))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_checkout_branch(cwd: String, branch_name: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::checkout_local_branch(&path, &branch_name).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::checkout_local_branch(path, &branch_name))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_smart_checkout_branch(cwd: String, branch_name: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::smart_checkout_branch(&path, &branch_name).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::smart_checkout_branch(path, &branch_name))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_reset(cwd: String, target: String, mode: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::reset(&path, &target, &mode).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::reset(path, &target, &mode))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_revert(cwd: String, commit: String) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::revert(&path, &commit).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::revert(path, &commit))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_squash_commits(cwd: String, commits: Vec<String>) -> Result<(), CommandError> {
-    let path = PathBuf::from(cwd);
-    git::squash_commits(&path, &commits).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::squash_commits(path, &commits))
 }
 
 #[tauri::command(rename_all = "camelCase")]
 async fn git_commits_in_remote(cwd: String, commits: Vec<String>) -> Result<bool, CommandError> {
-    let path = PathBuf::from(cwd);
-    git::commits_in_remote(&path, &commits).map_err(CommandError::from)
+    with_cwd(cwd, |path| git::commits_in_remote(path, &commits))
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -215,9 +208,10 @@ async fn git_add_worktree(
     branch: String,
     start_point: String,
 ) -> Result<(), CommandError> {
-    let root = PathBuf::from(repo_root);
-    let worktree_path = PathBuf::from(path);
-    git::add_worktree(&root, &worktree_path, &branch, &start_point).map_err(CommandError::from)
+    with_repo_root(repo_root, |root| {
+        let worktree_path = PathBuf::from(path);
+        git::add_worktree(root, &worktree_path, &branch, &start_point)
+    })
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -226,9 +220,10 @@ async fn git_remove_worktree(
     path: String,
     force: bool,
 ) -> Result<(), CommandError> {
-    let root = PathBuf::from(repo_root);
-    let worktree_path = PathBuf::from(path);
-    git::remove_worktree(&root, &worktree_path, force).map_err(CommandError::from)
+    with_repo_root(repo_root, |root| {
+        let worktree_path = PathBuf::from(path);
+        git::remove_worktree(root, &worktree_path, force)
+    })
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -237,8 +232,7 @@ async fn git_delete_branch(
     branch: String,
     force: bool,
 ) -> Result<(), CommandError> {
-    let root = PathBuf::from(repo_root);
-    git::delete_branch(&root, &branch, force).map_err(CommandError::from)
+    with_repo_root(repo_root, |root| git::delete_branch(root, &branch, force))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

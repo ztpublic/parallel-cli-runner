@@ -79,15 +79,87 @@ export function removePane(
   return { ...node, children: [nextLeft, nextRight] };
 }
 
-export function buildLayoutFromPanes(panes: PaneNode[]): LayoutNode | null {
+export function appendPaneToLayout(
+  node: LayoutNode | null,
+  pane: PaneNode,
+  orientation: Orientation = "vertical"
+): LayoutNode | null {
+  if (!node) return pane;
+  return {
+    type: "split",
+    id: createId(),
+    orientation,
+    children: [node, pane],
+  };
+}
+
+export function getLayoutOrientation(
+  node: LayoutNode | null,
+  fallback: Orientation = "vertical"
+): Orientation {
+  if (!node) return fallback;
+  return node.type === "split" ? node.orientation : fallback;
+}
+
+export function splitPane(
+  node: LayoutNode,
+  targetPaneId: string,
+  pane: PaneNode,
+  orientation: Orientation
+): LayoutNode {
+  const [next, didSplit] = splitPaneRecursive(node, targetPaneId, pane, orientation);
+  return didSplit ? next : node;
+}
+
+function splitPaneRecursive(
+  node: LayoutNode,
+  targetPaneId: string,
+  pane: PaneNode,
+  orientation: Orientation
+): [LayoutNode, boolean] {
+  if (node.type === "pane") {
+    if (node.id !== targetPaneId) return [node, false];
+    return [
+      {
+        type: "split",
+        id: createId(),
+        orientation,
+        children: [node, pane],
+      },
+      true,
+    ];
+  }
+
+  const [nextLeft, splitLeft] = splitPaneRecursive(
+    node.children[0],
+    targetPaneId,
+    pane,
+    orientation
+  );
+  if (splitLeft) {
+    return [{ ...node, children: [nextLeft, node.children[1]] }, true];
+  }
+
+  const [nextRight, splitRight] = splitPaneRecursive(
+    node.children[1],
+    targetPaneId,
+    pane,
+    orientation
+  );
+  if (splitRight) {
+    return [{ ...node, children: [node.children[0], nextRight] }, true];
+  }
+
+  return [node, false];
+}
+
+export function buildLayoutFromPanes(
+  panes: PaneNode[],
+  orientation: Orientation = "vertical"
+): LayoutNode | null {
   if (!panes.length) return null;
-  return panes.reduce<LayoutNode | null>((acc, pane) => {
-    if (!acc) return pane;
-    return {
-      type: "split",
-      id: createId(),
-      orientation: "vertical",
-      children: [acc, pane],
-    };
-  }, null);
+  return panes.reduce<LayoutNode | null>(
+    (acc, pane) => appendPaneToLayout(acc, pane, orientation),
+    null
+  );
 }

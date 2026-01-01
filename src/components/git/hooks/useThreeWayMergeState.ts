@@ -8,6 +8,7 @@ type UseThreeWayMergeStateProps = {
   leftText: string;
   rightText: string;
   baseViewRef: MutableRefObject<EditorView | null>;
+  containerRef: MutableRefObject<HTMLElement | null>;
 };
 
 export function useThreeWayMergeState({
@@ -16,6 +17,7 @@ export function useThreeWayMergeState({
   leftText,
   rightText,
   baseViewRef,
+  containerRef,
 }: UseThreeWayMergeStateProps) {
   const [baseDocState, setBaseDocState] = useState(baseText ?? "");
   const [chunkActions, setChunkActions] = useState<Record<string, MergeChunkAction>>({});
@@ -62,6 +64,11 @@ export function useThreeWayMergeState({
 
   useEffect(() => {
     if (!enabled || threeWayChunks.length === 0) {
+      return;
+    }
+
+    const container = containerRef.current;
+    if (!container) {
       return;
     }
 
@@ -121,9 +128,9 @@ export function useThreeWayMergeState({
       }
     };
 
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [enabled, threeWayChunks, selectedChunkId, baseViewRef, handleChunkAction]);
+    container.addEventListener("keydown", handleKey);
+    return () => container.removeEventListener("keydown", handleKey);
+  }, [enabled, threeWayChunks, selectedChunkId, baseViewRef, handleChunkAction, containerRef]);
 
   return {
     baseDocState,

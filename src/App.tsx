@@ -35,6 +35,7 @@ function App() {
     activePaneId,
     setActivePaneId,
     appendPane,
+    splitPaneInLayout,
     closePane,
     closeActivePane,
   } = useLayoutState();
@@ -182,7 +183,7 @@ function App() {
     if (repos.length > 0) {
       void refreshRepos();
     }
-  }, [refreshRepos]);
+  }, [repos, refreshRepos]);
 
   const handleOpenFolder = useCallback(
     async (path: string) => {
@@ -339,6 +340,18 @@ function App() {
     appendPane(next);
   }, [appendPane, panes.length]);
 
+  const handleSplitPane = useCallback(async () => {
+    const targetPaneId = activePaneId ?? panes[0]?.id;
+    if (!targetPaneId) return;
+    const nextIndex = panes.length + 1;
+    const next = await createPaneNode({
+      meta: {
+        title: `Terminal ${nextIndex}`,
+      },
+    });
+    splitPaneInLayout(next, targetPaneId, "horizontal");
+  }, [activePaneId, panes, splitPaneInLayout]);
+
   return (
     <main className="app-shell">
       <div className="workspace" style={{ position: "relative" }}>
@@ -474,6 +487,7 @@ function App() {
           onSetActivePane={setActivePaneId}
           onClosePane={(id) => void closePane(id)}
           onNewPane={() => void handleNewPane()}
+          onSplitPane={() => void handleSplitPane()}
         />
       </div>
       <ScanProgressModal open={isScanning} />

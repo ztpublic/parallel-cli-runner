@@ -1,5 +1,16 @@
 import { type MutableRefObject, useEffect, useState } from "react";
 import { MergeView } from "@codemirror/merge";
+import { EditorView } from "@codemirror/view";
+
+function updateEditorDoc(view: EditorView, nextDoc: string) {
+  const currentDoc = view.state.doc.toString();
+  if (currentDoc === nextDoc) {
+    return;
+  }
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: nextDoc },
+  });
+}
 
 export function useMergeView(
   docA: string,
@@ -40,7 +51,16 @@ export function useMergeView(
         viewRef.current = null;
       }
     };
-  }, [active, container, docA, docB, baseExtensions, extraExtensions, viewRef]);
+  }, [active, container, baseExtensions, extraExtensions, viewRef]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) {
+      return;
+    }
+    updateEditorDoc(view.a, docA);
+    updateEditorDoc(view.b, docB);
+  }, [docA, docB]);
 
   return (node: HTMLDivElement | null) => {
     if (containerRef) {
