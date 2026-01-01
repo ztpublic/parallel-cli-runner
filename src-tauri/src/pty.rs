@@ -3,6 +3,8 @@ use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
 };
+#[cfg(not(target_os = "windows"))]
+use std::path::Path;
 
 use anyhow::Context;
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
@@ -107,8 +109,9 @@ pub async fn create_session(
         .try_clone_reader()
         .map_err(CommandError::internal)?;
     let writer = pair.master.take_writer().map_err(CommandError::internal)?;
-    let mut command = CommandBuilder::new(shell);
+    let mut command = CommandBuilder::new(&shell);
     command.env("TERM", "xterm-256color");
+    apply_login_shell_args(&mut command, &shell);
     if let Some(dir) = cwd {
         command.cwd(dir);
     }
@@ -260,5 +263,18 @@ fn default_shell() -> String {
     #[cfg(not(target_os = "windows"))]
     {
         std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string())
+    }
+}
+
+fn apply_login_shell_args(command: &mut CommandBuilder, shell: &str) {
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell_name = Path::new(shell)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or(shell);
+        if matches!(shell_name, "bash" | "zsh" | "fish" | "ksh") {
+            command.arg("-l");
+        }
     }
 }
