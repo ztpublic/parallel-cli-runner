@@ -3,19 +3,21 @@ import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateWorktreeDialog } from "../dialogs/CreateWorktreeDialog";
 import { DeleteWorktreeDialog } from "../dialogs/DeleteWorktreeDialog";
-import type { RepoGroup, WorktreeItem } from "../../types/git-ui";
+import type { RepoGroup, RepoHeader, WorktreeItem } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
 type GitWorktreesProps = {
   worktreeGroups: RepoGroup<WorktreeItem>[];
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
+  onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
 };
 
 export function GitWorktrees({
   worktreeGroups,
   onCreateWorktree,
   onDeleteWorktree,
+  onOpenTerminal,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -53,9 +55,9 @@ export function GitWorktrees({
         icon: "folder",
         actions: [
           {
-            id: "open-terminal",
+            id: "terminal",
             icon: "terminal",
-            label: "Open",
+            label: "Terminal",
           },
           {
             id: "delete-worktree",
@@ -77,12 +79,20 @@ export function GitWorktrees({
           repoName: group.repo.name,
         });
       }
-    } else if (actionId === "delete-worktree") {
+    } else if (actionId === "terminal" || actionId === "delete-worktree") {
       // id format: repoId:branchName
       const lastColonIndex = node.id.lastIndexOf(":");
       if (lastColonIndex !== -1) {
         const repoId = node.id.substring(0, lastColonIndex);
         const branchName = node.id.substring(lastColonIndex + 1);
+        const group = worktreeGroups.find((g) => g.repo.repoId === repoId);
+        const worktree = group?.items.find((item) => item.branch === branchName);
+        if (actionId === "terminal") {
+          if (group && worktree) {
+            onOpenTerminal?.(group.repo, worktree);
+          }
+          return;
+        }
         setDeleteDialog({
           open: true,
           repoId,

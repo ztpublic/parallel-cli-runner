@@ -1283,6 +1283,7 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .terminal-shell-body {
@@ -1293,7 +1294,10 @@ button {
 }
 
 .terminal-shell-body.is-hidden {
-  display: none;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .terminal-placeholder {

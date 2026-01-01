@@ -1,14 +1,21 @@
 import { useState } from "react";
-import { LayoutNode, PaneNode } from "../types/layout";
+import { LayoutNode } from "../types/layout";
 import { Icon } from "./Icons";
 import { LayoutRenderer } from "./LayoutRenderer";
 
-type TerminalPanelProps = {
-  layout: LayoutNode | null;
-  panes: PaneNode[];
+type TerminalTab = {
+  id: string;
+  title: string;
+  layout: LayoutNode;
   activePaneId: string | null;
+};
+
+type TerminalPanelProps = {
+  tabs: TerminalTab[];
+  activeTabId: string | null;
+  onSetActiveTab: (id: string) => void;
   onSetActivePane: (id: string) => void;
-  onClosePane: (id: string) => void;
+  onCloseTab: (id: string) => void;
   onNewPane: () => void;
   onSplitPane: () => void;
 };
@@ -16,11 +23,11 @@ type TerminalPanelProps = {
 type TerminalView = "terminals" | "acp";
 
 export function TerminalPanel({
-  layout,
-  panes,
-  activePaneId,
+  tabs,
+  activeTabId,
+  onSetActiveTab,
   onSetActivePane,
-  onClosePane,
+  onCloseTab,
   onNewPane,
   onSplitPane,
 }: TerminalPanelProps) {
@@ -54,38 +61,36 @@ export function TerminalPanel({
         {activeView === "terminals" ? (
           <>
             <div className="terminal-tabs" role="tablist" aria-label="Terminal sessions">
-              {panes.map((pane, index) => {
-                const isActive = pane.id === activePaneId;
+              {tabs.map((tab, index) => {
+                const isActive = tab.id === activeTabId;
                 return (
                   <div
-                    key={pane.id}
+                    key={tab.id}
                     className={`terminal-tab ${isActive ? "is-active" : ""}`}
                     role="tab"
                     tabIndex={0}
                     aria-selected={isActive}
-                    onClick={() => onSetActivePane(pane.id)}
+                    onClick={() => onSetActiveTab(tab.id)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
-                        onSetActivePane(pane.id);
+                        onSetActiveTab(tab.id);
                       }
                     }}
                   >
                     <Icon name="terminal" size={14} />
-                    <span>{pane.meta?.title ?? `Terminal ${index + 1}`}</span>
-                    {panes.length > 1 ? (
-                      <button
-                        type="button"
-                        className="terminal-tab-close"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onClosePane(pane.id);
-                        }}
-                        title="Close terminal"
-                      >
-                        <Icon name="close" size={12} />
-                      </button>
-                    ) : null}
+                    <span>{tab.title || `Terminal ${index + 1}`}</span>
+                    <button
+                      type="button"
+                      className="terminal-tab-close"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCloseTab(tab.id);
+                      }}
+                      title="Close terminal"
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
                   </div>
                 );
               })}
@@ -119,23 +124,26 @@ export function TerminalPanel({
         )}
       </div>
       <section className="terminal-shell">
-        <div
-          className={
-            activeView === "terminals"
-              ? "terminal-shell-body"
-              : "terminal-shell-body is-hidden"
-          }
-        >
-          {layout ? (
-            <LayoutRenderer
-              node={layout}
-              activePaneId={activePaneId}
-              onFocus={onSetActivePane}
-            />
-          ) : (
-            <div className="loading">Booting terminal session…</div>
-          )}
-        </div>
+        {tabs.length ? (
+          tabs.map((tab) => {
+            const isActiveTab = tab.id === activeTabId;
+            const isHidden = activeView !== "terminals" || !isActiveTab;
+            return (
+              <div
+                key={tab.id}
+                className={`terminal-shell-body ${isHidden ? "is-hidden" : ""}`}
+              >
+                <LayoutRenderer
+                  node={tab.layout}
+                  activePaneId={isActiveTab ? tab.activePaneId : null}
+                  onFocus={onSetActivePane}
+                />
+              </div>
+            );
+          })
+        ) : activeView === "terminals" ? (
+          <div className="terminal-placeholder">No terminals yet. Use + to start one.</div>
+        ) : null}
         {activeView === "terminals" ? null : (
           <div className="terminal-placeholder">ACP Sessions content will be added later.</div>
         )}

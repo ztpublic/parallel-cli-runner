@@ -10,6 +10,7 @@ type GitReposProps = {
   activeRepoId?: string | null;
   onActivateRepo?: (repoId: string) => void;
   onRemoveRepo?: (repoId: string) => void;
+  onOpenTerminal?: (repo: RepoHeader) => void;
 };
 
 export function GitRepos({
@@ -19,6 +20,7 @@ export function GitRepos({
   activeRepoId,
   onActivateRepo,
   onRemoveRepo,
+  onOpenTerminal,
 }: GitReposProps) {
   const nodes: TreeNode[] = repos.map((repo) => ({
     id: repo.repoId,
@@ -29,6 +31,11 @@ export function GitRepos({
     rightSlot: repo.repoId === activeRepoId ? <span className="git-badge">active</span> : undefined,
     actions: [
       {
+        id: "terminal",
+        icon: "terminal",
+        label: "Terminal",
+      },
+      {
         id: "remove",
         icon: "trash",
         label: "Remove",
@@ -38,6 +45,13 @@ export function GitRepos({
   }));
 
   const handleAction = (node: TreeNode, actionId: string) => {
+    const repo = repos.find((item) => item.repoId === node.id);
+    if (actionId === "terminal") {
+      if (repo) {
+        onOpenTerminal?.(repo);
+      }
+      return;
+    }
     if (actionId === "remove") {
       onRemoveRepo?.(node.id);
     }

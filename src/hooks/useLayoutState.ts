@@ -1,113 +1,206 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LayoutNode, Orientation, PaneNode } from "../types/layout";
 import {
+  appendPaneToLayout,
   collectPanes,
   countPanes,
+  createId,
   findPane,
   getFirstPane,
   getLayoutOrientation,
-  appendPaneToLayout,
   removePane,
   splitPane,
 } from "../types/layout";
 import { killSession, writeToSession } from "../services/tauri";
+import { killLayoutSessions } from "../services/sessions";
 
 export function useLayoutState() {
-  const [layout, setLayout] = useState<LayoutNode | null>(null);
-  const [activePaneId, setActivePaneId] = useState<string | null>(null);
-  const layoutRef = useRef<LayoutNode | null>(layout);
-  const activePaneIdRef = useRef<string | null>(activePaneId);
+  const [tabs, setTabs] = useState<
+    {
+      id: string;
+      title: string;
+      layout: LayoutNode;
+      activePaneId: string | null;
+    }[]
+  >([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const tabsRef = useRef(tabs);
+  const activeTabIdRef = useRef(activeTabId);
 
   useEffect(() => {
-    layoutRef.current = layout;
-  }, [layout]);
+    tabsRef.current = tabs;
+  }, [tabs]);
 
   useEffect(() => {
-    activePaneIdRef.current = activePaneId;
-  }, [activePaneId]);
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
-  const resetLayoutState = useCallback(() => {
-    setLayout(null);
-    setActivePaneId(null);
-  }, []);
+  useEffect(() => {
+    if (!tabs.length) {
+      if (activeTabId !== null) {
+        setActiveTabId(null);
+      }
+      return;
+    }
+    if (!activeTabId || !tabs.some((tab) => tab.id === activeTabId)) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
 
-  const getLayoutSnapshot = useCallback(() => layoutRef.current, []);
+  const activeTab = useMemo(() => {
+    if (!tabs.length) return null;
+    if (!activeTabId) return tabs[0];
+    return tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  }, [tabs, activeTabId]);
 
-  const appendPane = useCallback((pane: PaneNode) => {
-    setLayout((prev) => {
-      const orientation = getLayoutOrientation(prev);
-      return appendPaneToLayout(prev, pane, orientation);
-    });
-    setActivePaneId(pane.id);
+  const layout = activeTab?.layout ?? null;
+  const activePaneId = activeTab?.activePaneId ?? null;
+
+  const getActiveTabId = useCallback(
+    () => activeTabIdRef.current ?? tabsRef.current[0]?.id ?? null,
+    []
+  );
+
+  const setActivePaneId = useCallback(
+    (paneId: string | null) => {
+      const tabId = getActiveTabId();
+      if (!tabId) return;
+      setTabs((prev) =>
+        prev.map((tab) => (tab.id === tabId ? { ...tab, activePaneId: paneId } : tab))
+      );
+    },
+    [getActiveTabId]
+  );
+
+  const appendPane = useCallback((pane: PaneNode, title?: string) => {
+    const tabId = createId();
+    const tabTitle =
+      title ?? pane.meta?.title ?? `Terminal ${tabsRef.current.length + 1}`;
+    setTabs((prev) => [
+      ...prev,
+      {
+        id: tabId,
+        title: tabTitle,
+        layout: pane,
+        activePaneId: pane.id,
+      },
+    ]);
+    setActiveTabId(tabId);
   }, []);
 
   const splitPaneInLayout = useCallback(
     (pane: PaneNode, targetPaneId: string, orientation: Orientation) => {
-      setLayout((prev) => {
-        if (!prev) return prev;
-        const next = splitPane(prev, targetPaneId, pane, orientation);
-        if (next === prev) {
-          const fallbackOrientation = getLayoutOrientation(prev);
-          return appendPaneToLayout(prev, pane, fallbackOrientation);
-        }
-        return next;
-      });
-      setActivePaneId(pane.id);
+      const tabId = getActiveTabId();
+      if (!tabId) return;
+      setTabs((prev) =>
+        prev.map((tab) => {
+          if (tab.id !== tabId) return tab;
+          const nextLayout = splitPane(tab.layout, targetPaneId, pane, orientation);
+          const resolvedLayout =
+            nextLayout === tab.layout
+              ? appendPaneToLayout(tab.layout, pane, getLayoutOrientation(tab.layout))
+              : nextLayout;
+          return {
+            ...tab,
+            layout: resolvedLayout ?? pane,
+            activePaneId: pane.id,
+          };
+        })
+      );
     },
-    []
+    [getActiveTabId]
   );
 
-  const closePane = useCallback(async (paneId: string) => {
-    const currentLayout = layoutRef.current;
-    if (!currentLayout) return;
-    if (countPanes(currentLayout) === 1) return;
+  const closeTab = useCallback((tabId: string) => {
+    const currentTabs = tabsRef.current;
+    const tabIndex = currentTabs.findIndex((tab) => tab.id === tabId);
+    if (tabIndex === -1) return;
 
-    const paneToRemove = findPane(currentLayout, paneId);
-    if (paneToRemove) {
-      await killSession({ id: paneToRemove.sessionId });
+    const tab = currentTabs[tabIndex];
+    const nextTabs = currentTabs.filter((item) => item.id !== tabId);
+    setTabs(nextTabs);
+
+    if (activeTabIdRef.current === tabId) {
+      const fallbackTab = nextTabs[tabIndex - 1] ?? nextTabs[tabIndex] ?? nextTabs[0];
+      setActiveTabId(fallbackTab?.id ?? null);
     }
 
-    setLayout((prev) => {
-      if (!prev) return prev;
-      const next = removePane(prev, paneId);
-      if (!next) return prev;
-      if (activePaneIdRef.current === paneId) {
-        const fallbackPane = getFirstPane(next);
-        setActivePaneId(fallbackPane?.id ?? null);
-      }
-      return next;
-    });
+    void killLayoutSessions(tab.layout);
   }, []);
+
+  const closePane = useCallback(
+    async (paneId: string) => {
+      const tabId = getActiveTabId();
+      if (!tabId) return;
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+
+      const paneToRemove = findPane(tab.layout, paneId);
+      if (!paneToRemove) return;
+
+      if (countPanes(tab.layout) === 1) {
+        closeTab(tabId);
+        return;
+      }
+
+      await killSession({ id: paneToRemove.sessionId });
+
+      setTabs((prev) =>
+        prev.map((item) => {
+          if (item.id !== tabId) return item;
+          const nextLayout = removePane(item.layout, paneId);
+          if (!nextLayout) return item;
+          const nextActivePaneId =
+            item.activePaneId === paneId
+              ? getFirstPane(nextLayout)?.id ?? null
+              : item.activePaneId;
+          return { ...item, layout: nextLayout, activePaneId: nextActivePaneId };
+        })
+      );
+    },
+    [closeTab, getActiveTabId]
+  );
 
   const closeActivePane = useCallback(async () => {
-    const currentActivePaneId = activePaneIdRef.current;
-    if (!currentActivePaneId) return;
-    await closePane(currentActivePaneId);
-  }, [closePane]);
+    const tabId = getActiveTabId();
+    if (!tabId) return;
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab?.activePaneId) return;
+    await closePane(tab.activePaneId);
+  }, [closePane, getActiveTabId]);
 
-  const broadcastPaneInput = useCallback((pane: PaneNode, data: string) => {
-    const currentLayout = layoutRef.current;
-    if (!currentLayout) return;
-    const targetSessions = collectPanes(currentLayout)
-      .map((p) => p.sessionId)
-      .filter((id) => id !== pane.sessionId);
-    if (!targetSessions.length) return;
-    targetSessions.forEach((id) => {
-      void writeToSession({ id, data });
-    });
-  }, []);
+  const getTabsSnapshot = useCallback(() => tabsRef.current, []);
+
+  const broadcastPaneInput = useCallback(
+    (pane: PaneNode, data: string) => {
+      const tabId = getActiveTabId();
+      if (!tabId) return;
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+      const targetSessions = collectPanes(tab.layout)
+        .map((p) => p.sessionId)
+        .filter((id) => id !== pane.sessionId);
+      if (!targetSessions.length) return;
+      targetSessions.forEach((id) => {
+        void writeToSession({ id, data });
+      });
+    },
+    [getActiveTabId]
+  );
 
   return {
+    tabs,
+    activeTabId,
+    setActiveTabId,
     layout,
-    setLayout,
     activePaneId,
     setActivePaneId,
-    resetLayoutState,
-    getLayoutSnapshot,
     appendPane,
     splitPaneInLayout,
     closePane,
     closeActivePane,
+    closeTab,
+    getTabsSnapshot,
     broadcastPaneInput,
   };
 }

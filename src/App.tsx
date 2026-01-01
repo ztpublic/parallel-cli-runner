@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import "./App.css";
 import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
@@ -31,21 +31,20 @@ import type {
 
 function App() {
   const {
+    tabs,
+    activeTabId,
+    setActiveTabId,
     layout,
-    setLayout,
     activePaneId,
     setActivePaneId,
     appendPane,
     splitPaneInLayout,
-    closePane,
     closeActivePane,
+    closeTab,
+    getTabsSnapshot,
   } = useLayoutState();
 
   useClosePaneHotkey(closeActivePane);
-
-  // Track layout for cleanup
-  const layoutRef = useRef(layout);
-  layoutRef.current = layout;
 
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -143,45 +142,15 @@ function App() {
     };
   }, [isResizing, resize, stopResizing]);
 
-  useEffect(() => {
-    let alive = true;
-    let initialNode: any = null;
-
-    const start = async () => {
-      const next = await createPaneNode({
-        meta: {
-          title: "Local session",
-        },
-      });
-      initialNode = next;
-
-      if (!alive) {
-        void killLayoutSessions(next);
-        return;
-      }
-      setLayout(next);
-      setActivePaneId(next.id);
-    };
-
-    void start();
-
-    return () => {
-      alive = false;
-      // If we unmount before setting layout, kill the initial node
-      if (initialNode && !layoutRef.current) {
-        void killLayoutSessions(initialNode);
-      }
-    };
-  }, [setLayout, setActivePaneId]);
-
   // Global cleanup on unmount
   useEffect(() => {
     return () => {
-      if (layoutRef.current) {
-        void killLayoutSessions(layoutRef.current);
-      }
+      const tabs = getTabsSnapshot();
+      tabs.forEach((tab) => {
+        void killLayoutSessions(tab.layout);
+      });
     };
-  }, []);
+  }, [getTabsSnapshot]);
 
   useEffect(() => {
     if (repos.length > 0) {
@@ -261,7 +230,8 @@ function App() {
     setEnabledRepoIds((prev) => prev.filter((id) => id !== repoId));
   }, [repos, setRepos]);
 
-  const panes = useMemo(() => collectPanes(layout), [layout]);
+  const activePanes = useMemo(() => collectPanes(layout), [layout]);
+  const resolvedActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
 
   const repoHeaders = useMemo<RepoHeader[]>(
     () =>
@@ -343,27 +313,57 @@ function App() {
     [enabledRepoHeaders, changedFilesByRepo]
   );
 
+  const openTerminalAt = useCallback(
+    async ({ cwd, title, subtitle }: { cwd: string; title: string; subtitle?: string }) => {
+      const next = await createPaneNode({
+        cwd,
+        meta: { title, subtitle },
+      });
+      appendPane(next, title);
+    },
+    [appendPane]
+  );
+
+  const handleOpenRepoTerminal = useCallback(
+    (repo: RepoHeader) => {
+      void openTerminalAt({ cwd: repo.path, title: repo.name, subtitle: repo.path });
+    },
+    [openTerminalAt]
+  );
+
+  const handleOpenWorktreeTerminal = useCallback(
+    (repo: RepoHeader, worktree: WorktreeItem) => {
+      void openTerminalAt({
+        cwd: worktree.path,
+        title: `${repo.name}:${worktree.branch}`,
+        subtitle: worktree.path,
+      });
+    },
+    [openTerminalAt]
+  );
+
   const handleNewPane = useCallback(async () => {
-    const nextIndex = panes.length + 1;
+    const nextIndex = tabs.length + 1;
+    const title = `Terminal ${nextIndex}`;
     const next = await createPaneNode({
       meta: {
-        title: `Terminal ${nextIndex}`,
+        title,
       },
     });
-    appendPane(next);
-  }, [appendPane, panes.length]);
+    appendPane(next, title);
+  }, [appendPane, tabs.length]);
 
   const handleSplitPane = useCallback(async () => {
-    const targetPaneId = activePaneId ?? panes[0]?.id;
+    const targetPaneId = activePaneId ?? activePanes[0]?.id;
     if (!targetPaneId) return;
-    const nextIndex = panes.length + 1;
+    const nextIndex = activePanes.length + 1;
     const next = await createPaneNode({
       meta: {
         title: `Terminal ${nextIndex}`,
       },
     });
     splitPaneInLayout(next, targetPaneId, "horizontal");
-  }, [activePaneId, panes, splitPaneInLayout]);
+  }, [activePaneId, activePanes, splitPaneInLayout]);
 
   return (
     <main className="app-shell">
@@ -486,6 +486,8 @@ function App() {
             dropStash(repoId, stashIndex)
           );
         }}
+        onOpenRepoTerminal={handleOpenRepoTerminal}
+        onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
         onOpenFolder={handleTriggerOpenFolder}
         onLoadMoreCommits={(repoId) => {
           void runGitCommand("Load commits failed", "Failed to load more commits.", () =>
@@ -505,11 +507,11 @@ function App() {
           onMouseDown={startResizing}
         />
         <TerminalPanel
-          layout={layout}
-          panes={panes}
-          activePaneId={activePaneId}
+          tabs={tabs}
+          activeTabId={resolvedActiveTabId}
+          onSetActiveTab={setActiveTabId}
           onSetActivePane={setActivePaneId}
-          onClosePane={(id) => void closePane(id)}
+          onCloseTab={(id) => closeTab(id)}
           onNewPane={() => void handleNewPane()}
           onSplitPane={() => void handleSplitPane()}
         />

@@ -66,6 +66,8 @@ type GitPanelProps = {
   onDeleteStash?: (repoId: string, stashIndex: number) => void;
   onRemoveRepo?: (repoId: string) => void;
   onActivateRepo?: (repoId: string) => void;
+  onOpenRepoTerminal?: (repo: RepoHeader) => void;
+  onOpenWorktreeTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -123,6 +125,8 @@ export function GitPanel({
   onDeleteStash,
   onRemoveRepo,
   onActivateRepo,
+  onOpenRepoTerminal,
+  onOpenWorktreeTerminal,
 }: GitPanelProps) {
   const {
     tabs,
@@ -215,6 +219,7 @@ export function GitPanel({
             activeRepoId={null} 
             onActivateRepo={onActivateRepo}
             onRemoveRepo={onRemoveRepo}
+            onOpenTerminal={onOpenRepoTerminal}
           />
         ) : null}
 
@@ -290,6 +295,7 @@ export function GitPanel({
                 worktreeGroups={worktreeGroups}
                 onCreateWorktree={onCreateWorktree}
                 onDeleteWorktree={onDeleteWorktree}
+                onOpenTerminal={onOpenWorktreeTerminal}
               />
             ) : null}
 
