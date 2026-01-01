@@ -11,6 +11,7 @@ type GitWorktreesProps = {
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
+  onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
 };
 
 export function GitWorktrees({
@@ -18,6 +19,7 @@ export function GitWorktrees({
   onCreateWorktree,
   onDeleteWorktree,
   onOpenTerminal,
+  onMergeBranch,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -31,43 +33,53 @@ export function GitWorktrees({
     branchName: string;
   }>({ open: false, repoId: "", branchName: "" });
 
-  const nodes: TreeNode[] = worktreeGroups.map((group) => ({
-    id: group.repo.repoId,
-    label: group.repo.name,
-    description: group.repo.path,
-    icon: "folder",
-    defaultExpanded: true,
-    selectable: false,
-    rightSlot: <span className="git-pill">{group.items.length}</span>,
-    actions: [
-      {
-        id: "create-worktree",
-        icon: "plus",
-        label: "Create Worktree",
-      },
-    ],
-    children: group.items
-      .filter((worktree) => worktree.path !== group.repo.path)
-      .map((worktree) => ({
-        id: `${group.repo.repoId}:${worktree.branch}`,
-        label: worktree.branch,
-        description: worktree.path,
-        icon: "folder",
-        actions: [
-          {
-            id: "terminal",
-            icon: "terminal",
-            label: "Terminal",
-          },
-          {
-            id: "delete-worktree",
-            icon: "trash",
-            label: "Delete",
-            intent: "danger",
-          },
-        ],
-      })),
-  }));
+  const nodes: TreeNode[] = worktreeGroups.map((group) => {
+    const activeBranch = group.repo.activeBranch;
+    return {
+      id: group.repo.repoId,
+      label: group.repo.name,
+      description: group.repo.path,
+      icon: "folder",
+      defaultExpanded: true,
+      selectable: false,
+      rightSlot: <span className="git-pill">{group.items.length}</span>,
+      actions: [
+        {
+          id: "create-worktree",
+          icon: "plus",
+          label: "Create Worktree",
+        },
+      ],
+      children: group.items
+        .filter((worktree) => worktree.path !== group.repo.path)
+        .map((worktree) => ({
+          id: `${group.repo.repoId}:${worktree.branch}`,
+          label: worktree.branch,
+          description: worktree.path,
+          icon: "folder",
+          contextMenu: [
+            {
+              id: "merge-to-active",
+              label: activeBranch ? `Merge to ${activeBranch}` : "Merge to active branch",
+              disabled: !activeBranch || worktree.branch === activeBranch,
+            },
+          ],
+          actions: [
+            {
+              id: "terminal",
+              icon: "terminal",
+              label: "Terminal",
+            },
+            {
+              id: "delete-worktree",
+              icon: "trash",
+              label: "Delete",
+              intent: "danger",
+            },
+          ],
+        })),
+    };
+  });
 
   const handleAction = (node: TreeNode, actionId: string) => {
     if (actionId === "create-worktree") {
@@ -102,9 +114,27 @@ export function GitWorktrees({
     }
   };
 
+  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+    if (itemId !== "merge-to-active") return;
+    const lastColonIndex = node.id.lastIndexOf(":");
+    if (lastColonIndex === -1) return;
+    const repoId = node.id.substring(0, lastColonIndex);
+    const branchName = node.id.substring(lastColonIndex + 1);
+    const group = worktreeGroups.find((g) => g.repo.repoId === repoId);
+    const targetBranch = group?.repo.activeBranch;
+    if (targetBranch && targetBranch !== branchName) {
+      onMergeBranch?.(repoId, targetBranch, branchName);
+    }
+  };
+
   return (
     <div className="git-tree">
-      <TreeView nodes={nodes} toggleOnRowClick onAction={handleAction} />
+      <TreeView
+        nodes={nodes}
+        toggleOnRowClick
+        onAction={handleAction}
+        onContextMenuSelect={handleContextMenuSelect}
+      />
       {!worktreeGroups.length ? (
         <div className="git-empty">
           <Icon name="folder" size={22} />

@@ -299,6 +299,7 @@ export function GitPanel({
                 onCreateWorktree={onCreateWorktree}
                 onDeleteWorktree={onDeleteWorktree}
                 onOpenTerminal={onOpenWorktreeTerminal}
+                onMergeBranch={onMergeBranch}
               />
             ) : null}
 
