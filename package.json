@@ -70,6 +70,7 @@
     "@storybook/addon-vitest": "^10.1.10",
     "@storybook/react-vite": "^10.1.10",
     "@tauri-apps/cli": "^2",
+    "@types/node": "^22.13.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
