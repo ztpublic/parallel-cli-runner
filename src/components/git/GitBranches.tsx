@@ -16,6 +16,7 @@ type GitBranchesProps = {
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
+  onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
   onPull?: (repoId: string) => void;
   onPush?: (repoId: string, force: boolean) => void;
 };
@@ -29,6 +30,7 @@ export function GitBranches({
   onCreateBranch,
   onSwitchBranch,
   onDeleteBranch,
+  onMergeBranch,
   onPull,
   onPush,
 }: GitBranchesProps) {
@@ -51,6 +53,7 @@ export function GitBranches({
   }>({ open: false, repoId: "", branchName: "" });
 
   const nodes: TreeNode[] = branchGroups.map((group) => {
+    const activeBranch = group.repo.activeBranch;
     const localChildren: TreeNode[] = group.localBranches.map((branch) => {
       const isAhead = (branch.ahead ?? 0) > 0;
       const isBehind = (branch.behind ?? 0) > 0;
@@ -58,54 +61,60 @@ export function GitBranches({
 
       const rightSlot = (
         <div className="flex items-center gap-2">
-           {branch.current && <span className="git-badge">current</span>}
-           {hasStatus ? (
-             <span className="git-branch-status text-xs text-muted">
-               {isBehind ? `↓${branch.behind} ` : ""}
-               {isAhead ? `↑${branch.ahead}` : ""}
-             </span>
-           ) : null}
+          {branch.current && <span className="git-badge">current</span>}
+          {hasStatus ? (
+            <span className="git-branch-status text-xs text-muted">
+              {isBehind ? `↓${branch.behind} ` : ""}
+              {isAhead ? `↑${branch.ahead}` : ""}
+            </span>
+          ) : null}
         </div>
       );
 
       return {
-      id: `${group.repo.repoId}:local:${branch.name}`,
-      label: branch.name,
-      description: branch.lastCommit,
-      icon: "branch",
-      rightSlot,
-      contextMenu: [
-        {
-          id: "switch-branch",
-          label: "Switch Branch",
-          disabled: branch.current,
-        },
-        {
-          id: "pull",
-          label: "Pull",
-          disabled: !branch.current,
-        },
-        {
-          id: "push",
-          label: "Push",
-          disabled: !branch.current,
-        },
-        {
-          id: "force-push",
-          label: "Force Push",
-          disabled: !branch.current,
-        },
-      ],
-      actions: [
-        {
-          id: "delete",
-          icon: "trash",
-          label: "Delete",
-          intent: "danger",
-          disabled: branch.current,
-        },
-      ],
-    }});
+        id: `${group.repo.repoId}:local:${branch.name}`,
+        label: branch.name,
+        description: branch.lastCommit,
+        icon: "branch",
+        rightSlot,
+        contextMenu: [
+          {
+            id: "switch-branch",
+            label: "Switch Branch",
+            disabled: branch.current,
+          },
+          {
+            id: "merge-to-active",
+            label: activeBranch ? `Merge to ${activeBranch}` : "Merge to active branch",
+            disabled: !activeBranch || branch.current,
+          },
+          {
+            id: "pull",
+            label: "Pull",
+            disabled: !branch.current,
+          },
+          {
+            id: "push",
+            label: "Push",
+            disabled: !branch.current,
+          },
+          {
+            id: "force-push",
+            label: "Force Push",
+            disabled: !branch.current,
+          },
+        ],
+        actions: [
+          {
+            id: "delete",
+            icon: "trash",
+            label: "Delete",
+            intent: "danger",
+            disabled: branch.current,
+          },
+        ],
+      };
+    });
 
     if (canLoadMoreLocal?.(group.repo.repoId)) {
       localChildren.push({
@@ -225,6 +234,17 @@ export function GitBranches({
         const repoId = parts[0];
         const branchName = parts[1];
         onSwitchBranch?.(repoId, branchName);
+      }
+    } else if (itemId === "merge-to-active") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        const group = branchGroups.find((g) => g.repo.repoId === repoId);
+        const targetBranch = group?.repo.activeBranch;
+        if (targetBranch && targetBranch !== branchName) {
+          onMergeBranch?.(repoId, targetBranch, branchName);
+        }
       }
     } else if (itemId === "pull") {
       const parts = node.id.split(":local:");

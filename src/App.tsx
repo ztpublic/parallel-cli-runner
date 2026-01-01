@@ -72,6 +72,7 @@ function App() {
     commit,
     pull,
     push,
+    mergeIntoBranch,
     createBranch,
     deleteBranch,
     switchBranch,
@@ -444,6 +445,11 @@ function App() {
           }
           void runGitCommand("Switch branch failed", "Failed to switch branch.", () =>
             switchBranch(repoId, branchName)
+          );
+        }}
+        onMergeBranch={(repoId, targetBranch, sourceBranch) => {
+          void runGitCommand("Merge failed", "Failed to merge branch.", () =>
+            mergeIntoBranch(repoId, targetBranch, sourceBranch)
           );
         }}
         onReset={(repoId, commitId, mode) => {

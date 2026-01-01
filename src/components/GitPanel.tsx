@@ -57,6 +57,7 @@ type GitPanelProps = {
   onOpenFolder?: () => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
+  onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
   onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
   onRevert?: (repoId: string, commitId: string) => void;
   onSquashCommits?: (repoId: string, commitIds: string[]) => void;
@@ -116,6 +117,7 @@ export function GitPanel({
   onOpenFolder,
   onSwitchBranch,
   onDeleteBranch,
+  onMergeBranch,
   onReset,
   onRevert,
   onSquashCommits,
@@ -253,6 +255,7 @@ export function GitPanel({
                 onCreateBranch={onCreateBranch}
                 onSwitchBranch={onSwitchBranch}
                 onDeleteBranch={onDeleteBranch}
+                onMergeBranch={onMergeBranch}
                 onPull={onPull}
                 onPush={onPush}
               />

@@ -16,12 +16,14 @@ const repoAlpha: RepoHeader = {
   repoId: "/home/user/projects/alpha",
   name: "alpha",
   path: "/home/user/projects/alpha",
+  activeBranch: "main",
 };
 
 const repoBeta: RepoHeader = {
   repoId: "/home/user/projects/beta",
   name: "beta",
   path: "/home/user/projects/beta",
+  activeBranch: "main",
 };
 
 const alphaLocalBranches: BranchItem[] = [

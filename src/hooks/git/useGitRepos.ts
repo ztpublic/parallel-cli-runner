@@ -16,6 +16,7 @@ import {
   gitListSubmodules,
   gitListStashes,
   gitListWorktrees,
+  gitMergeIntoBranch,
   gitPull,
   gitPush,
   gitRemoveWorktree,
@@ -490,6 +491,22 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const mergeIntoBranch = useCallback(
+    async (repoId: RepoId, targetBranch: string, sourceBranch: string) => {
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitMergeIntoBranch({
+            repoRoot: repo.root_path,
+            targetBranch,
+            sourceBranch,
+          }),
+        { errorMessage: "Failed to merge branch" }
+      );
+    },
+    [withRepo]
+  );
+
   const createBranch = useCallback(
     async (repoId: RepoId, name: string, sourceBranch?: string) => {
       await withRepo(
@@ -701,6 +718,7 @@ export function useGitRepos() {
     commit,
     pull,
     push,
+    mergeIntoBranch,
     createBranch,
     deleteBranch,
     switchBranch,
