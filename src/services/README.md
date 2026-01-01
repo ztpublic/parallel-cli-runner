@@ -1,4 +1,8 @@
 # Services
 
-Non-React logic and side-effectful helpers (e.g. typed Tauri `invoke()` wrappers, storage helpers, session helpers).
+Non-React logic and side-effectful helpers.
 
+- `src/services/tauri.ts` wraps Tauri `invoke()` calls for sessions and git operations.
+- `src/services/sessions.ts` manages pane/PTY lifecycle and start commands.
+- `src/services/storage.ts` and `src/services/storageKeys.ts` handle persisted UI state.
+- `src/services/errors.ts` formats backend errors for display.
