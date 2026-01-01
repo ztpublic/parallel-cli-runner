@@ -63,6 +63,16 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
     termRef.current = term;
     fitAddonRef.current = fitAddon;
     term.loadAddon(fitAddon);
+    term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown") {
+        return true;
+      }
+      if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyD") {
+        void invoke("write_to_session", { id: pane.sessionId, data: "\u0004" });
+        return false;
+      }
+      return true;
+    });
 
     if (containerRef.current) {
       term.open(containerRef.current);
