@@ -62,6 +62,8 @@ type GitPanelProps = {
   onSquashCommits?: (repoId: string, commitIds: string[]) => void;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
+  onApplyStash?: (repoId: string, stashIndex: number) => void;
+  onDeleteStash?: (repoId: string, stashIndex: number) => void;
   onRemoveRepo?: (repoId: string) => void;
   onActivateRepo?: (repoId: string) => void;
 };
@@ -117,6 +119,8 @@ export function GitPanel({
   onSquashCommits,
   onCreateWorktree,
   onDeleteWorktree,
+  onApplyStash,
+  onDeleteStash,
   onRemoveRepo,
   onActivateRepo,
 }: GitPanelProps) {
@@ -273,7 +277,13 @@ export function GitPanel({
               />
             ) : null}
 
-            {activeTab === "stashes" ? <GitStashes stashGroups={stashGroups} /> : null}
+            {activeTab === "stashes" ? (
+              <GitStashes
+                stashGroups={stashGroups}
+                onApplyStash={onApplyStash}
+                onDeleteStash={onDeleteStash}
+              />
+            ) : null}
 
             {activeTab === "worktrees" ? (
               <GitWorktrees

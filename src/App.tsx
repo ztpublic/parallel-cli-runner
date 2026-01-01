@@ -83,6 +83,8 @@ function App() {
     commitsInRemote,
     createWorktree,
     removeWorktree,
+    applyStash,
+    dropStash,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -472,6 +474,16 @@ function App() {
         onDeleteWorktree={(repoId, branchName) => {
           void runGitCommand("Delete worktree failed", "Failed to delete worktree.", () =>
             removeWorktree(repoId, branchName)
+          );
+        }}
+        onApplyStash={(repoId, stashIndex) => {
+          void runGitCommand("Apply stash failed", "Failed to apply stash.", () =>
+            applyStash(repoId, stashIndex)
+          );
+        }}
+        onDeleteStash={(repoId, stashIndex) => {
+          void runGitCommand("Delete stash failed", "Failed to delete stash.", () =>
+            dropStash(repoId, stashIndex)
           );
         }}
         onOpenFolder={handleTriggerOpenFolder}

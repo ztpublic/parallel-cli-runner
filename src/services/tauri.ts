@@ -68,6 +68,14 @@ export function gitListStashes(params: { cwd: string }): Promise<StashInfoDto[]>
   return invoke<StashInfoDto[]>("git_list_stashes", params);
 }
 
+export function gitApplyStash(params: { cwd: string; index: number }): Promise<void> {
+  return invoke("git_apply_stash", params);
+}
+
+export function gitDropStash(params: { cwd: string; index: number }): Promise<void> {
+  return invoke("git_drop_stash", params);
+}
+
 export function gitPull(params: { cwd: string }): Promise<void> {
   return invoke("git_pull", params);
 }

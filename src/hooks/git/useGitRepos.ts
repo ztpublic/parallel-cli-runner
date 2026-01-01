@@ -1,11 +1,13 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   gitAddWorktree,
+  gitApplyStash,
   gitCheckoutBranch,
   gitCommit,
   gitCommitsInRemote,
   gitCreateBranch,
   gitDeleteBranch,
+  gitDropStash,
   gitDiscardFiles,
   gitListBranches,
   gitListCommits,
@@ -662,6 +664,20 @@ export function useGitRepos() {
     [withRepo, worktreesByRepo]
   );
 
+  const applyStash = useCallback(
+    async (repoId: RepoId, index: number) => {
+      await withRepo(repoId, (repo) => gitApplyStash({ cwd: repo.root_path, index }));
+    },
+    [withRepo]
+  );
+
+  const dropStash = useCallback(
+    async (repoId: RepoId, index: number) => {
+      await withRepo(repoId, (repo) => gitDropStash({ cwd: repo.root_path, index }));
+    },
+    [withRepo]
+  );
+
   return {
     repos,
     setRepos,
@@ -695,6 +711,8 @@ export function useGitRepos() {
     commitsInRemote,
     createWorktree,
     removeWorktree,
+    applyStash,
+    dropStash,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

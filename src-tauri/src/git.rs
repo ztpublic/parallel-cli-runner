@@ -906,6 +906,30 @@ pub fn list_stashes(cwd: &Path) -> Result<Vec<StashInfoDto>, GitError> {
     Ok(stashes)
 }
 
+pub fn apply_stash(cwd: &Path, index: i32) -> Result<(), GitError> {
+    if index < 0 {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "stash index must be >= 0".to_string(),
+        });
+    }
+    let mut repo = open_repo(cwd)?;
+    repo.stash_apply(index as usize, None)?;
+    Ok(())
+}
+
+pub fn drop_stash(cwd: &Path, index: i32) -> Result<(), GitError> {
+    if index < 0 {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "stash index must be >= 0".to_string(),
+        });
+    }
+    let mut repo = open_repo(cwd)?;
+    repo.stash_drop(index as usize)?;
+    Ok(())
+}
+
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
     let repo = open_repo(cwd)?;
     let mut index = repo.index()?;
