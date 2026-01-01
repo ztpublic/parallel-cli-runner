@@ -1335,7 +1335,7 @@ button {
 
 .pane {
   background: var(--terminal-bg);
-  border: 1px solid var(--border-strong);
+  border: none;
   border-radius: 0;
   flex: 1 1 auto;
   min-height: 0;
