@@ -11,6 +11,7 @@ import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 import { gitScanRepos } from "./services/tauri";
 import { formatInvokeError } from "./services/errors";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
@@ -94,7 +95,7 @@ function App() {
     isLoadingMoreCommits,
   } = useGitRepos();
 
-  const { gitCommandError, clearGitCommandError, runGitCommand } =
+  const { gitCommandError, clearGitCommandError, runGitCommand, showGitCommandError } =
     useGitCommandErrorDialog();
 
   const [repoCandidates, setRepoCandidates] = useState<RepoInfoDto[]>([]);
@@ -343,6 +344,21 @@ function App() {
     [openTerminalAt]
   );
 
+  const handleOpenWorktreeFolder = useCallback(
+    async (_repo: RepoHeader, worktree: WorktreeItem) => {
+      try {
+        await openPath(worktree.path);
+      } catch (error) {
+        showGitCommandError(
+          "Open folder failed",
+          error,
+          "Failed to open worktree folder."
+        );
+      }
+    },
+    [showGitCommandError]
+  );
+
   const handleNewPane = useCallback(async () => {
     const nextIndex = tabs.length + 1;
     const title = `Terminal ${nextIndex}`;
@@ -494,6 +510,7 @@ function App() {
         }}
         onOpenRepoTerminal={handleOpenRepoTerminal}
         onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
+        onOpenWorktreeFolder={handleOpenWorktreeFolder}
         onOpenFolder={handleTriggerOpenFolder}
         onLoadMoreCommits={(repoId) => {
           void runGitCommand("Load commits failed", "Failed to load more commits.", () =>

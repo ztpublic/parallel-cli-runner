@@ -11,6 +11,7 @@ type GitWorktreesProps = {
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
+  onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
 };
 
@@ -19,6 +20,7 @@ export function GitWorktrees({
   onCreateWorktree,
   onDeleteWorktree,
   onOpenTerminal,
+  onOpenWorktreeFolder,
   onMergeBranch,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
@@ -66,6 +68,12 @@ export function GitWorktrees({
           ],
           actions: [
             {
+              id: "open-folder",
+              icon: "folder",
+              label: "Open in File Explorer",
+              disabled: !onOpenWorktreeFolder,
+            },
+            {
               id: "terminal",
               icon: "terminal",
               label: "Terminal",
@@ -91,7 +99,11 @@ export function GitWorktrees({
           repoName: group.repo.name,
         });
       }
-    } else if (actionId === "terminal" || actionId === "delete-worktree") {
+    } else if (
+      actionId === "terminal" ||
+      actionId === "delete-worktree" ||
+      actionId === "open-folder"
+    ) {
       // id format: repoId:branchName
       const lastColonIndex = node.id.lastIndexOf(":");
       if (lastColonIndex !== -1) {
@@ -102,6 +114,12 @@ export function GitWorktrees({
         if (actionId === "terminal") {
           if (group && worktree) {
             onOpenTerminal?.(group.repo, worktree);
+          }
+          return;
+        }
+        if (actionId === "open-folder") {
+          if (group && worktree) {
+            onOpenWorktreeFolder?.(group.repo, worktree);
           }
           return;
         }

@@ -18,6 +18,9 @@ export default defineConfig(async () => ({
           "@tauri-apps/plugin-dialog": fileURLToPath(
             new URL("./src/mocks/dialog.ts", import.meta.url),
           ),
+          "@tauri-apps/plugin-opener": fileURLToPath(
+            new URL("./src/mocks/opener.ts", import.meta.url),
+          ),
         }
       : undefined,
   },
