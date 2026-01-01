@@ -68,6 +68,7 @@ type GitPanelProps = {
   onRemoveRepo?: (repoId: string) => void;
   onActivateRepo?: (repoId: string) => void;
   onOpenRepoTerminal?: (repo: RepoHeader) => void;
+  onOpenRepoFolder?: (repo: RepoHeader) => void;
   onOpenWorktreeTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
 };
@@ -129,6 +130,7 @@ export function GitPanel({
   onRemoveRepo,
   onActivateRepo,
   onOpenRepoTerminal,
+  onOpenRepoFolder,
   onOpenWorktreeTerminal,
   onOpenWorktreeFolder,
 }: GitPanelProps) {
@@ -224,6 +226,7 @@ export function GitPanel({
             onActivateRepo={onActivateRepo}
             onRemoveRepo={onRemoveRepo}
             onOpenTerminal={onOpenRepoTerminal}
+            onOpenRepoFolder={onOpenRepoFolder}
           />
         ) : null}
 

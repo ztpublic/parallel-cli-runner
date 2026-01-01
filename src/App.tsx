@@ -333,6 +333,17 @@ function App() {
     [openTerminalAt]
   );
 
+  const handleOpenRepoFolder = useCallback(
+    async (repo: RepoHeader) => {
+      try {
+        await openPath(repo.path);
+      } catch (error) {
+        showGitCommandError("Open folder failed", error, "Failed to open repo folder.");
+      }
+    },
+    [showGitCommandError]
+  );
+
   const handleOpenWorktreeTerminal = useCallback(
     (repo: RepoHeader, worktree: WorktreeItem) => {
       void openTerminalAt({
@@ -509,6 +520,7 @@ function App() {
           );
         }}
         onOpenRepoTerminal={handleOpenRepoTerminal}
+        onOpenRepoFolder={handleOpenRepoFolder}
         onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
         onOpenWorktreeFolder={handleOpenWorktreeFolder}
         onOpenFolder={handleTriggerOpenFolder}

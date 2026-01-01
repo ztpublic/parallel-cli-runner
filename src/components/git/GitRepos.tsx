@@ -11,6 +11,7 @@ type GitReposProps = {
   onActivateRepo?: (repoId: string) => void;
   onRemoveRepo?: (repoId: string) => void;
   onOpenTerminal?: (repo: RepoHeader) => void;
+  onOpenRepoFolder?: (repo: RepoHeader) => void;
 };
 
 export function GitRepos({
@@ -21,6 +22,7 @@ export function GitRepos({
   onActivateRepo,
   onRemoveRepo,
   onOpenTerminal,
+  onOpenRepoFolder,
 }: GitReposProps) {
   const nodes: TreeNode[] = repos.map((repo) => ({
     id: repo.repoId,
@@ -30,6 +32,12 @@ export function GitRepos({
     checkable: true,
     rightSlot: repo.repoId === activeRepoId ? <span className="git-badge">active</span> : undefined,
     actions: [
+      {
+        id: "open-folder",
+        icon: "folder",
+        label: "Open in File Explorer",
+        disabled: !onOpenRepoFolder,
+      },
       {
         id: "terminal",
         icon: "terminal",
@@ -49,6 +57,12 @@ export function GitRepos({
     if (actionId === "terminal") {
       if (repo) {
         onOpenTerminal?.(repo);
+      }
+      return;
+    }
+    if (actionId === "open-folder") {
+      if (repo) {
+        onOpenRepoFolder?.(repo);
       }
       return;
     }
