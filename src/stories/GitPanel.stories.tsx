@@ -34,3 +34,16 @@ export const Default: Story = {
     changedFileGroups: initialChangedFileGroups,
   },
 };
+
+export const Empty: Story = {
+  args: {
+    initialTabs,
+    repos: [],
+    branchGroups: [],
+    commitGroups: [],
+    worktreeGroups: [],
+    remoteGroups: [],
+    stashGroups: [],
+    changedFileGroups: [],
+  },
+};

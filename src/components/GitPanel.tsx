@@ -127,6 +127,7 @@ export function GitPanel({
     handleDragEnd,
     handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
+  const hasRepos = repos.length > 0;
 
   const handleCommit = (repoId: string, message: string) => {
     onCommit?.(repoId, message);
@@ -194,7 +195,7 @@ export function GitPanel({
       />
 
       <div className="git-panel-content">
-        {activeTab === "repos" ? (
+        {hasRepos && activeTab === "repos" ? (
           <GitRepos
             repos={repos}
             enabledRepoIds={enabledRepoIds}
@@ -218,8 +219,8 @@ export function GitPanel({
           </div>
         ) : null}
 
-        {!repos.length ? (
-           <div className="git-empty">
+        {!hasRepos ? (
+          <div className="git-empty">
             <Icon name="folder" size={22} />
             <p>No repositories bound.</p>
             <button type="button" className="git-primary-button" onClick={onOpenFolder}>
