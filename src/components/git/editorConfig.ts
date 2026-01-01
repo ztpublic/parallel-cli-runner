@@ -1,5 +1,5 @@
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { javascript } from "@codemirror/lang-javascript";
@@ -94,7 +94,7 @@ const highlightStyles: Record<HighlightTheme, HighlightStyle> = {
   dracula: buildHighlightStyle("dracula"),
 };
 
-export function readOnlyExtensions(highlightTheme: HighlightTheme) {
+export function readOnlyExtensions(highlightTheme: HighlightTheme): Extension[] {
   return [
     EditorView.editable.of(false),
     EditorState.readOnly.of(true),
@@ -134,7 +134,10 @@ export function resolveLanguageId(languageId?: string, filePath?: string) {
   return extension ? FILE_EXTENSIONS[extension] ?? extension : undefined;
 }
 
-export function languageExtension(languageId?: string, filePath?: string) {
+export function languageExtension(
+  languageId?: string,
+  filePath?: string
+): Extension | null {
   const resolved = resolveLanguageId(languageId, filePath);
   switch (resolved) {
     case "ts":

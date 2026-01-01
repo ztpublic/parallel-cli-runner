@@ -1,5 +1,6 @@
 import { type MutableRefObject, useEffect, useState } from "react";
 import { MergeView } from "@codemirror/merge";
+import { type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 function updateEditorDoc(view: EditorView, nextDoc: string) {
@@ -16,8 +17,8 @@ export function useMergeView(
   docA: string,
   docB: string,
   active: boolean,
-  baseExtensions: readonly unknown[],
-  extraExtensions: readonly unknown[],
+  baseExtensions: readonly Extension[],
+  extraExtensions: readonly Extension[],
   viewRef: MutableRefObject<MergeView | null>,
   containerRef?: MutableRefObject<HTMLDivElement | null>
 ) {

@@ -1,6 +1,6 @@
 import { type MutableRefObject, useEffect, useState } from "react";
 import { getOriginalDoc, unifiedMergeView, updateOriginalDoc } from "@codemirror/merge";
-import { ChangeSet, EditorState, Text } from "@codemirror/state";
+import { ChangeSet, EditorState, Text, type Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 
 function toText(value: string) {
@@ -40,8 +40,8 @@ export function useUnifiedView(
   original: string,
   active: boolean,
   showChanges: boolean,
-  baseExtensions: readonly unknown[],
-  extraExtensions: readonly unknown[],
+  baseExtensions: readonly Extension[],
+  extraExtensions: readonly Extension[],
   viewRef: MutableRefObject<EditorView | null>,
   onReady?: () => void,
   containerRef?: MutableRefObject<HTMLDivElement | null>
