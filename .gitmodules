@@ -1,0 +1,3 @@
+[submodule "ai-elements-fork"]
+	path = ai-elements-fork
+	url = https://github.com/ztpublic/ai-elements-remix-fork.git
