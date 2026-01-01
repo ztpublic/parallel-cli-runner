@@ -8,6 +8,7 @@ import { GitStaging } from "./git/GitStaging";
 import { GitStashes } from "./git/GitStashes";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
+import { GitSubmodules } from "./git/GitSubmodules";
 import {
   ChangedFile,
   CommitItem,
@@ -17,6 +18,7 @@ import {
   RepoGroup,
   RepoHeader,
   StashItem,
+  SubmoduleItem,
   WorktreeItem,
 } from "../types/git-ui";
 
@@ -29,6 +31,7 @@ type GitPanelProps = {
   worktreeGroups?: RepoGroup<WorktreeItem>[];
   changedFileGroups?: RepoGroup<ChangedFile>[];
   remoteGroups?: RepoGroup<RemoteItem>[];
+  submoduleGroups?: RepoGroup<SubmoduleItem>[];
   stashGroups?: RepoGroup<StashItem>[];
   width?: number;
   loading?: boolean;
@@ -70,6 +73,7 @@ const defaultTabs: GitTab[] = [
   { id: "commit", label: "Changes", icon: "fileEdit" },
   { id: "stashes", label: "Stashes", icon: "archive" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
+  { id: "submodules", label: "Submodules", icon: "merge" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];
 
@@ -82,6 +86,7 @@ export function GitPanel({
   worktreeGroups = [],
   changedFileGroups = [],
   remoteGroups = [],
+  submoduleGroups = [],
   stashGroups = [],
   width,
   loading = false,
@@ -276,6 +281,10 @@ export function GitPanel({
                 onCreateWorktree={onCreateWorktree}
                 onDeleteWorktree={onDeleteWorktree}
               />
+            ) : null}
+
+            {activeTab === "submodules" ? (
+              <GitSubmodules submoduleGroups={submoduleGroups} />
             ) : null}
 
             {activeTab === "remotes" ? <GitRemotes remoteGroups={remoteGroups} /> : null}

@@ -111,6 +111,13 @@ pub struct RemoteInfoDto {
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
+pub struct SubmoduleInfoDto {
+    pub name: String,
+    pub path: String,
+    pub url: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, TS)]
 pub struct WorktreeInfoDto {
     pub branch: String,
     pub path: String,
@@ -295,22 +302,60 @@ pub fn status(cwd: &Path) -> Result<RepoStatusDto, GitError> {
     })
 }
 
+fn enqueue_submodule_paths(
+    repo: &Repository,
+    pending: &mut Vec<PathBuf>,
+    queued: &mut HashSet<PathBuf>,
+) {
+    let Some(workdir) = repo.workdir() else {
+        return;
+    };
+    let submodules = match repo.submodules() {
+        Ok(submodules) => submodules,
+        Err(err) if err.code() == ErrorCode::NotFound => return,
+        Err(_) => return,
+    };
+
+    for submodule in submodules {
+        let path = workdir.join(submodule.path());
+        if queued.insert(path.clone()) {
+            pending.push(path);
+        }
+    }
+}
+
+fn register_repo(
+    repo: &Repository,
+    scanned_entries: &mut Vec<(RepoInfoDto, PathBuf)>,
+    seen: &mut HashSet<String>,
+    pending: &mut Vec<PathBuf>,
+    queued: &mut HashSet<PathBuf>,
+) {
+    let info = repo_info_from_repo(repo);
+    if seen.insert(info.root_path.clone()) {
+        let git_path = canonicalize_path(repo.path());
+        scanned_entries.push((info, git_path));
+        enqueue_submodule_paths(repo, pending, queued);
+    }
+}
+
 pub fn scan_repos<F>(root: &Path, progress_cb: F) -> Result<Vec<RepoInfoDto>, GitError>
 where
     F: Fn(String),
 {
     let mut seen = HashSet::new();
     let mut scanned_entries = Vec::new();
+    let mut pending = Vec::new();
+    let mut queued = HashSet::new();
 
-    if let Ok(repo) = Repository::discover(root) {
-        let info = repo_info_from_repo(&repo);
-        let git_path = canonicalize_path(repo.path());
-        if seen.insert(info.root_path.clone()) {
-            scanned_entries.push((info, git_path));
-        }
+    if queued.insert(root.to_path_buf()) {
+        pending.push(root.to_path_buf());
     }
 
-    let mut pending = vec![root.to_path_buf()];
+    if let Ok(repo) = Repository::discover(root) {
+        register_repo(&repo, &mut scanned_entries, &mut seen, &mut pending, &mut queued);
+    }
+
     while let Some(dir) = pending.pop() {
         progress_cb(dir.to_string_lossy().to_string());
         let entries = match fs::read_dir(&dir) {
@@ -322,11 +367,7 @@ where
         let git_marker = dir.join(".git");
         if fs::symlink_metadata(&git_marker).is_ok() {
             if let Ok(repo) = Repository::discover(&dir) {
-                let info = repo_info_from_repo(&repo);
-                let git_path = canonicalize_path(repo.path());
-                if seen.insert(info.root_path.clone()) {
-                    scanned_entries.push((info, git_path));
-                }
+                register_repo(&repo, &mut scanned_entries, &mut seen, &mut pending, &mut queued);
                 is_repo_dir = true;
             }
         } else {
@@ -334,11 +375,7 @@ where
             let objects = dir.join("objects");
             if head.is_file() && objects.is_dir() {
                 if let Ok(repo) = Repository::open(&dir) {
-                    let info = repo_info_from_repo(&repo);
-                    let git_path = canonicalize_path(repo.path());
-                    if seen.insert(info.root_path.clone()) {
-                        scanned_entries.push((info, git_path));
-                    }
+                    register_repo(&repo, &mut scanned_entries, &mut seen, &mut pending, &mut queued);
                     is_repo_dir = true;
                 }
             }
@@ -365,7 +402,9 @@ where
                 continue;
             }
 
-            pending.push(path);
+            if queued.insert(path.clone()) {
+                pending.push(path);
+            }
         }
     }
 
@@ -710,6 +749,37 @@ pub fn list_remotes(cwd: &Path) -> Result<Vec<RemoteInfoDto>, GitError> {
         });
     }
     Ok(remotes)
+}
+
+pub fn list_submodules(cwd: &Path) -> Result<Vec<SubmoduleInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let Some(workdir) = repo.workdir() else {
+        return Ok(Vec::new());
+    };
+
+    let submodules = match repo.submodules() {
+        Ok(submodules) => submodules,
+        Err(err) if err.code() == ErrorCode::NotFound => return Ok(Vec::new()),
+        Err(err) => return Err(GitError::Git2(err)),
+    };
+
+    let mut modules = Vec::new();
+    for submodule in submodules {
+        let name = submodule
+            .name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| submodule.path().to_string_lossy().to_string());
+        let path = workdir.join(submodule.path());
+        let url = submodule.url().map(|url| url.to_string());
+        modules.push(SubmoduleInfoDto {
+            name,
+            path: path.to_string_lossy().to_string(),
+            url,
+        });
+    }
+
+    modules.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(modules)
 }
 
 pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {

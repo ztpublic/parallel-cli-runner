@@ -102,6 +102,13 @@ async fn git_list_remotes(cwd: String) -> Result<Vec<git::RemoteInfoDto>, Comman
 }
 
 #[tauri::command]
+async fn git_list_submodules(
+    cwd: String,
+) -> Result<Vec<git::SubmoduleInfoDto>, CommandError> {
+    with_cwd(cwd, git::list_submodules)
+}
+
+#[tauri::command]
 async fn git_list_stashes(cwd: String) -> Result<Vec<git::StashInfoDto>, CommandError> {
     with_cwd(cwd, git::list_stashes)
 }
@@ -257,6 +264,7 @@ pub fn run() {
             git_list_commits,
             git_list_worktrees,
             git_list_remotes,
+            git_list_submodules,
             git_list_stashes,
             git_pull,
             git_push,

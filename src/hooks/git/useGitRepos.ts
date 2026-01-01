@@ -11,6 +11,7 @@ import {
   gitListCommits,
   gitListRemoteBranches,
   gitListRemotes,
+  gitListSubmodules,
   gitListStashes,
   gitListWorktrees,
   gitPull,
@@ -35,6 +36,7 @@ import type {
   RepoInfoDto,
   RepoStatusDto,
   StashInfoDto,
+  SubmoduleInfoDto,
   WorktreeInfoDto,
 } from "../../types/git";
 import type {
@@ -43,6 +45,7 @@ import type {
   CommitItem,
   RemoteItem,
   StashItem,
+  SubmoduleItem,
   WorktreeItem,
 } from "../../types/git-ui";
 
@@ -112,6 +115,14 @@ function mapRemotes(remotes: RemoteInfoDto[]): RemoteItem[] {
   }));
 }
 
+function mapSubmodules(submodules: SubmoduleInfoDto[]): SubmoduleItem[] {
+  return submodules.map((submodule) => ({
+    name: submodule.name,
+    path: submodule.path,
+    url: submodule.url ?? null,
+  }));
+}
+
 function mapStashes(stashes: StashInfoDto[]): StashItem[] {
   return stashes.map((stash) => ({
     index: stash.index,
@@ -140,6 +151,7 @@ export function useGitRepos() {
   const [commitsByRepo, setCommitsByRepo] = useState<Record<RepoId, CommitItem[]>>({});
   const [worktreesByRepo, setWorktreesByRepo] = useState<Record<RepoId, WorktreeItem[]>>({});
   const [remotesByRepo, setRemotesByRepo] = useState<Record<RepoId, RemoteItem[]>>({});
+  const [submodulesByRepo, setSubmodulesByRepo] = useState<Record<RepoId, SubmoduleItem[]>>({});
   const [stashesByRepo, setStashesByRepo] = useState<Record<RepoId, StashItem[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,6 +178,7 @@ export function useGitRepos() {
     setCommitsByRepo(filterState);
     setWorktreesByRepo(filterState);
     setRemotesByRepo(filterState);
+    setSubmodulesByRepo(filterState);
     setStashesByRepo(filterState);
     
     setCommitsSkipByRepo(filterState);
@@ -210,16 +223,25 @@ export function useGitRepos() {
 
         const results = await Promise.all(
           targets.map(async (repo) => {
-            const [statusDto, local, remote, commitDtos, worktreeDtos, remoteDtos, stashDtos] =
-              await Promise.all([
-                gitStatus({ cwd: repo.root_path }),
-                gitListBranches({ cwd: repo.root_path }),
-                gitListRemoteBranches({ cwd: repo.root_path }),
-                gitListCommits({ cwd: repo.root_path, limit: 10, skip: 0 }),
-                gitListWorktrees({ cwd: repo.root_path }),
-                gitListRemotes({ cwd: repo.root_path }),
-                gitListStashes({ cwd: repo.root_path }),
-              ]);
+            const [
+              statusDto,
+              local,
+              remote,
+              commitDtos,
+              worktreeDtos,
+              remoteDtos,
+              submoduleDtos,
+              stashDtos,
+            ] = await Promise.all([
+              gitStatus({ cwd: repo.root_path }),
+              gitListBranches({ cwd: repo.root_path }),
+              gitListRemoteBranches({ cwd: repo.root_path }),
+              gitListCommits({ cwd: repo.root_path, limit: 10, skip: 0 }),
+              gitListWorktrees({ cwd: repo.root_path }),
+              gitListRemotes({ cwd: repo.root_path }),
+              gitListSubmodules({ cwd: repo.root_path }),
+              gitListStashes({ cwd: repo.root_path }),
+            ]);
             return {
               repoId: repo.repo_id,
               status: statusDto,
@@ -229,6 +251,7 @@ export function useGitRepos() {
               hasMoreCommits: commitDtos.length === 10,
               worktrees: mapWorktrees(worktreeDtos),
               remotes: mapRemotes(remoteDtos),
+              submodules: mapSubmodules(submoduleDtos),
               stashes: mapStashes(stashDtos),
             };
           })
@@ -271,6 +294,11 @@ export function useGitRepos() {
         setRemotesByRepo((prev) => {
           const next = { ...prev };
           for (const result of results) next[result.repoId] = result.remotes;
+          return next;
+        });
+        setSubmodulesByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.submodules;
           return next;
         });
         setStashesByRepo((prev) => {
@@ -643,6 +671,7 @@ export function useGitRepos() {
     commitsByRepo,
     worktreesByRepo,
     remotesByRepo,
+    submodulesByRepo,
     stashesByRepo,
     changedFilesByRepo,
     loading,

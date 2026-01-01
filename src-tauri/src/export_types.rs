@@ -4,7 +4,7 @@ mod tests {
         BranchInfoDto, CommitInfoDto, DiffCompareKind, DiffDeltaStatus, DiffFileSummaryDto,
         DiffMetaDto, DiffRequestDto, DiffRequestOptionsDto, DiffResponseDto, DiffStatDto,
         FileChangeType, FileStatusDto, RemoteInfoDto, RepoInfoDto, RepoStatusDto, StashInfoDto,
-        WorktreeInfoDto,
+        SubmoduleInfoDto, WorktreeInfoDto,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -49,6 +49,8 @@ mod tests {
         git_ts.push_str(&BranchInfoDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");
         git_ts.push_str(&RemoteInfoDto::decl().replace("type ", "export type "));
+        git_ts.push_str("\n\n");
+        git_ts.push_str(&SubmoduleInfoDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");
         git_ts.push_str(&WorktreeInfoDto::decl().replace("type ", "export type "));
         git_ts.push_str("\n\n");

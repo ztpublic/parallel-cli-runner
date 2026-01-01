@@ -38,6 +38,12 @@ export type WorktreeItem = {
   path: string;
 };
 
+export type SubmoduleItem = {
+  name: string;
+  path: string;
+  url?: string | null;
+};
+
 export type StashItem = {
   index: number;
   message: string;
@@ -60,6 +66,7 @@ export type GitTabId =
   | "branches"
   | "commits"
   | "commit"
+  | "submodules"
   | "worktrees"
   | "remotes"
   | "stashes";

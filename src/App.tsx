@@ -25,6 +25,7 @@ import type {
   RepoGroup,
   RepoHeader,
   StashItem,
+  SubmoduleItem,
   WorktreeItem,
 } from "./types/git-ui";
 
@@ -58,6 +59,7 @@ function App() {
     commitsByRepo,
     worktreesByRepo,
     remotesByRepo,
+    submodulesByRepo,
     stashesByRepo,
     changedFilesByRepo,
     loading: gitLoading,
@@ -312,6 +314,15 @@ function App() {
     [enabledRepoHeaders, remotesByRepo]
   );
 
+  const submoduleGroups = useMemo<RepoGroup<SubmoduleItem>[]>(
+    () =>
+      repoHeaders.map((repo) => ({
+        repo,
+        items: submodulesByRepo[repo.repoId] ?? [],
+      })),
+    [repoHeaders, submodulesByRepo]
+  );
+
   const stashGroups = useMemo<RepoGroup<StashItem>[]>(
     () =>
       enabledRepoHeaders.map((repo) => ({
@@ -366,6 +377,7 @@ function App() {
         commitGroups={commitGroups}
         worktreeGroups={worktreeGroups}
         remoteGroups={remoteGroups}
+        submoduleGroups={submoduleGroups}
         stashGroups={stashGroups}
         changedFileGroups={changedFileGroups}
         onRemoveRepo={handleRemoveRepo}

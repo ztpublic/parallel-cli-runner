@@ -3,6 +3,7 @@ import {
   CommitItem,
   WorktreeItem,
   RemoteItem,
+  SubmoduleItem,
   StashItem,
   GitTab,
   ChangedFile,
@@ -125,6 +126,24 @@ export const initialRemoteGroups: RepoGroup<RemoteItem>[] = [
   { repo: repoBeta, items: [] },
 ];
 
+const alphaSubmodules: SubmoduleItem[] = [
+  {
+    name: "ui-kit",
+    path: "/home/user/projects/alpha/vendor/ui-kit",
+    url: "https://github.com/acme/ui-kit.git",
+  },
+  {
+    name: "design-system",
+    path: "/home/user/projects/alpha/vendor/design-system",
+    url: "https://github.com/acme/design-system.git",
+  },
+];
+
+export const initialSubmoduleGroups: RepoGroup<SubmoduleItem>[] = [
+  { repo: repoAlpha, items: alphaSubmodules },
+  { repo: repoBeta, items: [] },
+];
+
 export const initialStashGroups: RepoGroup<StashItem>[] = [
   { repo: repoAlpha, items: alphaStashes },
   { repo: repoBeta, items: betaStashes },
@@ -136,6 +155,7 @@ export const initialTabs: GitTab[] = [
   { id: "commit", label: "Changes", icon: "fileEdit" },
   { id: "stashes", label: "Stashes", icon: "archive" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
+  { id: "submodules", label: "Submodules", icon: "merge" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
 ];
 
