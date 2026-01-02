@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Icon } from "./Icons";
+import { ContextMenu } from "./ContextMenu";
 import { useGitTabs } from "../hooks/git/useGitTabs";
 import { GitTabBar } from "./git/GitTabBar";
 import { GitBranches } from "./git/GitBranches";
@@ -13,6 +14,7 @@ import { GitSubmodules } from "./git/GitSubmodules";
 import {
   ChangedFile,
   GitTab,
+  GitTabId,
   RemoteItem,
   RepoBranchGroup,
   RepoGroup,
@@ -22,9 +24,13 @@ import {
   WorktreeCommits,
   WorktreeItem,
 } from "../types/git-ui";
+import type { TreeNodeContextMenuItem } from "../types/tree";
+
+type GitTabGroup = "top" | "bottom";
 
 type GitPanelProps = {
   initialTabs?: GitTab[];
+  initialSplit?: boolean;
   repos?: RepoHeader[];
   enabledRepoIds?: string[];
   branchGroups?: RepoBranchGroup[];
@@ -93,6 +99,7 @@ const defaultTabs: GitTab[] = [
 
 export function GitPanel({
   initialTabs,
+  initialSplit = false,
   repos = [],
   enabledRepoIds,
   branchGroups = [],
@@ -144,25 +151,43 @@ export function GitPanel({
 }: GitPanelProps) {
   const {
     tabs,
+    tabGroups,
+    topTabs,
+    bottomTabs,
     activeTab,
     setActiveTab,
+    activeTopTab,
+    setActiveTopTab,
+    activeBottomTab,
+    setActiveBottomTab,
     draggedTabId,
     dragOverTabId,
+    dragOverGroup,
+    moveTabToGroup,
     handleDragStart,
     handleDragOver,
     handleDrop,
     handleDragEnd,
     handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
+  const [isSplit, setIsSplit] = useState(initialSplit);
+  const [lastActiveGroup, setLastActiveGroup] = useState<GitTabGroup>("top");
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    tabId: GitTabId;
+    position: { x: number; y: number };
+  } | null>(null);
   const hasRepos = repos.length > 0;
+  const shouldRefresh = isSplit
+    ? activeTopTab === "commit" || activeBottomTab === "commit"
+    : activeTab === "commit";
 
   useEffect(() => {
-    if (activeTab !== "commit" || !onRefresh || !hasRepos) return;
+    if (!shouldRefresh || !onRefresh || !hasRepos) return;
     const intervalId = window.setInterval(() => {
       onRefresh();
     }, 10000);
     return () => window.clearInterval(intervalId);
-  }, [activeTab, hasRepos, onRefresh]);
+  }, [shouldRefresh, hasRepos, onRefresh]);
 
   const handleCommit = (repoId: string, message: string) => {
     return onCommit?.(repoId, message);
@@ -188,12 +213,223 @@ export function GitPanel({
     onRollbackFiles?.(repoId, paths);
   };
 
+  const handleToggleSplit = () => {
+    if (isSplit) {
+      const fallbackTab = lastActiveGroup === "bottom" ? activeBottomTab : activeTopTab;
+      setActiveTab(fallbackTab);
+      setIsSplit(false);
+      return;
+    }
+
+    const activeGroup = tabGroups[activeTab] ?? "top";
+    if (activeGroup === "bottom") {
+      setActiveBottomTab(activeTab);
+      setActiveTopTab(topTabs[0]?.id ?? activeTab);
+      setLastActiveGroup("bottom");
+    } else {
+      setActiveTopTab(activeTab);
+      setActiveBottomTab(bottomTabs[0]?.id ?? activeTab);
+      setLastActiveGroup("top");
+    }
+    setIsSplit(true);
+  };
+
+  const handleSingleTabClick = (tabId: GitTabId) => {
+    setActiveTab(tabId);
+    setLastActiveGroup(tabGroups[tabId] ?? "top");
+  };
+
+  const handleTopTabClick = (tabId: GitTabId) => {
+    setActiveTopTab(tabId);
+    setLastActiveGroup("top");
+  };
+
+  const handleBottomTabClick = (tabId: GitTabId) => {
+    setActiveBottomTab(tabId);
+    setLastActiveGroup("bottom");
+  };
+
+  const tabContextItems = useMemo(() => {
+    if (!tabContextMenu || !isSplit) return [];
+    const tabGroup = tabGroups[tabContextMenu.tabId] ?? "top";
+    const topCount = topTabs.length;
+    const bottomCount = bottomTabs.length;
+
+    const moveTopDisabled = tabGroup === "top" || bottomCount <= 1;
+    const moveBottomDisabled = tabGroup === "bottom" || topCount <= 1;
+
+    const items: TreeNodeContextMenuItem[] = [
+      {
+        id: "move-top",
+        label: "Move to Top Panel",
+        disabled: moveTopDisabled,
+      },
+      {
+        id: "move-bottom",
+        label: "Move to Bottom Panel",
+        disabled: moveBottomDisabled,
+      },
+    ];
+
+    return items;
+  }, [bottomTabs.length, isSplit, tabContextMenu, tabGroups, topTabs.length]);
+
+  const renderTabContent = (tabId: GitTabId) => (
+    <>
+      {hasRepos && tabId === "repos" ? (
+        <GitRepos
+          repos={repos}
+          enabledRepoIds={enabledRepoIds}
+          onEnableRepos={onEnableRepos}
+          // Active repo concept removed, pass null or maybe allow selection for highlighting?
+          // User requested to remove active repo concept. So we pass nothing or maybe pass selection state if managed here.
+          // For now pass null as activeRepoId.
+          activeRepoId={null}
+          onActivateRepo={onActivateRepo}
+          onRemoveRepo={onRemoveRepo}
+          onOpenTerminal={onOpenRepoTerminal}
+          onOpenRepoFolder={onOpenRepoFolder}
+        />
+      ) : null}
+
+      {error ? (
+        <div className="git-empty">
+          <Icon name="alert" size={22} />
+          <p>{error}</p>
+          <button type="button" className="git-primary-button" onClick={onRefresh}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+
+      {!hasRepos ? (
+        <div className="git-empty">
+          <Icon name="folder" size={22} />
+          <p>No repositories bound.</p>
+          <button type="button" className="git-primary-button" onClick={onOpenFolder}>
+            Open Folder
+          </button>
+        </div>
+      ) : (
+        <>
+          {tabId === "branches" ? (
+            <GitBranches
+              branchGroups={branchGroups}
+              onLoadMoreLocal={onLoadMoreLocalBranches}
+              onLoadMoreRemote={onLoadMoreRemoteBranches}
+              canLoadMoreLocal={canLoadMoreLocalBranches}
+              canLoadMoreRemote={canLoadMoreRemoteBranches}
+              onCreateBranch={onCreateBranch}
+              onSwitchBranch={onSwitchBranch}
+              onDeleteBranch={onDeleteBranch}
+              onMergeBranch={onMergeBranch}
+              onRebaseBranch={onRebaseBranch}
+              onPull={onPull}
+              onPush={onPush}
+            />
+          ) : null}
+
+          {tabId === "commits" ? (
+            <GitCommits
+              commitGroups={commitGroups}
+              onLoadMore={onLoadMoreCommits}
+              canLoadMore={canLoadMoreCommits}
+              isLoadingMore={isLoadingMoreCommits}
+              onReset={onReset}
+              onRevert={onRevert}
+              onSquashCommits={onSquashCommits}
+            />
+          ) : null}
+
+          {tabId === "commit" ? (
+            <GitStaging
+              groups={changedFileGroups}
+              onStageAll={handleStageAll}
+              onUnstageAll={handleUnstageAll}
+              onStageFile={handleStageFile}
+              onUnstageFile={handleUnstageFile}
+              onRollbackFiles={handleRollbackFiles}
+              onCommit={handleCommit}
+            />
+          ) : null}
+
+          {tabId === "stashes" ? (
+            <GitStashes
+              stashGroups={stashGroups}
+              onApplyStash={onApplyStash}
+              onDeleteStash={onDeleteStash}
+            />
+          ) : null}
+
+          {tabId === "worktrees" ? (
+            <GitWorktrees
+              worktreeGroups={worktreeGroups}
+              onCreateWorktree={onCreateWorktree}
+              onDeleteWorktree={onDeleteWorktree}
+              onOpenTerminal={onOpenWorktreeTerminal}
+              onOpenWorktreeFolder={onOpenWorktreeFolder}
+              onMergeBranch={onMergeBranch}
+              onRebaseBranch={onRebaseBranch}
+            />
+          ) : null}
+
+          {tabId === "submodules" ? (
+            <GitSubmodules submoduleGroups={submoduleGroups} />
+          ) : null}
+
+          {tabId === "remotes" ? <GitRemotes remoteGroups={remoteGroups} /> : null}
+        </>
+      )}
+    </>
+  );
+
+  const handleTabContextMenu = (
+    tabId: GitTabId,
+    event: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    if (!isSplit) return;
+    setTabContextMenu({
+      tabId,
+      position: { x: event.clientX, y: event.clientY },
+    });
+  };
+
+  const handleTabContextMenuSelect = (itemId: string) => {
+    if (!tabContextMenu) return;
+    const { tabId } = tabContextMenu;
+
+    if (itemId === "move-top") {
+      moveTabToGroup(tabId, "top");
+      setActiveTopTab(tabId);
+      setLastActiveGroup("top");
+    }
+
+    if (itemId === "move-bottom") {
+      moveTabToGroup(tabId, "bottom");
+      setActiveBottomTab(tabId);
+      setLastActiveGroup("bottom");
+    }
+  };
+
   return (
     <aside className="git-panel" style={{ width }}>
       <div className="panel-header">
-        <div className="panel-title">
-          <Icon name="branch" size={16} />
-          <span>Git Manager</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div className="panel-title">
+            <Icon name="branch" size={16} />
+            <span>Git Manager</span>
+          </div>
+          <button
+            type="button"
+            className={`icon-button icon-button--small ${
+              isSplit ? "icon-button--pressed" : ""
+            }`}
+            title={isSplit ? "Disable split view" : "Enable split view"}
+            aria-pressed={isSplit}
+            onClick={handleToggleSplit}
+          >
+            <Icon name="split" size={14} />
+          </button>
         </div>
         <div style={{ display: "flex", gap: "4px" }}>
           <button
@@ -216,125 +452,74 @@ export function GitPanel({
         </div>
       </div>
 
-      <GitTabBar
-        tabs={tabs}
-        activeTab={activeTab}
-        draggedTabId={draggedTabId}
-        dragOverTabId={dragOverTabId}
-        onTabClick={setActiveTab}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onDragEnd={handleDragEnd}
-        onPointerDown={handlePointerDown}
-      />
-
-      <div className="git-panel-content">
-        {hasRepos && activeTab === "repos" ? (
-          <GitRepos
-            repos={repos}
-            enabledRepoIds={enabledRepoIds}
-            onEnableRepos={onEnableRepos}
-            // Active repo concept removed, pass null or maybe allow selection for highlighting?
-            // User requested to remove active repo concept. So we pass nothing or maybe pass selection state if managed here.
-            // For now pass null as activeRepoId.
-            activeRepoId={null} 
-            onActivateRepo={onActivateRepo}
-            onRemoveRepo={onRemoveRepo}
-            onOpenTerminal={onOpenRepoTerminal}
-            onOpenRepoFolder={onOpenRepoFolder}
+      {isSplit ? (
+        <div className="git-panel-split">
+          <section className="git-panel-section">
+            <GitTabBar
+              tabs={topTabs}
+              activeTab={activeTopTab}
+              draggedTabId={draggedTabId}
+              dragOverTabId={dragOverTabId}
+              dragOverGroup={dragOverGroup}
+              groupId="top"
+              onTabClick={handleTopTabClick}
+              onTabContextMenu={handleTabContextMenu}
+              onDragStart={(tabId) => handleDragStart("top", tabId)}
+              onDragOver={(tabId) => handleDragOver("top", tabId)}
+              onDrop={(tabId) => handleDrop("top", tabId)}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(tabId) => handlePointerDown("top", tabId)}
+            />
+            <div className="git-panel-content">{renderTabContent(activeTopTab)}</div>
+          </section>
+          <section className="git-panel-section">
+            <GitTabBar
+              tabs={bottomTabs}
+              activeTab={activeBottomTab}
+              draggedTabId={draggedTabId}
+              dragOverTabId={dragOverTabId}
+              dragOverGroup={dragOverGroup}
+              groupId="bottom"
+              onTabClick={handleBottomTabClick}
+              onTabContextMenu={handleTabContextMenu}
+              onDragStart={(tabId) => handleDragStart("bottom", tabId)}
+              onDragOver={(tabId) => handleDragOver("bottom", tabId)}
+              onDrop={(tabId) => handleDrop("bottom", tabId)}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(tabId) => handlePointerDown("bottom", tabId)}
+            />
+            <div className="git-panel-content">{renderTabContent(activeBottomTab)}</div>
+          </section>
+        </div>
+      ) : (
+        <>
+          <GitTabBar
+            tabs={tabs}
+            activeTab={activeTab}
+            draggedTabId={draggedTabId}
+            dragOverTabId={dragOverTabId}
+            dragOverGroup={dragOverGroup}
+            groupId="single"
+            onTabClick={handleSingleTabClick}
+            onTabContextMenu={handleTabContextMenu}
+            onDragStart={(tabId) => handleDragStart("single", tabId)}
+            onDragOver={(tabId) => handleDragOver("single", tabId)}
+            onDrop={(tabId) => handleDrop("single", tabId)}
+            onDragEnd={handleDragEnd}
+            onPointerDown={(tabId) => handlePointerDown("single", tabId)}
           />
-        ) : null}
 
-        {error ? (
-          <div className="git-empty">
-            <Icon name="alert" size={22} />
-            <p>{error}</p>
-            <button type="button" className="git-primary-button" onClick={onRefresh}>
-              Retry
-            </button>
-          </div>
-        ) : null}
-
-        {!hasRepos ? (
-          <div className="git-empty">
-            <Icon name="folder" size={22} />
-            <p>No repositories bound.</p>
-            <button type="button" className="git-primary-button" onClick={onOpenFolder}>
-              Open Folder
-            </button>
-          </div>
-        ) : (
-          <>
-            {activeTab === "branches" ? (
-              <GitBranches
-                branchGroups={branchGroups}
-                onLoadMoreLocal={onLoadMoreLocalBranches}
-                onLoadMoreRemote={onLoadMoreRemoteBranches}
-                canLoadMoreLocal={canLoadMoreLocalBranches}
-                canLoadMoreRemote={canLoadMoreRemoteBranches}
-                onCreateBranch={onCreateBranch}
-                onSwitchBranch={onSwitchBranch}
-                onDeleteBranch={onDeleteBranch}
-                onMergeBranch={onMergeBranch}
-                onRebaseBranch={onRebaseBranch}
-                onPull={onPull}
-                onPush={onPush}
-              />
-            ) : null}
-
-            {activeTab === "commits" ? (
-              <GitCommits
-                commitGroups={commitGroups}
-                onLoadMore={onLoadMoreCommits}
-                canLoadMore={canLoadMoreCommits}
-                isLoadingMore={isLoadingMoreCommits}
-                onReset={onReset}
-                onRevert={onRevert}
-                onSquashCommits={onSquashCommits}
-              />
-            ) : null}
-
-            {activeTab === "commit" ? (
-              <GitStaging
-                groups={changedFileGroups}
-                onStageAll={handleStageAll}
-                onUnstageAll={handleUnstageAll}
-                onStageFile={handleStageFile}
-                onUnstageFile={handleUnstageFile}
-                onRollbackFiles={handleRollbackFiles}
-                onCommit={handleCommit}
-              />
-            ) : null}
-
-            {activeTab === "stashes" ? (
-              <GitStashes
-                stashGroups={stashGroups}
-                onApplyStash={onApplyStash}
-                onDeleteStash={onDeleteStash}
-              />
-            ) : null}
-
-            {activeTab === "worktrees" ? (
-              <GitWorktrees
-                worktreeGroups={worktreeGroups}
-                onCreateWorktree={onCreateWorktree}
-                onDeleteWorktree={onDeleteWorktree}
-                onOpenTerminal={onOpenWorktreeTerminal}
-                onOpenWorktreeFolder={onOpenWorktreeFolder}
-                onMergeBranch={onMergeBranch}
-                onRebaseBranch={onRebaseBranch}
-              />
-            ) : null}
-
-            {activeTab === "submodules" ? (
-              <GitSubmodules submoduleGroups={submoduleGroups} />
-            ) : null}
-
-            {activeTab === "remotes" ? <GitRemotes remoteGroups={remoteGroups} /> : null}
-          </>
-        )}
-      </div>
+          <div className="git-panel-content">{renderTabContent(activeTab)}</div>
+        </>
+      )}
+      {tabContextMenu && isSplit ? (
+        <ContextMenu
+          items={tabContextItems}
+          position={tabContextMenu.position}
+          onSelect={handleTabContextMenuSelect}
+          onClose={() => setTabContextMenu(null)}
+        />
+      ) : null}
     </aside>
   );
 }

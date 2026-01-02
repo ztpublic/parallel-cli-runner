@@ -37,6 +37,21 @@ export const Default: Story = {
   },
 };
 
+export const SplitView: Story = {
+  args: {
+    initialTabs,
+    initialSplit: true,
+    repos: repoHeaders,
+    branchGroups: initialBranchGroups,
+    commitGroups: initialCommitGroups,
+    worktreeGroups: initialWorktreeGroups,
+    remoteGroups: initialRemoteGroups,
+    submoduleGroups: initialSubmoduleGroups,
+    stashGroups: initialStashGroups,
+    changedFileGroups: initialChangedFileGroups,
+  },
+};
+
 export const Empty: Story = {
   args: {
     initialTabs,
