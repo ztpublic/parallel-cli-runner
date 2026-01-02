@@ -192,7 +192,7 @@ export const initialChangedFiles: ChangedFile[] = [
   { path: "src/App.tsx", status: "modified", staged: true },
   { path: "src/components/GitPanel.tsx", status: "modified", staged: true },
   { path: "src/components/TopBar.tsx", status: "added", staged: false },
-  { path: "src/services/tauri.ts", status: "modified", staged: false },
+  { path: "src/services/backend.ts", status: "modified", staged: false },
   { path: "README.md", status: "deleted", staged: false },
 ];
 

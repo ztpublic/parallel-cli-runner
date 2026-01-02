@@ -1,13 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Terminal } from "xterm";
 import type { IDisposable } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
-
-type SessionData = {
-  id: string;
-  data: string;
-};
+import { subscribeSessionData, writeToSession } from "./backend";
 
 type TerminalEntry = {
   term: Terminal;
@@ -15,7 +9,6 @@ type TerminalEntry = {
   onInput: { current?: (data: string) => void };
   dataListener: IDisposable;
   unlisten?: () => void;
-  unlistenPromise?: Promise<() => void>;
   disposed: boolean;
 };
 
@@ -46,14 +39,14 @@ function createEntry(sessionId: string, onInput?: (data: string) => void): Termi
       return true;
     }
     if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyD") {
-      void invoke("write_to_session", { id: sessionId, data: "\u0004" });
+      void writeToSession({ id: sessionId, data: "\u0004" });
       return false;
     }
     return true;
   });
 
   const dataListener = term.onData((data) => {
-    void invoke("write_to_session", { id: sessionId, data });
+    void writeToSession({ id: sessionId, data });
     onInputRef.current?.(data);
   });
 
@@ -65,17 +58,10 @@ function createEntry(sessionId: string, onInput?: (data: string) => void): Termi
     disposed: false,
   };
 
-  entry.unlistenPromise = listen<SessionData>("session-data", (event) => {
-    if (event.payload.id === sessionId) {
-      term.write(event.payload.data);
+  entry.unlisten = subscribeSessionData((payload) => {
+    if (payload.id === sessionId) {
+      term.write(payload.data);
     }
-  }).then((unlisten) => {
-    if (entry.disposed) {
-      unlisten();
-    } else {
-      entry.unlisten = unlisten;
-    }
-    return unlisten;
   });
 
   return entry;
@@ -117,8 +103,6 @@ export function disposeTerminal(sessionId: string): void {
   entry.dataListener.dispose();
   if (entry.unlisten) {
     entry.unlisten();
-  } else if (entry.unlistenPromise) {
-    void entry.unlistenPromise.then((unlisten) => unlisten());
   }
   entry.term.dispose();
   registry.delete(sessionId);

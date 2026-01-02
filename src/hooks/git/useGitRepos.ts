@@ -31,7 +31,7 @@ import {
   gitStatus,
   gitUnstageAll,
   gitUnstageFiles,
-} from "../../services/tauri";
+} from "../../services/backend";
 import { formatInvokeError } from "../../services/errors";
 import type {
   BranchInfoDto,

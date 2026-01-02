@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { openPath } from "../../platform/actions";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";

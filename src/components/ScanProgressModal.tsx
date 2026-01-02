@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { listen } from "@tauri-apps/api/event";
+import { subscribeScanProgress } from "../services/backend";
 
 interface ScanProgressModalProps {
   open: boolean;
@@ -14,12 +14,12 @@ export function ScanProgressModal({ open }: ScanProgressModalProps) {
     // Reset path when opening
     setCurrentPath("");
 
-    const unlistenPromise = listen<string>("scan-progress", (event) => {
-      setCurrentPath(event.payload);
+    const unsubscribe = subscribeScanProgress((path) => {
+      setCurrentPath(path);
     });
 
     return () => {
-      unlistenPromise.then((unlisten) => unlisten());
+      unsubscribe();
     };
   }, [open]);
 

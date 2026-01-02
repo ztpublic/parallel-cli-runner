@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { getTransport } from "../platform/transport";
 import type {
   BranchInfoDto,
   CommitInfoDto,
@@ -12,36 +12,61 @@ import type {
   WorktreeInfoDto,
 } from "../types/git";
 
+function request<T>(method: string, params?: unknown): Promise<T> {
+  return getTransport().request<T>(method, params);
+}
+
 export function createSession(params: { cwd?: string }): Promise<string> {
-  return invoke<string>("create_session", params);
+  return request<string>("create_session", params);
 }
 
 export function writeToSession(params: { id: string; data: string }): Promise<void> {
-  return invoke("write_to_session", params);
+  return request("write_to_session", params);
+}
+
+export function resizeSession(params: {
+  id: string;
+  cols: number;
+  rows: number;
+}): Promise<void> {
+  return request("resize_session", params);
 }
 
 export function killSession(params: { id: string }): Promise<void> {
-  return invoke("kill_session", params);
+  return request("kill_session", params);
+}
+
+export type SessionDataEvent = {
+  id: string;
+  data: string;
+};
+
+export function subscribeSessionData(handler: (payload: SessionDataEvent) => void): () => void {
+  return getTransport().subscribe<SessionDataEvent>("session-data", handler);
+}
+
+export function subscribeScanProgress(handler: (path: string) => void): () => void {
+  return getTransport().subscribe<string>("scan-progress", handler);
 }
 
 export function gitDetectRepo(params: { cwd: string }): Promise<string | null> {
-  return invoke<string | null>("git_detect_repo", params);
+  return request<string | null>("git_detect_repo", params);
 }
 
 export function gitScanRepos(params: { cwd: string }): Promise<RepoInfoDto[]> {
-  return invoke<RepoInfoDto[]>("git_scan_repos", params);
+  return request<RepoInfoDto[]>("git_scan_repos", params);
 }
 
 export function gitStatus(params: { cwd: string }): Promise<RepoStatusDto> {
-  return invoke<RepoStatusDto>("git_status", params);
+  return request<RepoStatusDto>("git_status", params);
 }
 
 export function gitListBranches(params: { cwd: string }): Promise<BranchInfoDto[]> {
-  return invoke<BranchInfoDto[]>("git_list_branches", params);
+  return request<BranchInfoDto[]>("git_list_branches", params);
 }
 
 export function gitListRemoteBranches(params: { cwd: string }): Promise<BranchInfoDto[]> {
-  return invoke<BranchInfoDto[]>("git_list_remote_branches", params);
+  return request<BranchInfoDto[]>("git_list_remote_branches", params);
 }
 
 export function gitListCommits(params: {
@@ -49,39 +74,39 @@ export function gitListCommits(params: {
   limit: number;
   skip?: number;
 }): Promise<CommitInfoDto[]> {
-  return invoke<CommitInfoDto[]>("git_list_commits", params);
+  return request<CommitInfoDto[]>("git_list_commits", params);
 }
 
 export function gitListWorktrees(params: { cwd: string }): Promise<WorktreeInfoDto[]> {
-  return invoke<WorktreeInfoDto[]>("git_list_worktrees", params);
+  return request<WorktreeInfoDto[]>("git_list_worktrees", params);
 }
 
 export function gitListRemotes(params: { cwd: string }): Promise<RemoteInfoDto[]> {
-  return invoke<RemoteInfoDto[]>("git_list_remotes", params);
+  return request<RemoteInfoDto[]>("git_list_remotes", params);
 }
 
 export function gitListSubmodules(params: { cwd: string }): Promise<SubmoduleInfoDto[]> {
-  return invoke<SubmoduleInfoDto[]>("git_list_submodules", params);
+  return request<SubmoduleInfoDto[]>("git_list_submodules", params);
 }
 
 export function gitListStashes(params: { cwd: string }): Promise<StashInfoDto[]> {
-  return invoke<StashInfoDto[]>("git_list_stashes", params);
+  return request<StashInfoDto[]>("git_list_stashes", params);
 }
 
 export function gitApplyStash(params: { cwd: string; index: number }): Promise<void> {
-  return invoke("git_apply_stash", params);
+  return request("git_apply_stash", params);
 }
 
 export function gitDropStash(params: { cwd: string; index: number }): Promise<void> {
-  return invoke("git_drop_stash", params);
+  return request("git_drop_stash", params);
 }
 
 export function gitPull(params: { cwd: string }): Promise<void> {
-  return invoke("git_pull", params);
+  return request("git_pull", params);
 }
 
 export function gitPush(params: { cwd: string; force: boolean }): Promise<void> {
-  return invoke("git_push", params);
+  return request("git_push", params);
 }
 
 export function gitCommit(params: {
@@ -90,27 +115,27 @@ export function gitCommit(params: {
   stageAll: boolean;
   amend: boolean;
 }): Promise<void> {
-  return invoke("git_commit", params);
+  return request("git_commit", params);
 }
 
 export function gitStageFiles(params: { cwd: string; paths: string[] }): Promise<void> {
-  return invoke("git_stage_files", params);
+  return request("git_stage_files", params);
 }
 
 export function gitUnstageFiles(params: { cwd: string; paths: string[] }): Promise<void> {
-  return invoke("git_unstage_files", params);
+  return request("git_unstage_files", params);
 }
 
 export function gitDiscardFiles(params: { cwd: string; paths: string[] }): Promise<void> {
-  return invoke("git_discard_files", params);
+  return request("git_discard_files", params);
 }
 
 export function gitStageAll(params: { cwd: string }): Promise<void> {
-  return invoke("git_stage_all", params);
+  return request("git_stage_all", params);
 }
 
 export function gitUnstageAll(params: { cwd: string }): Promise<void> {
-  return invoke("git_unstage_all", params);
+  return request("git_unstage_all", params);
 }
 
 export function gitMergeIntoBranch(params: {
@@ -118,7 +143,7 @@ export function gitMergeIntoBranch(params: {
   targetBranch: string;
   sourceBranch: string;
 }): Promise<void> {
-  return invoke("git_merge_into_branch", params);
+  return request("git_merge_into_branch", params);
 }
 
 export function gitRebaseBranch(params: {
@@ -126,7 +151,7 @@ export function gitRebaseBranch(params: {
   targetBranch: string;
   ontoBranch: string;
 }): Promise<void> {
-  return invoke("git_rebase_branch", params);
+  return request("git_rebase_branch", params);
 }
 
 export function gitCreateBranch(params: {
@@ -134,25 +159,25 @@ export function gitCreateBranch(params: {
   branchName: string;
   sourceBranch?: string;
 }): Promise<void> {
-  return invoke("git_create_branch", params);
+  return request("git_create_branch", params);
 }
 
 export function gitCheckoutBranch(params: {
   cwd: string;
   branchName: string;
 }): Promise<void> {
-  return invoke("git_checkout_branch", params);
+  return request("git_checkout_branch", params);
 }
 
 export function gitDetachWorktreeHead(params: { cwd: string }): Promise<void> {
-  return invoke("git_detach_worktree_head", params);
+  return request("git_detach_worktree_head", params);
 }
 
 export function gitSmartCheckoutBranch(params: {
   cwd: string;
   branchName: string;
 }): Promise<void> {
-  return invoke("git_smart_checkout_branch", params);
+  return request("git_smart_checkout_branch", params);
 }
 
 export function gitReset(params: {
@@ -160,28 +185,28 @@ export function gitReset(params: {
   target: string;
   mode: "soft" | "mixed" | "hard";
 }): Promise<void> {
-  return invoke("git_reset", params);
+  return request("git_reset", params);
 }
 
 export function gitRevert(params: {
   cwd: string;
   commit: string;
 }): Promise<void> {
-  return invoke("git_revert", params);
+  return request("git_revert", params);
 }
 
 export function gitSquashCommits(params: {
   cwd: string;
   commits: string[];
 }): Promise<void> {
-  return invoke("git_squash_commits", params);
+  return request("git_squash_commits", params);
 }
 
 export function gitCommitsInRemote(params: {
   cwd: string;
   commits: string[];
 }): Promise<boolean> {
-  return invoke<boolean>("git_commits_in_remote", params);
+  return request<boolean>("git_commits_in_remote", params);
 }
 
 export function gitAddWorktree(params: {
@@ -190,7 +215,7 @@ export function gitAddWorktree(params: {
   branch: string;
   startPoint: string;
 }): Promise<void> {
-  return invoke("git_add_worktree", params);
+  return request("git_add_worktree", params);
 }
 
 export function gitRemoveWorktree(params: {
@@ -198,7 +223,7 @@ export function gitRemoveWorktree(params: {
   path: string;
   force: boolean;
 }): Promise<void> {
-  return invoke("git_remove_worktree", params);
+  return request("git_remove_worktree", params);
 }
 
 export function gitDeleteBranch(params: {
@@ -206,9 +231,9 @@ export function gitDeleteBranch(params: {
   branch: string;
   force: boolean;
 }): Promise<void> {
-  return invoke("git_delete_branch", params);
+  return request("git_delete_branch", params);
 }
 
 export function gitUnifiedDiff(params: DiffRequestDto): Promise<DiffResponseDto> {
-  return invoke<DiffResponseDto>("git_unified_diff", params);
+  return request<DiffResponseDto>("git_unified_diff", params);
 }

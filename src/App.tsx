@@ -9,10 +9,9 @@ import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
 import { makeWorktreeTargetId } from "./hooks/git/gitTargets";
 import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
-import { gitScanRepos } from "./services/tauri";
+import { gitScanRepos } from "./services/backend";
 import { formatInvokeError } from "./services/errors";
-import { open } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
+import { openDialog, openPath } from "./platform/actions";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
@@ -257,7 +256,7 @@ function App() {
 
   const handleTriggerOpenFolder = useCallback(async () => {
     try {
-      const selection = await open({
+      const selection = await openDialog({
         directory: true,
         multiple: false,
         title: "Open Folder",

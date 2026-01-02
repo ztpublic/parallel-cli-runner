@@ -1,6 +1,6 @@
 import type { LayoutNode, PaneMeta, PaneNode } from "../types/layout";
 import { collectPanes, createId } from "../types/layout";
-import { createSession, killSession, writeToSession } from "./tauri";
+import { createSession, killSession, writeToSession } from "./backend";
 import { disposeTerminal } from "./terminalRegistry";
 
 export async function createPaneNode(opts?: {

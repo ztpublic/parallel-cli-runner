@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import "xterm/css/xterm.css";
 import { PaneNode } from "../types/layout";
 import { attachTerminal, detachTerminal, type TerminalHandle } from "../services/terminalRegistry";
+import { resizeSession } from "../services/backend";
 
 type TerminalPaneProps = {
   pane: PaneNode;
@@ -37,7 +37,7 @@ export function TerminalPane({
     fitAddon.fit();
     const cols = term.cols;
     const rows = term.rows;
-    await invoke("resize_session", { id: pane.sessionId, cols, rows });
+    await resizeSession({ id: pane.sessionId, cols, rows });
     term.refresh(0, Math.max(0, term.rows - 1));
   }, [pane.sessionId]);
 

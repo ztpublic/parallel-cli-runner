@@ -11,7 +11,7 @@ import {
   removePane,
   splitPane,
 } from "../types/layout";
-import { killSession, writeToSession } from "../services/tauri";
+import { killSession, writeToSession } from "../services/backend";
 import { disposeTerminal } from "../services/terminalRegistry";
 import { killLayoutSessions } from "../services/sessions";
 

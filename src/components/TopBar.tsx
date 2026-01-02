@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { openDialog } from "../platform/actions";
 
 import { Icon } from "./Icons";
 
@@ -14,7 +14,7 @@ export function TopBar({ onOpenFolder }: TopBarProps) {
   const handleOpenFolder = async () => {
     setIsFileMenuOpen(false);
     try {
-      const selection = await open({
+      const selection = await openDialog({
         directory: true,
         multiple: false,
         title: "Open Folder",
