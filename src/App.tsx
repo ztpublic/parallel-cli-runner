@@ -3,7 +3,7 @@ import "./App.css";
 import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
 import { useClosePaneHotkey } from "./hooks/useHotkeys";
-import { countPanes, findPane, getFirstPane } from "./types/layout";
+import { collectPanes, countPanes, findPane, getFirstPane } from "./types/layout";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
@@ -474,7 +474,16 @@ function App() {
         return;
       }
 
-      const targetPaneId = tab.activePaneId ?? getFirstPane(tab.layout)?.id;
+      let targetPaneId = tab.activePaneId;
+      if (splitPaneIds.length) {
+        const allPanes = collectPanes(tab.layout);
+        const survivor = allPanes.find((p) => !splitPaneIds.includes(p.id));
+        if (survivor) {
+          targetPaneId = survivor.id;
+        }
+      }
+      if (!targetPaneId) targetPaneId = getFirstPane(tab.layout)?.id ?? null;
+
       if (!targetPaneId) return;
       const targetPane = findPane(tab.layout, targetPaneId);
       const cwd = targetPane?.meta?.cwd ?? targetPane?.meta?.subtitle;
