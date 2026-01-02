@@ -166,17 +166,6 @@ export function TerminalPanel({
               >
                 <Icon name="plus" size={16} />
               </button>
-              <button
-                type="button"
-                className="icon-button"
-                title="Split terminal"
-                onClick={onSplitPane}
-              >
-                <Icon name="split" size={16} />
-              </button>
-              <button type="button" className="icon-button" title="Terminal settings">
-                <Icon name="settings" size={16} />
-              </button>
             </div>
           </>
         ) : (
