@@ -21,7 +21,6 @@ type TerminalPanelProps = {
   onSetActivePane: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewPane: () => void;
-  onSplitPane: () => void;
   onSetTerminalView: (
     tabId: string,
     view: "single" | "vertical" | "horizontal" | "quad"
@@ -40,7 +39,6 @@ export function TerminalPanel({
   onSetActivePane,
   onCloseTab,
   onNewPane,
-  onSplitPane,
   onSetTerminalView,
 }: TerminalPanelProps) {
   const [activeView, setActiveView] = useState<TerminalView>("terminals");

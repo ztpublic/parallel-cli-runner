@@ -3,7 +3,7 @@ import "./App.css";
 import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
 import { useClosePaneHotkey } from "./hooks/useHotkeys";
-import { collectPanes, countPanes, findPane, getFirstPane } from "./types/layout";
+import { countPanes, findPane, getFirstPane } from "./types/layout";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
@@ -36,11 +36,8 @@ function App() {
     tabs,
     activeTabId,
     setActiveTabId,
-    layout,
-    activePaneId,
     setActivePaneId,
     appendPane,
-    splitPaneInLayout,
     splitPaneInTab,
     closePaneInTab,
     closeActivePane,
@@ -288,7 +285,6 @@ function App() {
     setEnabledRepoIds((prev) => prev.filter((id) => id !== repoId));
   }, [repos, setRepos]);
 
-  const activePanes = useMemo(() => collectPanes(layout), [layout]);
   const resolvedActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
 
   const repoHeaders = useMemo<RepoHeader[]>(
@@ -452,22 +448,6 @@ function App() {
     });
     appendPane(next, title);
   }, [appendPane, tabs.length]);
-
-  const handleSplitPane = useCallback(async () => {
-    const targetPaneId = activePaneId ?? activePanes[0]?.id;
-    if (!targetPaneId) return;
-    const nextIndex = activePanes.length + 1;
-    const next = await createPaneNode({
-      meta: {
-        title: `Terminal ${nextIndex}`,
-      },
-    });
-    splitPaneInLayout(next, targetPaneId, "horizontal");
-    requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("resize"));
-    });
-    setTerminalLayoutTick((tick) => tick + 1);
-  }, [activePaneId, activePanes, splitPaneInLayout]);
 
   const handleSetTerminalView = useCallback(
     async (tabId: string, view: "single" | "vertical" | "horizontal" | "quad") => {
@@ -704,7 +684,6 @@ function App() {
           onSetActivePane={setActivePaneId}
           onCloseTab={(id) => closeTab(id)}
           onNewPane={() => void handleNewPane()}
-          onSplitPane={() => void handleSplitPane()}
           onSetTerminalView={(tabId, view) => void handleSetTerminalView(tabId, view)}
         />
       </div>
