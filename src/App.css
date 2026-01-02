@@ -903,6 +903,13 @@ button {
   background: rgba(0, 122, 204, 0.2);
 }
 
+.git-branch-status {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .git-hash {
   font-size: 10px;
   font-family: var(--font-mono);
