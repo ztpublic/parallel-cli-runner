@@ -161,6 +161,7 @@ export function GitStaging({
         checkable: true, // Only repo is checkable for multi-commit
         defaultExpanded: true,
         selectable: false,
+        rightSlot: <span className="git-pill">{group.items.length}</span>,
         children,
       };
     });
