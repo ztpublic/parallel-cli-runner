@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";
@@ -114,6 +115,7 @@ export function GitStaging({
             description: formatDescription(file),
             selectable: true,
             actions: [
+              { id: "open-file", icon: "externalLink", label: "Open File" },
               { id: "unstage", icon: "minus", label: "Unstage" },
               { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
@@ -141,6 +143,7 @@ export function GitStaging({
             description: formatDescription(file),
             selectable: true,
             actions: [
+              { id: "open-file", icon: "externalLink", label: "Open File" },
               { id: "stage", icon: "plus", label: "Stage" },
               { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
@@ -191,6 +194,10 @@ export function GitStaging({
           `file:${group.repo.repoId}:${f.path}:staged` === node.id
       );
       if (stagedFile) {
+        if (actionId === "open-file") {
+          const fullPath = `${group.repo.path}/${stagedFile.path}`;
+          openPath(fullPath);
+        }
         if (actionId === "unstage")
           onUnstageFile(group.repo.repoId, stagedFile.path);
         if (actionId === "rollback")
@@ -204,6 +211,10 @@ export function GitStaging({
           `file:${group.repo.repoId}:${f.path}:unstaged` === node.id
       );
       if (unstagedFile) {
+        if (actionId === "open-file") {
+          const fullPath = `${group.repo.path}/${unstagedFile.path}`;
+          openPath(fullPath);
+        }
         if (actionId === "stage")
           onStageFile(group.repo.repoId, unstagedFile.path);
         if (actionId === "rollback")
