@@ -232,6 +232,14 @@ struct GitRemoveWorktreeParams {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct GitStashSaveParams {
+    cwd: String,
+    message: Option<String>,
+    include_untracked: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GitDeleteBranchParams {
     repo_root: String,
     branch: String,
@@ -729,6 +737,14 @@ async fn handle_request(
                 with_repo_root(params.repo_root, |root| {
                     git::delete_branch(root, &params.branch, params.force)
                 })
+            })
+            .await?;
+            Ok(Value::Null)
+        }
+        "git_stash_save" => {
+            let params: GitStashSaveParams = parse_params(params)?;
+            run_blocking(move || {
+                with_cwd(params.cwd, |path| git::stash_save(path, params.message, params.include_untracked))
             })
             .await?;
             Ok(Value::Null)

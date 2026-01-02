@@ -2308,3 +2308,16 @@ pub fn push(cwd: &Path, force: bool) -> Result<(), GitError> {
     let _ = run_git_command(cwd, args)?;
     Ok(())
 }
+
+pub fn stash_save(cwd: &Path, message: Option<String>, include_untracked: bool) -> Result<(), GitError> {
+    let mut repo = open_repo(cwd)?;
+    let sig = repo.signature()?;
+    let flags = if include_untracked {
+        Some(StashFlags::INCLUDE_UNTRACKED)
+    } else {
+        Some(StashFlags::DEFAULT)
+    };
+    let msg = message.as_deref().unwrap_or("");
+    repo.stash_save(&sig, msg, flags)?;
+    Ok(())
+}

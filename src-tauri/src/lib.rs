@@ -285,6 +285,11 @@ async fn git_remove_worktree(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_stash_save(cwd: String, message: Option<String>, include_untracked: bool) -> Result<(), CommandError> {
+    with_cwd(cwd, |path| git::stash_save(path, message, include_untracked))
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_delete_branch(
     repo_root: String,
     branch: String,
@@ -365,7 +370,8 @@ pub fn run() {
             git_commits_in_remote,
             git_add_worktree,
             git_remove_worktree,
-            git_delete_branch
+            git_delete_branch,
+            git_stash_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

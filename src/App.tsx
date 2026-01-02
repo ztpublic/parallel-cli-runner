@@ -94,6 +94,7 @@ function App() {
     removeWorktree,
     applyStash,
     dropStash,
+    createStash,
     loadMoreTags,
     canLoadMoreTags,
     isLoadingMoreTags,
@@ -767,6 +768,11 @@ function App() {
         onApplyStash={(repoId, stashIndex) => {
           void runGitCommand("Apply stash failed", "Failed to apply stash.", () =>
             applyStash(repoId, stashIndex)
+          );
+        }}
+        onStash={(repoId, message) => {
+          void runGitCommand("Stash failed", "Failed to stash changes.", () =>
+            createStash(repoId, message)
           );
         }}
         onDeleteStash={(repoId, stashIndex) => {

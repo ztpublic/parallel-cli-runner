@@ -4,6 +4,7 @@ import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";
 import { StageAllAndCommitDialog } from "../dialogs/StageAllAndCommitDialog";
+import { StashChangesDialog } from "../dialogs/StashChangesDialog";
 import type { TreeNode } from "../../types/tree";
 
 type GitStagingProps = {
@@ -14,6 +15,7 @@ type GitStagingProps = {
   onStageFile: (repoId: string, path: string) => void;
   onUnstageFile: (repoId: string, path: string) => void;
   onRollbackFiles: (repoId: string, paths: string[]) => void;
+  onStash: (repoId: string, message: string) => void;
 };
 
 export function GitStaging({
@@ -24,6 +26,7 @@ export function GitStaging({
   onStageFile,
   onUnstageFile,
   onRollbackFiles,
+  onStash,
 }: GitStagingProps) {
   const [commitMessage, setCommitMessage] = useState("");
   const [checkedRepoIds, setCheckedRepoIds] = useState<string[]>([]);
@@ -31,6 +34,10 @@ export function GitStaging({
     open: boolean;
     repoIds: string[];
   }>({ open: false, repoIds: [] });
+  const [stashDialog, setStashDialog] = useState<{
+    open: boolean;
+    repoId: string | null;
+  }>({ open: false, repoId: null });
 
   const dirtyGroups = useMemo(() => groups.filter(g => g.items.length > 0), [groups]);
 
@@ -162,6 +169,9 @@ export function GitStaging({
         defaultExpanded: true,
         selectable: false,
         rightSlot: <span className="git-pill">{group.items.length}</span>,
+        contextMenu: [
+          { id: "stash-all", label: "Stash All Changes", icon: "archive" },
+        ],
         children,
       };
     });
@@ -222,6 +232,18 @@ export function GitStaging({
           onRollbackFiles(group.repo.repoId, [unstagedFile.path]);
         return;
       }
+    }
+  };
+
+  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+    if (itemId === "stash-all") {
+      setStashDialog({ open: true, repoId: node.id });
+    }
+  };
+
+  const handleConfirmStash = (message: string) => {
+    if (stashDialog.repoId) {
+      onStash(stashDialog.repoId, message);
     }
   };
 
@@ -316,6 +338,7 @@ export function GitStaging({
             checkedIds={checkedRepoIds}
             onCheckChange={setCheckedRepoIds}
             onAction={handleAction}
+            onContextMenuSelect={handleContextMenuSelect}
             autoCheckChildren={false} // Only repos are checkable
             toggleOnRowClick={true}
         />
@@ -327,6 +350,13 @@ export function GitStaging({
         onClose={() => setStageAllDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={handleConfirmStageAllAndCommit}
       />
+
+      <StashChangesDialog
+        open={stashDialog.open}
+        onClose={() => setStashDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={handleConfirmStash}
+      />
     </div>
   );
 }
+

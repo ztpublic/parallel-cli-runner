@@ -80,6 +80,7 @@ type GitPanelProps = {
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onApplyStash?: (repoId: string, stashIndex: number) => void;
+  onStash?: (repoId: string, message: string) => void;
   onDeleteStash?: (repoId: string, stashIndex: number) => void;
   onLoadMoreTags?: (repoId: string) => void;
   canLoadMoreTags?: (repoId: string) => boolean;
@@ -149,6 +150,7 @@ export function GitPanel({
   onCreateWorktree,
   onDeleteWorktree,
   onApplyStash,
+  onStash,
   onDeleteStash,
   onLoadMoreTags,
   canLoadMoreTags,
@@ -261,6 +263,10 @@ export function GitPanel({
 
   const handleRollbackFiles = (repoId: string, paths: string[]) => {
     onRollbackFiles?.(repoId, paths);
+  };
+
+  const handleStash = (repoId: string, message: string) => {
+    onStash?.(repoId, message);
   };
 
   const handleToggleSplit = () => {
@@ -400,6 +406,7 @@ export function GitPanel({
               onUnstageFile={handleUnstageFile}
               onRollbackFiles={handleRollbackFiles}
               onCommit={handleCommit}
+              onStash={handleStash}
             />
           ) : null}
 

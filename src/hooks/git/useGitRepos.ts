@@ -29,6 +29,7 @@ import {
   gitSmartCheckoutBranch,
   gitStageAll,
   gitStageFiles,
+  gitStashSave,
   gitStatus,
   gitUnstageAll,
   gitUnstageFiles,
@@ -797,6 +798,22 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const createStash = useCallback(
+    async (repoId: RepoId, message?: string, includeUntracked: boolean = true) => {
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitStashSave({
+            cwd: repo.root_path,
+            message,
+            includeUntracked,
+          }),
+        { errorMessage: "Failed to stash changes" }
+      );
+    },
+    [withRepo]
+  );
+
   const loadMoreTags = useCallback(
     async (repoId: RepoId) => {
       const repo = resolveRepo(repoId);
@@ -891,6 +908,7 @@ export function useGitRepos() {
     removeWorktree,
     applyStash,
     dropStash,
+    createStash,
     loadMoreTags,
     canLoadMoreTags,
     isLoadingMoreTags,

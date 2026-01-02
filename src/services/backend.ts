@@ -110,6 +110,14 @@ export function gitDropStash(params: { cwd: string; index: number }): Promise<vo
   return request("git_drop_stash", params);
 }
 
+export function gitStashSave(params: {
+  cwd: string;
+  message?: string;
+  includeUntracked: boolean;
+}): Promise<void> {
+  return request("git_stash_save", params);
+}
+
 export function gitPull(params: { cwd: string }): Promise<void> {
   return request("git_pull", params);
 }
