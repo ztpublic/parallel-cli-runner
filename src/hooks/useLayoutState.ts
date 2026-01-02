@@ -224,6 +224,57 @@ export function useLayoutState() {
     [closeTab]
   );
 
+  const closePanesInTab = useCallback(
+    async (tabId: string, paneIds: string[]) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+
+      const panesToRemove = paneIds
+        .map((id) => findPane(tab.layout, id))
+        .filter((p): p is PaneNode => !!p);
+
+      if (panesToRemove.length === 0) return;
+
+      await Promise.all(
+        panesToRemove.map(async (pane) => {
+          try {
+            await killSession({ id: pane.sessionId });
+          } catch (error) {
+            console.warn("Failed to kill session", error);
+          }
+          disposeTerminal(pane.sessionId);
+        })
+      );
+
+      setTabs((prev) => {
+        return prev.map((item) => {
+          if (item.id !== tabId) return item;
+
+          let nextLayout = item.layout;
+          for (const paneId of paneIds) {
+            const res = removePane(nextLayout, paneId);
+            if (!res) {
+              return item;
+            }
+            nextLayout = res;
+          }
+
+          const nextActivePaneId =
+            item.activePaneId && paneIds.includes(item.activePaneId)
+              ? getFirstPane(nextLayout)?.id ?? null
+              : item.activePaneId;
+
+          return {
+            ...item,
+            layout: nextLayout,
+            activePaneId: nextActivePaneId,
+          };
+        });
+      });
+    },
+    []
+  );
+
   const closeActivePane = useCallback(async () => {
     const tabId = getActiveTabId();
     if (!tabId) return;
@@ -263,6 +314,7 @@ export function useLayoutState() {
     splitPaneInTab,
     closePane,
     closePaneInTab,
+    closePanesInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,

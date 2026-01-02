@@ -39,7 +39,7 @@ function App() {
     setActivePaneId,
     appendPane,
     splitPaneInTab,
-    closePaneInTab,
+    closePanesInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,
@@ -459,9 +459,7 @@ function App() {
 
       const splitPaneIds = terminalSplitPaneIds[tabId] ?? [];
       if (splitPaneIds.length) {
-        for (const paneId of splitPaneIds) {
-          await closePaneInTab(tabId, paneId);
-        }
+        await closePanesInTab(tabId, splitPaneIds);
       }
 
       if (view === "single") {
@@ -527,7 +525,7 @@ function App() {
       });
       setTerminalLayoutTick((tick) => tick + 1);
     },
-    [closePaneInTab, splitPaneInTab, tabs, terminalSplitPaneIds, terminalSplitViews]
+    [closePanesInTab, splitPaneInTab, tabs, terminalSplitPaneIds, terminalSplitViews]
   );
 
   return (
