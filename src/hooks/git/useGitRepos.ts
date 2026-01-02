@@ -17,6 +17,7 @@ import {
   gitListStashes,
   gitListWorktrees,
   gitMergeIntoBranch,
+  gitRebaseBranch,
   gitPull,
   gitPush,
   gitRemoveWorktree,
@@ -638,6 +639,22 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const rebaseBranch = useCallback(
+    async (repoId: RepoId, targetBranch: string, ontoBranch: string) => {
+      await withRepo(
+        repoId,
+        (repo) =>
+          gitRebaseBranch({
+            repoRoot: repo.root_path,
+            targetBranch,
+            ontoBranch,
+          }),
+        { errorMessage: "Failed to rebase branch" }
+      );
+    },
+    [withRepo]
+  );
+
   const createBranch = useCallback(
     async (repoId: RepoId, name: string, sourceBranch?: string) => {
       await withRepo(
@@ -856,6 +873,7 @@ export function useGitRepos() {
     pull,
     push,
     mergeIntoBranch,
+    rebaseBranch,
     createBranch,
     deleteBranch,
     switchBranch,

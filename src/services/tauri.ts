@@ -121,6 +121,14 @@ export function gitMergeIntoBranch(params: {
   return invoke("git_merge_into_branch", params);
 }
 
+export function gitRebaseBranch(params: {
+  repoRoot: string;
+  targetBranch: string;
+  ontoBranch: string;
+}): Promise<void> {
+  return invoke("git_rebase_branch", params);
+}
+
 export function gitCreateBranch(params: {
   cwd: string;
   branchName: string;

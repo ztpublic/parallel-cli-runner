@@ -17,6 +17,7 @@ type GitBranchesProps = {
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
+  onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
   onPull?: (repoId: string) => void;
   onPush?: (repoId: string, force: boolean) => void;
 };
@@ -31,6 +32,7 @@ export function GitBranches({
   onSwitchBranch,
   onDeleteBranch,
   onMergeBranch,
+  onRebaseBranch,
   onPull,
   onPush,
 }: GitBranchesProps) {
@@ -86,6 +88,13 @@ export function GitBranches({
           {
             id: "merge-to-active",
             label: activeBranch ? `Merge to ${activeBranch}` : "Merge to active branch",
+            disabled: !activeBranch || branch.current,
+          },
+          {
+            id: "rebase-active-on-branch",
+            label: activeBranch
+              ? `Rebase ${activeBranch} on ${branch.name}`
+              : `Rebase active branch on ${branch.name}`,
             disabled: !activeBranch || branch.current,
           },
           {
@@ -244,6 +253,17 @@ export function GitBranches({
         const targetBranch = group?.repo.activeBranch;
         if (targetBranch && targetBranch !== branchName) {
           onMergeBranch?.(repoId, targetBranch, branchName);
+        }
+      }
+    } else if (itemId === "rebase-active-on-branch") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        const group = branchGroups.find((g) => g.repo.repoId === repoId);
+        const targetBranch = group?.repo.activeBranch;
+        if (targetBranch && targetBranch !== branchName) {
+          onRebaseBranch?.(repoId, targetBranch, branchName);
         }
       }
     } else if (itemId === "pull") {

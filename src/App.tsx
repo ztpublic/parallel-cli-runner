@@ -76,6 +76,7 @@ function App() {
     pull,
     push,
     mergeIntoBranch,
+    rebaseBranch,
     createBranch,
     deleteBranch,
     switchBranch,
@@ -496,6 +497,11 @@ function App() {
         onMergeBranch={(repoId, targetBranch, sourceBranch) => {
           void runGitCommand("Merge failed", "Failed to merge branch.", () =>
             mergeIntoBranch(repoId, targetBranch, sourceBranch)
+          );
+        }}
+        onRebaseBranch={(repoId, targetBranch, ontoBranch) => {
+          void runGitCommand("Rebase failed", "Failed to rebase branch.", () =>
+            rebaseBranch(repoId, targetBranch, ontoBranch)
           );
         }}
         onReset={(repoId, worktreePath, commitId, mode) => {

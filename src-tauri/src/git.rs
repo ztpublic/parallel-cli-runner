@@ -1222,6 +1222,73 @@ pub fn merge_into_branch(
     Ok(())
 }
 
+pub fn rebase_branch(
+    repo_root: &Path,
+    target_branch: &str,
+    onto_branch: &str,
+) -> Result<(), GitError> {
+    let repo = open_repo(repo_root)?;
+    if target_branch.trim().is_empty() || onto_branch.trim().is_empty() {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "targetBranch and ontoBranch are required".to_string(),
+        });
+    }
+    if target_branch == onto_branch {
+        return Err(GitError::GitFailed {
+            code: None,
+            stderr: "targetBranch and ontoBranch must be different".to_string(),
+        });
+    }
+
+    let target_refname = {
+        let target_ref = repo.find_branch(target_branch, BranchType::Local)?;
+        target_ref
+            .get()
+            .name()
+            .ok_or_else(|| GitError::GitFailed {
+                code: None,
+                stderr: "target branch refname is invalid".to_string(),
+            })?
+            .to_string()
+    };
+
+    let _onto_refname = {
+        let onto_ref = repo.find_branch(onto_branch, BranchType::Local)?;
+        onto_ref
+            .get()
+            .name()
+            .ok_or_else(|| GitError::GitFailed {
+                code: None,
+                stderr: "onto branch refname is invalid".to_string(),
+            })?
+            .to_string()
+    };
+
+    let original_head = repo
+        .head()
+        .ok()
+        .and_then(|head| head.name().map(|name| name.to_string()));
+    let switched = original_head
+        .as_deref()
+        .map(|name| name != target_refname)
+        .unwrap_or(true);
+
+    if switched {
+        checkout_branch(&repo, &target_refname)?;
+    }
+
+    run_git_command(repo_root, ["rebase", "--autostash", onto_branch])?;
+
+    if switched {
+        if let Some(original_head) = original_head {
+            let _ = checkout_branch(&repo, &original_head);
+        }
+    }
+
+    Ok(())
+}
+
 pub fn current_branch(cwd: &Path) -> Result<String, GitError> {
     let repo = open_repo(cwd)?;
     let head = match repo.head() {

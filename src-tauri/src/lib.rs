@@ -180,6 +180,15 @@ async fn git_merge_into_branch(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_rebase_branch(
+    repo_root: String,
+    target_branch: String,
+    onto_branch: String,
+) -> Result<(), CommandError> {
+    with_repo_root(repo_root, |path| git::rebase_branch(path, &target_branch, &onto_branch))
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_create_branch(
     cwd: String,
     branch_name: String,
@@ -287,6 +296,7 @@ pub fn run() {
             git_stage_all,
             git_unstage_all,
             git_merge_into_branch,
+            git_rebase_branch,
             git_create_branch,
             git_checkout_branch,
             git_smart_checkout_branch,

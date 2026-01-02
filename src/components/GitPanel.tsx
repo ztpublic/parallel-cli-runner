@@ -58,6 +58,7 @@ type GitPanelProps = {
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
+  onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
   onReset?: (
     repoId: string,
     worktreePath: string,
@@ -125,6 +126,7 @@ export function GitPanel({
   onSwitchBranch,
   onDeleteBranch,
   onMergeBranch,
+  onRebaseBranch,
   onReset,
   onRevert,
   onSquashCommits,
@@ -266,6 +268,7 @@ export function GitPanel({
                 onSwitchBranch={onSwitchBranch}
                 onDeleteBranch={onDeleteBranch}
                 onMergeBranch={onMergeBranch}
+                onRebaseBranch={onRebaseBranch}
                 onPull={onPull}
                 onPush={onPush}
               />
