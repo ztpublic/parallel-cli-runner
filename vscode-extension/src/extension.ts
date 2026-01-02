@@ -341,8 +341,9 @@ function buildWebviewHtml(
     runtimeConfig
   )};</script>`;
 
+  const bodyPaddingReset = `<style nonce="${nonce}">body{padding:0!important;}</style>`;
   const cspMeta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
-  html = html.replace("</head>", `${cspMeta}\n${configScript}\n</head>`);
+  html = html.replace("</head>", `${cspMeta}\n${bodyPaddingReset}\n${configScript}\n</head>`);
 
   html = html.replace(/<script(\s[^>]*?)>/g, (match, attrs) => {
     if (/nonce=/.test(attrs)) {
