@@ -1,0 +1,83 @@
+name: vscode-extension
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "vscode-extension/**"
+      - "src-tauri/**"
+      - "src/**"
+      - "vite.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - ".github/workflows/vscode-extension.yml"
+  pull_request:
+    paths:
+      - "vscode-extension/**"
+      - "src-tauri/**"
+      - "src/**"
+      - "vite.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/**"
+      - ".github/workflows/vscode-extension.yml"
+
+jobs:
+  build-win-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install root deps
+        run: npm ci
+      - name: Install extension deps
+        run: npm --prefix vscode-extension install
+      - name: Build webview
+        run: npm run frontend:build:vscode
+      - name: Compile extension
+        run: npm --prefix vscode-extension run compile
+      - name: Build backend
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-msvc
+      - name: Stage backend binary
+        run: node scripts/stage-backend.mjs win32-x64 x86_64-pc-windows-msvc parallel-cli-runner.exe
+      - name: Package extension
+        run: npm --prefix vscode-extension run package:win-x64
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-cli-runner-win32-x64
+          path: vscode-extension/parallel-cli-runner-win32-x64.vsix
+
+  build-mac-arm64:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install root deps
+        run: npm ci
+      - name: Install extension deps
+        run: npm --prefix vscode-extension install
+      - name: Build webview
+        run: npm run frontend:build:vscode
+      - name: Compile extension
+        run: npm --prefix vscode-extension run compile
+      - name: Build backend
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --target aarch64-apple-darwin
+      - name: Stage backend binary
+        run: node scripts/stage-backend.mjs darwin-arm64 aarch64-apple-darwin parallel-cli-runner
+      - name: Package extension
+        run: npm --prefix vscode-extension run package:mac-arm64
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: parallel-cli-runner-darwin-arm64
+          path: vscode-extension/parallel-cli-runner-darwin-arm64.vsix

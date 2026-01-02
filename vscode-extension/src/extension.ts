@@ -30,6 +30,9 @@ let panel: vscode.WebviewPanel | null = null;
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Parallel CLI Runner");
   context.subscriptions.push(output);
+  void ensureBackend(context, output).catch((error) => {
+    output.appendLine(`Backend init failed: ${(error as Error).message}`);
+  });
 
   const openCommand = vscode.commands.registerCommand("parallelCliRunner.open", async () => {
     if (panel) {
@@ -37,7 +40,15 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    const backend = await ensureBackend(context, output);
+    let backend: BackendState;
+    try {
+      backend = await ensureBackend(context, output);
+    } catch (error) {
+      void vscode.window.showErrorMessage(
+        `Failed to start backend: ${(error as Error).message}`
+      );
+      return;
+    }
     panel = vscode.window.createWebviewPanel(
       "parallelCliRunner",
       "Parallel CLI Runner",
@@ -77,6 +88,14 @@ async function ensureBackend(
   const externalBackend = getExternalBackend();
   if (externalBackend) {
     output.appendLine(`Using external backend: ${externalBackend.wsUrl}`);
+    const ready = await waitForBackendReady(
+      externalBackend.wsUrl,
+      externalBackend.authToken,
+      output
+    );
+    if (!ready) {
+      throw new Error("External backend did not respond to WebSocket handshake.");
+    }
     backendState = { ...externalBackend, process: null, settings };
     return backendState;
   }
@@ -104,6 +123,12 @@ async function ensureBackend(
   child.stdout.on("data", (data) => output.appendLine(data.toString()));
   child.stderr.on("data", (data) => output.appendLine(data.toString()));
   child.on("exit", (code) => output.appendLine(`Backend exited (${code ?? "unknown"})`));
+
+  const ready = await waitForBackendReady(wsUrl, authToken, output);
+  if (!ready) {
+    child.kill();
+    throw new Error("Backend did not respond to WebSocket handshake.");
+  }
 
   backendState = { wsUrl, authToken, port, process: child, settings };
   return backendState;
@@ -359,5 +384,76 @@ function findAvailablePort(): Promise<number> {
       server.close(() => resolve(port));
     });
     server.on("error", reject);
+  });
+}
+
+async function waitForBackendReady(
+  wsUrl: string,
+  authToken: string,
+  output: vscode.OutputChannel,
+  attempts = 20,
+  delayMs = 250
+): Promise<boolean> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const ok = await checkWebSocketHandshake(wsUrl, authToken);
+    if (ok) {
+      return true;
+    }
+    output.appendLine(`Backend not ready (attempt ${attempt + 1}/${attempts})`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return false;
+}
+
+function checkWebSocketHandshake(wsUrl: string, authToken: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let socket: net.Socket | null = null;
+    try {
+      const url = new URL(wsUrl);
+      url.searchParams.set("token", authToken);
+      const port = Number(url.port || "0");
+      if (!Number.isFinite(port) || port <= 0) {
+        resolve(false);
+        return;
+      }
+
+      const key = crypto.randomBytes(16).toString("base64");
+      const pathWithQuery = `${url.pathname}${url.search}`;
+      const request = [
+        `GET ${pathWithQuery} HTTP/1.1`,
+        `Host: ${url.hostname}:${port}`,
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Version: 13",
+        `Sec-WebSocket-Key: ${key}`,
+        "\r\n",
+      ].join("\r\n");
+
+      socket = net.connect(port, url.hostname);
+      socket.setTimeout(1000);
+      socket.on("connect", () => {
+        socket?.write(request);
+      });
+      socket.on("data", (data) => {
+        const response = data.toString();
+        resolve(response.includes(" 101 ") || response.startsWith("HTTP/1.1 101"));
+        socket?.destroy();
+      });
+      socket.on("timeout", () => {
+        resolve(false);
+        socket?.destroy();
+      });
+      socket.on("error", () => {
+        resolve(false);
+      });
+      socket.on("close", () => {
+        socket = null;
+      });
+    } catch {
+      resolve(false);
+      if (socket) {
+        socket.destroy();
+      }
+    }
   });
 }

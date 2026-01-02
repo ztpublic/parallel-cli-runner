@@ -12,6 +12,11 @@
     "onCommand:parallelCliRunner.open"
   ],
   "main": "./dist/extension.js",
+  "files": [
+    "dist",
+    "webview",
+    "bin/**"
+  ],
   "contributes": {
     "commands": [
       {
@@ -47,11 +52,14 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ."
+    "compile": "tsc -p .",
+    "package:win-x64": "vsce package --target win32-x64 --out parallel-cli-runner-win32-x64.vsix",
+    "package:mac-arm64": "vsce package --target darwin-arm64 --out parallel-cli-runner-darwin-arm64.vsix"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
     "typescript": "~5.8.3"
   }
 }
