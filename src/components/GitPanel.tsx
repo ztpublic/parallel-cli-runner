@@ -39,10 +39,10 @@ type GitPanelProps = {
   error?: string | null;
   onRefresh?: () => void;
   onEnableRepos?: (repoIds: string[]) => void;
-  onCommit?: (repoId: string, message: string) => void;
+  onCommit?: (repoId: string, message: string) => Promise<any> | void;
   onPull?: (repoId: string) => void;
   onPush?: (repoId: string, force: boolean) => void;
-  onStageAll?: (repoId: string) => void;
+  onStageAll?: (repoId: string) => Promise<any> | void;
   onUnstageAll?: (repoId: string) => void;
   onStageFile?: (repoId: string, path: string) => void;
   onUnstageFile?: (repoId: string, path: string) => void;
@@ -165,11 +165,11 @@ export function GitPanel({
   }, [activeTab, hasRepos, onRefresh]);
 
   const handleCommit = (repoId: string, message: string) => {
-    onCommit?.(repoId, message);
+    return onCommit?.(repoId, message);
   };
 
   const handleStageAll = (repoId: string) => {
-    onStageAll?.(repoId);
+    return onStageAll?.(repoId);
   };
 
   const handleUnstageAll = (repoId: string) => {

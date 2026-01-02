@@ -566,7 +566,7 @@ function App() {
           void runGitCommand("Refresh failed", "Failed to refresh git data.", () => refreshRepos());
         }}
         onStageAll={(repoId) => {
-          void runGitCommand("Stage all failed", "Failed to stage all files.", () =>
+          return runGitCommand("Stage all failed", "Failed to stage all files.", () =>
             stageAll(repoId)
           );
         }}
@@ -591,7 +591,7 @@ function App() {
           );
         }}
         onCommit={(repoId, message) => {
-          void runGitCommand("Commit failed", "Failed to commit changes.", () =>
+          return runGitCommand("Commit failed", "Failed to commit changes.", () =>
             commit(repoId, message)
           );
         }}

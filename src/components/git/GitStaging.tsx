@@ -2,12 +2,13 @@ import { useState, useMemo, useEffect } from "react";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";
+import { StageAllAndCommitDialog } from "../dialogs/StageAllAndCommitDialog";
 import type { TreeNode } from "../../types/tree";
 
 type GitStagingProps = {
   groups: RepoGroup<ChangedFile>[];
-  onCommit: (repoId: string, message: string) => void;
-  onStageAll: (repoId: string) => void;
+  onCommit: (repoId: string, message: string) => Promise<any> | void;
+  onStageAll: (repoId: string) => Promise<any> | void;
   onUnstageAll: (repoId: string) => void;
   onStageFile: (repoId: string, path: string) => void;
   onUnstageFile: (repoId: string, path: string) => void;
@@ -24,21 +25,15 @@ export function GitStaging({
   onRollbackFiles,
 }: GitStagingProps) {
   const [commitMessage, setCommitMessage] = useState("");
-  // By default, check all repos that have staged changes?
-  // Or just check all visible repos?
-  // Let's default to all dirty groups.
   const [checkedRepoIds, setCheckedRepoIds] = useState<string[]>([]);
+  const [stageAllDialog, setStageAllDialog] = useState<{
+    open: boolean;
+    repoIds: string[];
+  }>({ open: false, repoIds: [] });
 
   const dirtyGroups = useMemo(() => groups.filter(g => g.items.length > 0), [groups]);
 
   // Sync checkedRepoIds when dirtyGroups change (e.g. new repo becomes dirty)
-  // But we don't want to reset user selection constantly if they uncheck one.
-  // Strategy: If a repo is dirty and not in state, add it? 
-  // Simple: Just initialize once or when groups length changes drastically?
-  // Let's just default to all dirty on mount, and if new ones appear, maybe add them?
-  // For now, let's keep it controlled by user, but default to all.
-  
-  // Actually, simpler: Initialize/Sync.
   useEffect(() => {
     setCheckedRepoIds(prev => {
         const currentIds = new Set(dirtyGroups.map(g => g.repo.repoId));
@@ -52,8 +47,6 @@ export function GitStaging({
         return next;
     });
   }, [dirtyGroups.length]); 
-  // Dependency on length is imperfect but avoids infinite loop if we depended on array identity.
-  // Better: separate effect for initialization.
 
   const getStatusIcon = (status: ChangeStatus) => {
     switch (status) {
@@ -208,11 +201,39 @@ export function GitStaging({
     }
   };
 
-  const handleCommit = () => {
-    // Commit to all checked repos
+  const handleCommit = async () => {
+    // Check for repos that are checked but have no staged files and have unstaged files
+    const reposToStage: string[] = [];
+
     checkedRepoIds.forEach(repoId => {
-        onCommit(repoId, commitMessage);
+      const group = groups.find(g => g.repo.repoId === repoId);
+      if (group) {
+        const hasStaged = group.items.some(f => f.staged);
+        const hasUnstaged = group.items.some(f => !f.staged);
+        if (!hasStaged && hasUnstaged) {
+          reposToStage.push(repoId);
+        }
+      }
     });
+
+    if (reposToStage.length > 0) {
+      setStageAllDialog({ open: true, repoIds: reposToStage });
+      return;
+    }
+
+    // Commit to all checked repos
+    await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
+    setCommitMessage("");
+  };
+
+  const handleConfirmStageAllAndCommit = async () => {
+    const { repoIds } = stageAllDialog;
+    
+    // Stage all for identified repos
+    await Promise.all(repoIds.map(id => onStageAll(id)));
+
+    // Commit all checked repos
+    await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
     setCommitMessage("");
   };
 
@@ -261,6 +282,13 @@ export function GitStaging({
             toggleOnRowClick={true}
         />
       </div>
+
+      <StageAllAndCommitDialog
+        open={stageAllDialog.open}
+        repoCount={stageAllDialog.repoIds.length}
+        onClose={() => setStageAllDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={handleConfirmStageAllAndCommit}
+      />
     </div>
   );
 }
