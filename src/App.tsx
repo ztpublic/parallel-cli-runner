@@ -110,7 +110,10 @@ function App() {
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
   const [enabledRepoIds, setEnabledRepoIds] = useState<string[]>([]);
   const [terminalSplitPaneIds, setTerminalSplitPaneIds] = useState<
-    Record<string, string | null>
+    Record<string, string[]>
+  >({});
+  const [terminalSplitViews, setTerminalSplitViews] = useState<
+    Record<string, "single" | "vertical" | "horizontal" | "quad">
   >({});
   const [terminalLayoutTick, setTerminalLayoutTick] = useState(0);
   
@@ -138,15 +141,36 @@ function App() {
         }
       });
       tabs.forEach((tab) => {
-        const splitPaneId = prev[tab.id];
-        if (splitPaneId && !findPane(tab.layout, splitPaneId)) {
-          next[tab.id] = null;
+        const splitPaneIds = prev[tab.id] ?? [];
+        if (!splitPaneIds.length) return;
+        const nextIds = splitPaneIds.filter((id) => findPane(tab.layout, id));
+        if (nextIds.length !== splitPaneIds.length) {
+          next[tab.id] = nextIds;
           changed = true;
         }
       });
       return changed ? next : prev;
     });
-  }, [tabs]);
+    setTerminalSplitViews((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const tabIds = new Set(tabs.map((tab) => tab.id));
+      Object.keys(next).forEach((tabId) => {
+        if (!tabIds.has(tabId)) {
+          delete next[tabId];
+          changed = true;
+        }
+      });
+      tabs.forEach((tab) => {
+        const splitPaneIds = terminalSplitPaneIds[tab.id] ?? [];
+        if (!splitPaneIds.length && next[tab.id] && next[tab.id] !== "single") {
+          next[tab.id] = "single";
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [tabs, terminalSplitPaneIds]);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -446,28 +470,23 @@ function App() {
   }, [activePaneId, activePanes, splitPaneInLayout]);
 
   const handleSetTerminalView = useCallback(
-    async (tabId: string, view: "single" | "vertical") => {
+    async (tabId: string, view: "single" | "vertical" | "horizontal" | "quad") => {
       const tab = tabs.find((item) => item.id === tabId);
       if (!tab) return;
 
-      const hasSplitPane = Boolean(terminalSplitPaneIds[tabId]);
-      if (view === "vertical") {
-        if (hasSplitPane && countPanes(tab.layout) > 1) return;
-        const targetPaneId = tab.activePaneId ?? getFirstPane(tab.layout)?.id;
-        if (!targetPaneId) return;
-        const targetPane = findPane(tab.layout, targetPaneId);
-        const cwd = targetPane?.meta?.cwd ?? targetPane?.meta?.subtitle;
-        const nextIndex = countPanes(tab.layout) + 1;
-        const next = await createPaneNode({
-          cwd,
-          meta: {
-            title: `Terminal ${nextIndex}`,
-            subtitle: targetPane?.meta?.subtitle,
-            cwd,
-          },
-        });
-        splitPaneInTab(tabId, next, targetPaneId, "vertical");
-        setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: next.id }));
+      const existingView = terminalSplitViews[tabId] ?? "single";
+      if (view === existingView) return;
+
+      const splitPaneIds = terminalSplitPaneIds[tabId] ?? [];
+      if (splitPaneIds.length) {
+        for (const paneId of splitPaneIds) {
+          await closePaneInTab(tabId, paneId);
+        }
+      }
+
+      if (view === "single") {
+        setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: [] }));
+        setTerminalSplitViews((prev) => ({ ...prev, [tabId]: "single" }));
         requestAnimationFrame(() => {
           window.dispatchEvent(new Event("resize"));
         });
@@ -475,19 +494,51 @@ function App() {
         return;
       }
 
-      if (view === "single") {
-        const splitPaneId = terminalSplitPaneIds[tabId];
-        if (splitPaneId) {
-          await closePaneInTab(tabId, splitPaneId);
-          setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: null }));
-          requestAnimationFrame(() => {
-            window.dispatchEvent(new Event("resize"));
-          });
-          setTerminalLayoutTick((tick) => tick + 1);
-        }
+      const targetPaneId = tab.activePaneId ?? getFirstPane(tab.layout)?.id;
+      if (!targetPaneId) return;
+      const targetPane = findPane(tab.layout, targetPaneId);
+      const cwd = targetPane?.meta?.cwd ?? targetPane?.meta?.subtitle;
+      const subtitle = targetPane?.meta?.subtitle;
+      const baseIndex = countPanes(tab.layout);
+
+      const createSplitPane = async (indexOffset: number) =>
+        createPaneNode({
+          cwd,
+          meta: {
+            title: `Terminal ${baseIndex + indexOffset}`,
+            subtitle,
+            cwd,
+          },
+        });
+
+      if (view === "vertical" || view === "horizontal") {
+        const next = await createSplitPane(1);
+        splitPaneInTab(tabId, next, targetPaneId, view === "vertical" ? "vertical" : "horizontal");
+        setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: [next.id] }));
+        setTerminalSplitViews((prev) => ({ ...prev, [tabId]: view }));
+      } else {
+        const paneA = await createSplitPane(1);
+        splitPaneInTab(tabId, paneA, targetPaneId, "vertical");
+
+        const paneB = await createSplitPane(2);
+        splitPaneInTab(tabId, paneB, targetPaneId, "horizontal");
+
+        const paneC = await createSplitPane(3);
+        splitPaneInTab(tabId, paneC, paneA.id, "horizontal");
+
+        setTerminalSplitPaneIds((prev) => ({
+          ...prev,
+          [tabId]: [paneA.id, paneB.id, paneC.id],
+        }));
+        setTerminalSplitViews((prev) => ({ ...prev, [tabId]: "quad" }));
       }
+
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event("resize"));
+      });
+      setTerminalLayoutTick((tick) => tick + 1);
     },
-    [closePaneInTab, splitPaneInTab, tabs, terminalSplitPaneIds]
+    [closePaneInTab, splitPaneInTab, tabs, terminalSplitPaneIds, terminalSplitViews]
   );
 
   return (
@@ -647,6 +698,7 @@ function App() {
           tabs={tabs}
           activeTabId={resolvedActiveTabId}
           terminalSplitPaneIds={terminalSplitPaneIds}
+          terminalSplitViews={terminalSplitViews}
           layoutTick={terminalLayoutTick}
           onSetActiveTab={setActiveTabId}
           onSetActivePane={setActivePaneId}

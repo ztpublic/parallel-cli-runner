@@ -14,14 +14,18 @@ type TerminalTab = {
 type TerminalPanelProps = {
   tabs: TerminalTab[];
   activeTabId: string | null;
-  terminalSplitPaneIds: Record<string, string | null>;
+  terminalSplitPaneIds: Record<string, string[]>;
+  terminalSplitViews: Record<string, "single" | "vertical" | "horizontal" | "quad">;
   layoutTick: number;
   onSetActiveTab: (id: string) => void;
   onSetActivePane: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewPane: () => void;
   onSplitPane: () => void;
-  onSetTerminalView: (tabId: string, view: "single" | "vertical") => void;
+  onSetTerminalView: (
+    tabId: string,
+    view: "single" | "vertical" | "horizontal" | "quad"
+  ) => void;
 };
 
 type TerminalView = "terminals" | "acp";
@@ -30,6 +34,7 @@ export function TerminalPanel({
   tabs,
   activeTabId,
   terminalSplitPaneIds,
+  terminalSplitViews,
   layoutTick,
   onSetActiveTab,
   onSetActivePane,
@@ -47,20 +52,32 @@ export function TerminalPanel({
   const menuItems = useMemo(() => {
     if (!menuState) return [];
     const tab = tabs.find((item) => item.id === menuState.tabId);
-    const splitPaneId = terminalSplitPaneIds[menuState.tabId];
-    const isSplitView =
-      Boolean(splitPaneId) && (tab ? countPanes(tab.layout) > 1 : false);
+    const view = terminalSplitViews[menuState.tabId] ?? "single";
+    const splitPaneIds = terminalSplitPaneIds[menuState.tabId] ?? [];
+    const hasSplitPanes = Boolean(splitPaneIds.length) && (tab ? countPanes(tab.layout) > 1 : false);
     return [
       { id: "view", label: "View", type: "separator" as const },
-      { id: "single", label: "Single view", type: "radio" as const, selected: !isSplitView },
+      { id: "single", label: "Single view", type: "radio" as const, selected: view === "single" || !hasSplitPanes },
       {
         id: "vertical",
         label: "Vertical split view",
         type: "radio" as const,
-        selected: isSplitView,
+        selected: view === "vertical" && hasSplitPanes,
+      },
+      {
+        id: "horizontal",
+        label: "Horizontal split view",
+        type: "radio" as const,
+        selected: view === "horizontal" && hasSplitPanes,
+      },
+      {
+        id: "quad",
+        label: "4 split view",
+        type: "radio" as const,
+        selected: view === "quad" && hasSplitPanes,
       },
     ];
-  }, [menuState, tabs, terminalSplitPaneIds]);
+  }, [menuState, tabs, terminalSplitPaneIds, terminalSplitViews]);
 
   return (
     <section className="terminal-panel">
@@ -205,6 +222,12 @@ export function TerminalPanel({
             }
             if (itemId === "vertical") {
               onSetTerminalView(menuState.tabId, "vertical");
+            }
+            if (itemId === "horizontal") {
+              onSetTerminalView(menuState.tabId, "horizontal");
+            }
+            if (itemId === "quad") {
+              onSetTerminalView(menuState.tabId, "quad");
             }
           }}
         />
