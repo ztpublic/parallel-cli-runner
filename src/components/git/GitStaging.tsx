@@ -237,6 +237,20 @@ export function GitStaging({
     setCommitMessage("");
   };
 
+  const commitButtonText = useMemo(() => {
+    if (checkedRepoIds.length === 1) {
+      const repoId = checkedRepoIds[0];
+      const group = groups.find((g) => g.repo.repoId === repoId);
+      if (group) {
+        const branch = group.repo.activeBranch;
+        return `Commit to ${group.repo.name}${branch ? ` - ${branch}` : ""}`;
+      }
+    }
+    return `Commit to ${checkedRepoIds.length} ${
+      checkedRepoIds.length === 1 ? "Repo" : "Repos"
+    }`;
+  }, [checkedRepoIds, groups]);
+
   const commitDisabled = !commitMessage.trim() || checkedRepoIds.length === 0;
 
   if (!dirtyGroups.length) {
@@ -268,7 +282,7 @@ export function GitStaging({
           onClick={handleCommit}
         >
           <Icon name="check" size={14} />
-          Commit to {checkedRepoIds.length} {checkedRepoIds.length === 1 ? 'Repo' : 'Repos'}
+          {commitButtonText}
         </button>
       </div>
 
