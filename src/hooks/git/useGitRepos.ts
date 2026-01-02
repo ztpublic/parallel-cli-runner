@@ -7,6 +7,7 @@ import {
   gitCommitsInRemote,
   gitCreateBranch,
   gitDeleteBranch,
+  gitDetachWorktreeHead,
   gitDropStash,
   gitDiscardFiles,
   gitListBranches,
@@ -704,6 +705,32 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const checkoutBranchAtPath = useCallback(
+    async (repoId: RepoId, worktreePath: string, branchName: string) => {
+      await withRepo(
+        repoId,
+        () =>
+          gitCheckoutBranch({
+            cwd: worktreePath,
+            branchName,
+          }),
+        { errorMessage: "Failed to check out branch in worktree" }
+      );
+    },
+    [withRepo]
+  );
+
+  const detachWorktreeHead = useCallback(
+    async (repoId: RepoId, worktreePath: string) => {
+      await withRepo(
+        repoId,
+        () => gitDetachWorktreeHead({ cwd: worktreePath }),
+        { refresh: false, errorMessage: "Failed to detach worktree HEAD" }
+      );
+    },
+    [withRepo]
+  );
+
   const smartSwitchBranch = useCallback(
     async (repoId: RepoId, branchName: string) => {
       await withRepo(
@@ -880,6 +907,8 @@ export function useGitRepos() {
     createBranch,
     deleteBranch,
     switchBranch,
+    checkoutBranchAtPath,
+    detachWorktreeHead,
     smartSwitchBranch,
     reset,
     revert,

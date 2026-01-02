@@ -16,6 +16,7 @@ import { openPath } from "@tauri-apps/plugin-opener";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
+import { RebaseWorktreeGuardDialog } from "./components/dialogs/RebaseWorktreeGuardDialog";
 import { SmartSwitchDialog } from "./components/dialogs/SmartSwitchDialog";
 import { SquashCommitsDialog } from "./components/dialogs/SquashCommitsDialog";
 import type { RepoInfoDto } from "./types/git";
@@ -77,6 +78,8 @@ function App() {
     push,
     mergeIntoBranch,
     rebaseBranch,
+    checkoutBranchAtPath,
+    detachWorktreeHead,
     createBranch,
     deleteBranch,
     switchBranch,
@@ -126,6 +129,21 @@ function App() {
     worktreePath: string;
     commitIds: string[];
   }>({ open: false, repoId: "", worktreePath: "", commitIds: [] });
+  const [rebaseGuardDialog, setRebaseGuardDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    targetBranch: string;
+    ontoBranch: string;
+    worktreePath: string;
+    hasDirtyWorktree: boolean;
+  }>({
+    open: false,
+    repoId: "",
+    targetBranch: "",
+    ontoBranch: "",
+    worktreePath: "",
+    hasDirtyWorktree: false,
+  });
 
   useEffect(() => {
     setTerminalSplitPaneIds((prev) => {
@@ -454,6 +472,63 @@ function App() {
     [showGitCommandError]
   );
 
+  const handleRebaseBranch = useCallback(
+    (repoId: string, targetBranch: string, ontoBranch: string) => {
+      const repo = repoHeaders.find((item) => item.repoId === repoId);
+      if (!repo) {
+        void runGitCommand("Rebase failed", "Failed to rebase branch.", () =>
+          rebaseBranch(repoId, targetBranch, ontoBranch)
+        );
+        return;
+      }
+      const worktrees = worktreesByRepo[repoId] ?? [];
+      const blockingWorktree = worktrees.find(
+        (worktree) => worktree.branch === targetBranch && worktree.path !== repo.path
+      );
+
+      if (blockingWorktree) {
+        const status = statusByWorktreeByRepo[repoId]?.[blockingWorktree.path];
+        const hasDirtyWorktree =
+          Boolean(status?.has_staged || status?.has_unstaged || status?.has_untracked) ||
+          (status?.conflicted_files ?? 0) > 0;
+        setRebaseGuardDialog({
+          open: true,
+          repoId,
+          targetBranch,
+          ontoBranch,
+          worktreePath: blockingWorktree.path,
+          hasDirtyWorktree,
+        });
+        return;
+      }
+
+      void runGitCommand("Rebase failed", "Failed to rebase branch.", () =>
+        rebaseBranch(repoId, targetBranch, ontoBranch)
+      );
+    },
+    [repoHeaders, rebaseBranch, runGitCommand, statusByWorktreeByRepo, worktreesByRepo]
+  );
+
+  const handleDetachAndRebase = useCallback(() => {
+    const { repoId, targetBranch, ontoBranch, worktreePath } = rebaseGuardDialog;
+    if (!repoId || !targetBranch || !ontoBranch || !worktreePath) return;
+    void runGitCommand(
+      "Rebase failed",
+      "Failed to detach the other worktree and rebase the branch.",
+      async () => {
+        await detachWorktreeHead(repoId, worktreePath);
+        await rebaseBranch(repoId, targetBranch, ontoBranch);
+        await checkoutBranchAtPath(repoId, worktreePath, targetBranch);
+      }
+    );
+  }, [
+    checkoutBranchAtPath,
+    detachWorktreeHead,
+    rebaseBranch,
+    rebaseGuardDialog,
+    runGitCommand,
+  ]);
+
   const handleNewPane = useCallback(async () => {
     const nextIndex = tabs.length + 1;
     const title = `Terminal ${nextIndex}`;
@@ -630,11 +705,7 @@ function App() {
             mergeIntoBranch(repoId, targetBranch, sourceBranch)
           );
         }}
-        onRebaseBranch={(repoId, targetBranch, ontoBranch) => {
-          void runGitCommand("Rebase failed", "Failed to rebase branch.", () =>
-            rebaseBranch(repoId, targetBranch, ontoBranch)
-          );
-        }}
+        onRebaseBranch={handleRebaseBranch}
         onReset={(repoId, worktreePath, commitId, mode) => {
           void runGitCommand("Reset failed", "Failed to reset commit.", () =>
             reset(repoId, commitId, mode, worktreePath)
@@ -727,6 +798,15 @@ function App() {
         title={gitCommandError?.title}
         message={gitCommandError?.message ?? ""}
         onClose={clearGitCommandError}
+      />
+      <RebaseWorktreeGuardDialog
+        open={rebaseGuardDialog.open}
+        targetBranch={rebaseGuardDialog.targetBranch}
+        ontoBranch={rebaseGuardDialog.ontoBranch}
+        worktreePath={rebaseGuardDialog.worktreePath}
+        hasDirtyWorktree={rebaseGuardDialog.hasDirtyWorktree}
+        onClose={() => setRebaseGuardDialog((prev) => ({ ...prev, open: false }))}
+        onConfirmDetach={handleDetachAndRebase}
       />
       <SmartSwitchDialog
         open={smartSwitchDialog.open}

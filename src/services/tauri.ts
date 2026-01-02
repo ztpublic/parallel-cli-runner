@@ -144,6 +144,10 @@ export function gitCheckoutBranch(params: {
   return invoke("git_checkout_branch", params);
 }
 
+export function gitDetachWorktreeHead(params: { cwd: string }): Promise<void> {
+  return invoke("git_detach_worktree_head", params);
+}
+
 export function gitSmartCheckoutBranch(params: {
   cwd: string;
   branchName: string;

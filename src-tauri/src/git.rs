@@ -1405,6 +1405,11 @@ pub fn checkout_local_branch(repo_root: &Path, branch_name: &str) -> Result<(), 
     checkout_branch(&repo, &refname)
 }
 
+pub fn detach_worktree_head(worktree_path: &Path) -> Result<(), GitError> {
+    let _ = run_git_command(worktree_path, ["checkout", "--detach"])?;
+    Ok(())
+}
+
 pub fn smart_checkout_branch(repo_root: &Path, branch_name: &str) -> Result<(), GitError> {
     let mut repo = open_repo(repo_root)?;
     let refname = local_branch_refname(branch_name);
