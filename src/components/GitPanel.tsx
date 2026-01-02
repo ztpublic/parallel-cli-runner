@@ -99,7 +99,7 @@ const defaultTabs: GitTab[] = [
 
 export function GitPanel({
   initialTabs,
-  initialSplit = false,
+  initialSplit = true,
   repos = [],
   enabledRepoIds,
   branchGroups = [],
