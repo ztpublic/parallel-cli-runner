@@ -115,7 +115,7 @@ export function GitStaging({
             description: formatDescription(file),
             selectable: true,
             actions: [
-              { id: "open-file", icon: "externalLink", label: "Open File" },
+              { id: "open-file", icon: "externalLink", label: "Open in VSCode" },
               { id: "unstage", icon: "minus", label: "Unstage" },
               { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
@@ -143,7 +143,7 @@ export function GitStaging({
             description: formatDescription(file),
             selectable: true,
             actions: [
-              { id: "open-file", icon: "externalLink", label: "Open File" },
+              { id: "open-file", icon: "externalLink", label: "Open in VSCode" },
               { id: "stage", icon: "plus", label: "Stage" },
               { id: "rollback", icon: "undo", label: "Roll back", intent: "danger" },
             ],
@@ -196,7 +196,7 @@ export function GitStaging({
       if (stagedFile) {
         if (actionId === "open-file") {
           const fullPath = `${group.repo.path}/${stagedFile.path}`;
-          openPath(fullPath);
+          openPath(fullPath, "Visual Studio Code");
         }
         if (actionId === "unstage")
           onUnstageFile(group.repo.repoId, stagedFile.path);
@@ -213,7 +213,7 @@ export function GitStaging({
       if (unstagedFile) {
         if (actionId === "open-file") {
           const fullPath = `${group.repo.path}/${unstagedFile.path}`;
-          openPath(fullPath);
+          openPath(fullPath, "Visual Studio Code");
         }
         if (actionId === "stage")
           onStageFile(group.repo.repoId, unstagedFile.path);
