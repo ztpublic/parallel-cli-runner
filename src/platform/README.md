@@ -1,8 +1,8 @@
 # Platform Layer
 
-Shared platform abstractions used by both Tauri and VSCode webviews.
+Shared platform abstractions used by both the Tauri desktop app and the VS Code webview.
 
-- `src/platform/config.ts` reads the injected runtime config (`window.__APP_CONFIG__`).
-- `src/platform/transport.ts` provides the WS transport with a Tauri fallback.
-- `src/platform/actions.ts` wraps dialog/opener actions with WS routing or Tauri plugins.
-- `src/platform/vscode.ts` provides a request bridge for VS Code webview-only APIs.
+- `src/platform/config.ts` reads the injected runtime config (`window.__APP_CONFIG__`) from Tauri or the extension.
+- `src/platform/transport.ts` chooses WebSocket transport when `wsUrl` is present, otherwise uses Tauri invoke/listen.
+- `src/platform/actions.ts` routes dialogs/openers to the VS Code bridge, WebSocket backend, or Tauri plugins.
+- `src/platform/vscode.ts` provides a request/response bridge for VS Code webview-only APIs.

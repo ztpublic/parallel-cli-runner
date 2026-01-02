@@ -5,4 +5,4 @@ React hooks that encapsulate stateful UI logic (effects, event handlers, async f
 - Layout and pane state: `useLayoutState`.
 - Keyboard behavior: `useHotkeys`.
 - Dismiss helpers: `useDismiss`.
-- Git data and actions: `src/hooks/git/*` (repositories, branches, commits, worktrees).
+- Git data and actions: `src/hooks/git/*` (repos, staging, tabs, command error dialog).
