@@ -8,6 +8,7 @@ pub mod git;
 use crate::git::{DiffRequestDto, DiffResponseDto, RepoInfoDto, RepoStatusDto};
 mod pty;
 use crate::pty::PtyManager;
+pub mod ws_server;
 
 #[cfg(test)]
 mod export_types;

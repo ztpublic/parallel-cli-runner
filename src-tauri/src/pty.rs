@@ -81,15 +81,16 @@ impl PtySession {
 }
 
 #[derive(Clone, Serialize)]
-struct SessionData {
+pub struct SessionData {
     id: String,
     data: String,
 }
 
-#[tauri::command]
-pub async fn create_session(
-    manager: State<'_, PtyManager>,
-    app: AppHandle,
+pub type SessionDataEmitter = Arc<dyn Fn(SessionData) + Send + Sync + 'static>;
+
+pub fn create_session_with_emitter(
+    manager: &PtyManager,
+    emitter: SessionDataEmitter,
     cmd: Option<String>,
     cwd: Option<String>,
 ) -> Result<String, CommandError> {
@@ -126,15 +127,13 @@ pub async fn create_session(
         session_id,
         Arc::new(PtySession::new(pair.master, writer, child)),
     );
-    let manager_clone = manager.inner().clone();
-    spawn_reader_loop(manager_clone, app, session_id, reader);
+    spawn_reader_loop(manager.clone(), session_id, reader, emitter);
 
     Ok(session_id.to_string())
 }
 
-#[tauri::command]
-pub async fn write_to_session(
-    manager: State<'_, PtyManager>,
+pub fn write_to_session_with_manager(
+    manager: &PtyManager,
     id: String,
     data: String,
 ) -> Result<(), CommandError> {
@@ -147,9 +146,8 @@ pub async fn write_to_session(
     session.write(&data).map_err(CommandError::internal)
 }
 
-#[tauri::command]
-pub async fn resize_session(
-    manager: State<'_, PtyManager>,
+pub fn resize_session_with_manager(
+    manager: &PtyManager,
     id: String,
     cols: u16,
     rows: u16,
@@ -163,8 +161,10 @@ pub async fn resize_session(
     session.resize(cols, rows).map_err(CommandError::internal)
 }
 
-#[tauri::command]
-pub async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<(), CommandError> {
+pub fn kill_session_with_manager(
+    manager: &PtyManager,
+    id: String,
+) -> Result<(), CommandError> {
     let session_id = Uuid::parse_str(&id)
         .map_err(|_| CommandError::new("invalid_argument", "invalid session id"))?;
     let Some(session) = manager.remove(&session_id) else {
@@ -174,9 +174,8 @@ pub async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<
     session.kill().map_err(CommandError::internal)
 }
 
-#[tauri::command]
-pub async fn broadcast_line(
-    manager: State<'_, PtyManager>,
+pub fn broadcast_line_with_manager(
+    manager: &PtyManager,
     session_ids: Vec<String>,
     line: String,
 ) -> Result<(), CommandError> {
@@ -191,13 +190,59 @@ pub async fn broadcast_line(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn create_session(
+    manager: State<'_, PtyManager>,
+    app: AppHandle,
+    cmd: Option<String>,
+    cwd: Option<String>,
+) -> Result<String, CommandError> {
+    let app_emitter: SessionDataEmitter = Arc::new(move |payload| {
+        let _ = app.emit("session-data", payload);
+    });
+    create_session_with_emitter(manager.inner(), app_emitter, cmd, cwd)
+}
+
+#[tauri::command]
+pub async fn write_to_session(
+    manager: State<'_, PtyManager>,
+    id: String,
+    data: String,
+) -> Result<(), CommandError> {
+    write_to_session_with_manager(manager.inner(), id, data)
+}
+
+#[tauri::command]
+pub async fn resize_session(
+    manager: State<'_, PtyManager>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), CommandError> {
+    resize_session_with_manager(manager.inner(), id, cols, rows)
+}
+
+#[tauri::command]
+pub async fn kill_session(manager: State<'_, PtyManager>, id: String) -> Result<(), CommandError> {
+    kill_session_with_manager(manager.inner(), id)
+}
+
+#[tauri::command]
+pub async fn broadcast_line(
+    manager: State<'_, PtyManager>,
+    session_ids: Vec<String>,
+    line: String,
+) -> Result<(), CommandError> {
+    broadcast_line_with_manager(manager.inner(), session_ids, line)
+}
+
 fn spawn_reader_loop(
     manager: PtyManager,
-    app: AppHandle,
     session_id: Uuid,
     mut reader: Box<dyn Read + Send>,
+    emitter: SessionDataEmitter,
 ) {
-    tauri::async_runtime::spawn_blocking(move || {
+    std::thread::spawn(move || {
         let mut buf = [0u8; 2048];
         let mut persistent_buf = Vec::new();
         loop {
@@ -213,7 +258,7 @@ fn spawn_reader_loop(
                                         id: session_id.to_string(),
                                         data: s.to_string(),
                                     };
-                                    let _ = app.emit("session-data", payload);
+                                    emitter(payload);
                                 }
                                 persistent_buf.clear();
                                 break;
@@ -228,14 +273,14 @@ fn spawn_reader_loop(
                                         id: session_id.to_string(),
                                         data: s,
                                     };
-                                    let _ = app.emit("session-data", payload);
+                                    emitter(payload);
                                 }
                                 if let Some(error_len) = e.error_len() {
                                     let payload = SessionData {
                                         id: session_id.to_string(),
                                         data: "".to_string(),
                                     };
-                                    let _ = app.emit("session-data", payload);
+                                    emitter(payload);
                                     persistent_buf.drain(0..valid_len + error_len);
                                 } else {
                                     persistent_buf.drain(0..valid_len);
