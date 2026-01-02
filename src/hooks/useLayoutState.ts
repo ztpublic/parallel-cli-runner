@@ -12,6 +12,7 @@ import {
   splitPane,
 } from "../types/layout";
 import { killSession, writeToSession } from "../services/tauri";
+import { disposeTerminal } from "../services/terminalRegistry";
 import { killLayoutSessions } from "../services/sessions";
 
 export function useLayoutState() {
@@ -111,6 +112,27 @@ export function useLayoutState() {
     [getActiveTabId]
   );
 
+  const splitPaneInTab = useCallback(
+    (tabId: string, pane: PaneNode, targetPaneId: string, orientation: Orientation) => {
+      setTabs((prev) =>
+        prev.map((tab) => {
+          if (tab.id !== tabId) return tab;
+          const nextLayout = splitPane(tab.layout, targetPaneId, pane, orientation);
+          const resolvedLayout =
+            nextLayout === tab.layout
+              ? appendPaneToLayout(tab.layout, pane, getLayoutOrientation(tab.layout))
+              : nextLayout;
+          return {
+            ...tab,
+            layout: resolvedLayout ?? pane,
+            activePaneId: pane.id,
+          };
+        })
+      );
+    },
+    []
+  );
+
   const closeTab = useCallback((tabId: string) => {
     const currentTabs = tabsRef.current;
     const tabIndex = currentTabs.findIndex((tab) => tab.id === tabId);
@@ -144,6 +166,7 @@ export function useLayoutState() {
       }
 
       await killSession({ id: paneToRemove.sessionId });
+      disposeTerminal(paneToRemove.sessionId);
 
       setTabs((prev) =>
         prev.map((item) => {
@@ -159,6 +182,38 @@ export function useLayoutState() {
       );
     },
     [closeTab, getActiveTabId]
+  );
+
+  const closePaneInTab = useCallback(
+    async (tabId: string, paneId: string) => {
+      const tab = tabsRef.current.find((item) => item.id === tabId);
+      if (!tab) return;
+
+      const paneToRemove = findPane(tab.layout, paneId);
+      if (!paneToRemove) return;
+
+      if (countPanes(tab.layout) === 1) {
+        closeTab(tabId);
+        return;
+      }
+
+      await killSession({ id: paneToRemove.sessionId });
+      disposeTerminal(paneToRemove.sessionId);
+
+      setTabs((prev) =>
+        prev.map((item) => {
+          if (item.id !== tabId) return item;
+          const nextLayout = removePane(item.layout, paneId);
+          if (!nextLayout) return item;
+          const nextActivePaneId =
+            item.activePaneId === paneId
+              ? getFirstPane(nextLayout)?.id ?? null
+              : item.activePaneId;
+          return { ...item, layout: nextLayout, activePaneId: nextActivePaneId };
+        })
+      );
+    },
+    [closeTab]
   );
 
   const closeActivePane = useCallback(async () => {
@@ -197,7 +252,9 @@ export function useLayoutState() {
     setActivePaneId,
     appendPane,
     splitPaneInLayout,
+    splitPaneInTab,
     closePane,
+    closePaneInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,

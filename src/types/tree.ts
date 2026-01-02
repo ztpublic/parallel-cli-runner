@@ -23,6 +23,13 @@ export type TreeNodeContextMenuItem =
       id: string;
       label: string;
       type: "separator";
+    }
+  | {
+      id: string;
+      label: string;
+      selected?: boolean;
+      disabled?: boolean;
+      type: "radio";
     };
 
 export type TreeNode = {

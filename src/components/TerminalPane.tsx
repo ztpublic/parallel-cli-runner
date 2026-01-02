@@ -1,27 +1,26 @@
 import { useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
 import "xterm/css/xterm.css";
 import { PaneNode } from "../types/layout";
-
-type SessionData = {
-  id: string;
-  data: string;
-};
+import { attachTerminal, detachTerminal, type TerminalHandle } from "../services/terminalRegistry";
 
 type TerminalPaneProps = {
   pane: PaneNode;
   isActive: boolean;
   onFocused: (id: string) => void;
   onInput?: (pane: PaneNode, data: string) => void;
+  layoutTick?: number;
 };
 
-export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPaneProps) {
+export function TerminalPane({
+  pane,
+  isActive,
+  onFocused,
+  onInput,
+  layoutTick,
+}: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const terminalRef = useRef<TerminalHandle | null>(null);
   const onInputRef = useRef(onInput);
   const resizeTimeoutRef = useRef<number | null>(null);
 
@@ -30,14 +29,16 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
   }, [onInput]);
 
   const syncSize = useCallback(async () => {
-    const term = termRef.current;
-    const fitAddon = fitAddonRef.current;
+    const handle = terminalRef.current;
+    const term = handle?.term ?? null;
+    const fitAddon = handle?.fitAddon ?? null;
     if (!term || !fitAddon) return;
 
     fitAddon.fit();
     const cols = term.cols;
     const rows = term.rows;
     await invoke("resize_session", { id: pane.sessionId, cols, rows });
+    term.refresh(0, Math.max(0, term.rows - 1));
   }, [pane.sessionId]);
 
   const scheduleSyncSize = useCallback(() => {
@@ -49,59 +50,20 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
   }, [syncSize]);
 
   useEffect(() => {
-    const term = new Terminal({
-      convertEol: true,
-      cursorBlink: true,
-      fontSize: 14,
-      fontFamily: "IBM Plex Mono, JetBrains Mono, Menlo, monospace",
-      disableStdin: false,
-      theme: {
-        background: "#1e1e1e",
-      },
-    });
-    const fitAddon = new FitAddon();
-    termRef.current = term;
-    fitAddonRef.current = fitAddon;
-    term.loadAddon(fitAddon);
-    term.attachCustomKeyEventHandler((event) => {
-      if (event.type !== "keydown") {
-        return true;
-      }
-      if (event.ctrlKey && !event.altKey && !event.metaKey && event.code === "KeyD") {
-        void invoke("write_to_session", { id: pane.sessionId, data: "\u0004" });
-        return false;
-      }
-      return true;
-    });
-
-    if (containerRef.current) {
-      term.open(containerRef.current);
-    }
-
-    const unsubscribeData = term.onData((data) => {
-      void invoke("write_to_session", { id: pane.sessionId, data });
+    const container = containerRef.current;
+    if (!container) return;
+    const handle = attachTerminal(pane.sessionId, container, (data) => {
       if (onInputRef.current) {
         onInputRef.current(pane, data);
       }
     });
-
-    let unlisten: (() => void) | undefined;
-    listen<SessionData>("session-data", (event) => {
-      if (event.payload.id === pane.sessionId) {
-        term.write(event.payload.data);
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
+    terminalRef.current = handle;
     void syncSize();
 
     const resizeObserver = new ResizeObserver(() => {
       scheduleSyncSize();
     });
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current);
-    }
+    resizeObserver.observe(container);
     window.addEventListener("resize", scheduleSyncSize);
 
     return () => {
@@ -111,19 +73,21 @@ export function TerminalPane({ pane, isActive, onFocused, onInput }: TerminalPan
         window.clearTimeout(resizeTimeoutRef.current);
         resizeTimeoutRef.current = null;
       }
-      unsubscribeData.dispose();
-      term.dispose();
-      if (unlisten) {
-        unlisten();
-      }
+      detachTerminal(pane.sessionId, container);
     };
-  }, [pane.sessionId, scheduleSyncSize, syncSize]);
+  }, [pane, pane.sessionId, scheduleSyncSize, syncSize]);
 
   useEffect(() => {
-    if (isActive && termRef.current) {
-      termRef.current.focus();
+    const term = terminalRef.current?.term;
+    if (isActive && term) {
+      term.focus();
     }
   }, [isActive]);
+
+  useEffect(() => {
+    if (layoutTick === undefined) return;
+    scheduleSyncSize();
+  }, [layoutTick, scheduleSyncSize]);
 
   return (
     <div

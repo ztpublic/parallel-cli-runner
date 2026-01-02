@@ -3,6 +3,7 @@ export type Orientation = "vertical" | "horizontal";
 export type PaneMeta = {
   title?: string;
   subtitle?: string;
+  cwd?: string;
 };
 
 export type PaneNode = {

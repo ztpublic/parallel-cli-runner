@@ -64,12 +64,43 @@ export function ContextMenu({ items, position, onClose, onSelect }: ContextMenuP
       style={{ left: adjustedPosition.x, top: adjustedPosition.y }}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {items.map((item) =>
-        item.type === "separator" ? (
-          <div key={item.id} className="context-menu-separator" role="separator">
-            <span>{item.label}</span>
-          </div>
-        ) : (
+      {items.map((item) => {
+        if (item.type === "separator") {
+          return (
+            <div key={item.id} className="context-menu-separator" role="separator">
+              <span>{item.label}</span>
+            </div>
+          );
+        }
+
+        if (item.type === "radio") {
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`context-menu-item context-menu-item-radio ${
+                item.selected ? "is-selected" : ""
+              }`}
+              role="menuitemradio"
+              aria-checked={item.selected ?? false}
+              disabled={item.disabled}
+              onClick={() => {
+                if (item.disabled) return;
+                onSelect?.(item.id);
+                onClose();
+              }}
+            >
+              <span className="context-menu-check">
+                {item.selected ? (
+                  <Icon name="check" size={12} className="context-menu-check-icon" />
+                ) : null}
+              </span>
+              <span>{item.label}</span>
+            </button>
+          );
+        }
+
+        return (
           <button
             key={item.id}
             type="button"
@@ -85,8 +116,8 @@ export function ContextMenu({ items, position, onClose, onSelect }: ContextMenuP
             {item.icon ? <Icon name={item.icon} size={14} className="context-menu-icon" /> : null}
             <span>{item.label}</span>
           </button>
-        )
-      )}
+        );
+      })}
     </div>
   );
 }

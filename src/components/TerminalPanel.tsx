@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { LayoutNode } from "../types/layout";
+import { useMemo, useState } from "react";
+import { countPanes, LayoutNode } from "../types/layout";
+import { ContextMenu } from "./ContextMenu";
 import { Icon } from "./Icons";
 import { LayoutRenderer } from "./LayoutRenderer";
 
@@ -13,11 +14,14 @@ type TerminalTab = {
 type TerminalPanelProps = {
   tabs: TerminalTab[];
   activeTabId: string | null;
+  terminalSplitPaneIds: Record<string, string | null>;
+  layoutTick: number;
   onSetActiveTab: (id: string) => void;
   onSetActivePane: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewPane: () => void;
   onSplitPane: () => void;
+  onSetTerminalView: (tabId: string, view: "single" | "vertical") => void;
 };
 
 type TerminalView = "terminals" | "acp";
@@ -25,13 +29,38 @@ type TerminalView = "terminals" | "acp";
 export function TerminalPanel({
   tabs,
   activeTabId,
+  terminalSplitPaneIds,
+  layoutTick,
   onSetActiveTab,
   onSetActivePane,
   onCloseTab,
   onNewPane,
   onSplitPane,
+  onSetTerminalView,
 }: TerminalPanelProps) {
   const [activeView, setActiveView] = useState<TerminalView>("terminals");
+  const [menuState, setMenuState] = useState<{
+    tabId: string;
+    position: { x: number; y: number };
+  } | null>(null);
+
+  const menuItems = useMemo(() => {
+    if (!menuState) return [];
+    const tab = tabs.find((item) => item.id === menuState.tabId);
+    const splitPaneId = terminalSplitPaneIds[menuState.tabId];
+    const isSplitView =
+      Boolean(splitPaneId) && (tab ? countPanes(tab.layout) > 1 : false);
+    return [
+      { id: "view", label: "View", type: "separator" as const },
+      { id: "single", label: "Single view", type: "radio" as const, selected: !isSplitView },
+      {
+        id: "vertical",
+        label: "Vertical split view",
+        type: "radio" as const,
+        selected: isSplitView,
+      },
+    ];
+  }, [menuState, tabs, terminalSplitPaneIds]);
 
   return (
     <section className="terminal-panel">
@@ -85,6 +114,12 @@ export function TerminalPanel({
                       className="terminal-tab-menu"
                       onClick={(event) => {
                         event.stopPropagation();
+                        onSetActiveTab(tab.id);
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        setMenuState({
+                          tabId: tab.id,
+                          position: { x: rect.left, y: rect.bottom + 6 },
+                        });
                       }}
                       title="Terminal options"
                     >
@@ -147,6 +182,7 @@ export function TerminalPanel({
                   node={tab.layout}
                   activePaneId={isActiveTab ? tab.activePaneId : null}
                   onFocus={onSetActivePane}
+                  layoutTick={layoutTick}
                 />
               </div>
             );
@@ -158,6 +194,21 @@ export function TerminalPanel({
           <div className="terminal-placeholder">ACP Sessions content will be added later.</div>
         )}
       </section>
+      {menuState ? (
+        <ContextMenu
+          items={menuItems}
+          position={menuState.position}
+          onClose={() => setMenuState(null)}
+          onSelect={(itemId) => {
+            if (itemId === "single") {
+              onSetTerminalView(menuState.tabId, "single");
+            }
+            if (itemId === "vertical") {
+              onSetTerminalView(menuState.tabId, "vertical");
+            }
+          }}
+        />
+      ) : null}
     </section>
   );
 }

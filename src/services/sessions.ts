@@ -1,17 +1,23 @@
 import type { LayoutNode, PaneMeta, PaneNode } from "../types/layout";
 import { collectPanes, createId } from "../types/layout";
 import { createSession, killSession, writeToSession } from "./tauri";
+import { disposeTerminal } from "./terminalRegistry";
 
 export async function createPaneNode(opts?: {
   cwd?: string;
   meta?: PaneMeta;
 }): Promise<PaneNode> {
   const sessionId = await createSession({ cwd: opts?.cwd });
+  const resolvedMeta = opts?.meta
+    ? { ...opts.meta, cwd: opts?.cwd ?? opts.meta.cwd }
+    : opts?.cwd
+      ? { cwd: opts.cwd }
+      : undefined;
   return {
     type: "pane",
     id: createId(),
     sessionId,
-    meta: opts?.meta,
+    meta: resolvedMeta,
   };
 }
 
@@ -23,6 +29,15 @@ export async function runStartCommand(pane: PaneNode, command: string): Promise<
 
 export async function killLayoutSessions(node: LayoutNode | null): Promise<void> {
   const panes = collectPanes(node);
-  await Promise.all(panes.map((pane) => killSession({ id: pane.sessionId }).catch(() => undefined)));
+  await Promise.all(
+    panes.map(async (pane) => {
+      try {
+        await killSession({ id: pane.sessionId });
+      } catch {
+        // Ignore session termination failures during teardown.
+      } finally {
+        disposeTerminal(pane.sessionId);
+      }
+    })
+  );
 }
-

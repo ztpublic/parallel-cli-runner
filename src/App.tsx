@@ -3,7 +3,7 @@ import "./App.css";
 import { createPaneNode, killLayoutSessions } from "./services/sessions";
 import { useLayoutState } from "./hooks/useLayoutState";
 import { useClosePaneHotkey } from "./hooks/useHotkeys";
-import { collectPanes } from "./types/layout";
+import { collectPanes, countPanes, findPane, getFirstPane } from "./types/layout";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
@@ -41,6 +41,8 @@ function App() {
     setActivePaneId,
     appendPane,
     splitPaneInLayout,
+    splitPaneInTab,
+    closePaneInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,
@@ -107,6 +109,10 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
   const [enabledRepoIds, setEnabledRepoIds] = useState<string[]>([]);
+  const [terminalSplitPaneIds, setTerminalSplitPaneIds] = useState<
+    Record<string, string | null>
+  >({});
+  const [terminalLayoutTick, setTerminalLayoutTick] = useState(0);
   
   const [smartSwitchDialog, setSmartSwitchDialog] = useState<{
     open: boolean;
@@ -119,6 +125,28 @@ function App() {
     worktreePath: string;
     commitIds: string[];
   }>({ open: false, repoId: "", worktreePath: "", commitIds: [] });
+
+  useEffect(() => {
+    setTerminalSplitPaneIds((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      const tabIds = new Set(tabs.map((tab) => tab.id));
+      Object.keys(next).forEach((tabId) => {
+        if (!tabIds.has(tabId)) {
+          delete next[tabId];
+          changed = true;
+        }
+      });
+      tabs.forEach((tab) => {
+        const splitPaneId = prev[tab.id];
+        if (splitPaneId && !findPane(tab.layout, splitPaneId)) {
+          next[tab.id] = null;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [tabs]);
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -411,7 +439,56 @@ function App() {
       },
     });
     splitPaneInLayout(next, targetPaneId, "horizontal");
+    requestAnimationFrame(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    setTerminalLayoutTick((tick) => tick + 1);
   }, [activePaneId, activePanes, splitPaneInLayout]);
+
+  const handleSetTerminalView = useCallback(
+    async (tabId: string, view: "single" | "vertical") => {
+      const tab = tabs.find((item) => item.id === tabId);
+      if (!tab) return;
+
+      const hasSplitPane = Boolean(terminalSplitPaneIds[tabId]);
+      if (view === "vertical") {
+        if (hasSplitPane && countPanes(tab.layout) > 1) return;
+        const targetPaneId = tab.activePaneId ?? getFirstPane(tab.layout)?.id;
+        if (!targetPaneId) return;
+        const targetPane = findPane(tab.layout, targetPaneId);
+        const cwd = targetPane?.meta?.cwd ?? targetPane?.meta?.subtitle;
+        const nextIndex = countPanes(tab.layout) + 1;
+        const next = await createPaneNode({
+          cwd,
+          meta: {
+            title: `Terminal ${nextIndex}`,
+            subtitle: targetPane?.meta?.subtitle,
+            cwd,
+          },
+        });
+        splitPaneInTab(tabId, next, targetPaneId, "vertical");
+        setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: next.id }));
+        requestAnimationFrame(() => {
+          window.dispatchEvent(new Event("resize"));
+        });
+        setTerminalLayoutTick((tick) => tick + 1);
+        return;
+      }
+
+      if (view === "single") {
+        const splitPaneId = terminalSplitPaneIds[tabId];
+        if (splitPaneId) {
+          await closePaneInTab(tabId, splitPaneId);
+          setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: null }));
+          requestAnimationFrame(() => {
+            window.dispatchEvent(new Event("resize"));
+          });
+          setTerminalLayoutTick((tick) => tick + 1);
+        }
+      }
+    },
+    [closePaneInTab, splitPaneInTab, tabs, terminalSplitPaneIds]
+  );
 
   return (
     <main className="app-shell">
@@ -569,11 +646,14 @@ function App() {
         <TerminalPanel
           tabs={tabs}
           activeTabId={resolvedActiveTabId}
+          terminalSplitPaneIds={terminalSplitPaneIds}
+          layoutTick={terminalLayoutTick}
           onSetActiveTab={setActiveTabId}
           onSetActivePane={setActivePaneId}
           onCloseTab={(id) => closeTab(id)}
           onNewPane={() => void handleNewPane()}
           onSplitPane={() => void handleSplitPane()}
+          onSetTerminalView={(tabId, view) => void handleSetTerminalView(tabId, view)}
         />
       </div>
       <ScanProgressModal open={isScanning} />
