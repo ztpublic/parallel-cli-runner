@@ -242,8 +242,9 @@ export function useGitTabs(initialTabs: GitTab[]) {
       const buttons = elements
         .map((element) => element.closest("button[data-git-tab-id]"))
         .filter((element): element is HTMLButtonElement => element !== null);
+      const firstButton = buttons.at(0);
       let targetButton =
-        buttons.find((button) => button.dataset.gitTabId !== sourceTabId) ?? buttons[0];
+        buttons.find((button) => button.dataset.gitTabId !== sourceTabId) ?? firstButton;
       if (!targetButton) {
         const candidates = Array.from(
           document.querySelectorAll<HTMLButtonElement>("button[data-git-tab-id]")
