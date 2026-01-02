@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./Icons";
 import { ContextMenu } from "./ContextMenu";
 import { useGitTabs } from "../hooks/git/useGitTabs";
@@ -87,14 +87,14 @@ type GitPanelProps = {
 };
 
 const defaultTabs: GitTab[] = [
-  { id: "repos", label: "Repos", icon: "folder" },
-  { id: "branches", label: "Branches", icon: "branch" },
-  { id: "commits", label: "Commits", icon: "commit" },
   { id: "commit", label: "Changes", icon: "fileEdit" },
-  { id: "stashes", label: "Stashes", icon: "archive" },
+  { id: "commits", label: "Commits", icon: "commit" },
+  { id: "branches", label: "Branches", icon: "branch" },
   { id: "worktrees", label: "Worktrees", icon: "folder" },
-  { id: "submodules", label: "Submodules", icon: "merge" },
+  { id: "repos", label: "Repos", icon: "folder" },
+  { id: "stashes", label: "Stashes", icon: "archive" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
+  { id: "submodules", label: "Submodules", icon: "merge" },
 ];
 
 export function GitPanel({
@@ -171,7 +171,10 @@ export function GitPanel({
     handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
   const [isSplit, setIsSplit] = useState(initialSplit);
+  const [splitRatio, setSplitRatio] = useState(0.5);
+  const [isResizingSplit, setIsResizingSplit] = useState(false);
   const [lastActiveGroup, setLastActiveGroup] = useState<GitTabGroup>("top");
+  const splitRef = useRef<HTMLDivElement | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{
     tabId: GitTabId;
     position: { x: number; y: number };
@@ -188,6 +191,42 @@ export function GitPanel({
     }, 10000);
     return () => window.clearInterval(intervalId);
   }, [shouldRefresh, hasRepos, onRefresh]);
+
+  useEffect(() => {
+    if (!isResizingSplit) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const container = splitRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const handleHeight = 6;
+      const minSectionHeight = 120;
+      const usableHeight = Math.max(rect.height - handleHeight, 1);
+      if (usableHeight <= minSectionHeight * 2) {
+        setSplitRatio(0.5);
+        return;
+      }
+      const offset = event.clientY - rect.top;
+      const clampedOffset = Math.min(
+        Math.max(offset, minSectionHeight),
+        usableHeight - minSectionHeight
+      );
+      const nextRatio = clampedOffset / usableHeight;
+      setSplitRatio(nextRatio);
+    };
+
+    const handlePointerUp = () => {
+      setIsResizingSplit(false);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [isResizingSplit]);
 
   const handleCommit = (repoId: string, message: string) => {
     return onCommit?.(repoId, message);
@@ -411,6 +450,11 @@ export function GitPanel({
     }
   };
 
+  const handleSplitPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsResizingSplit(true);
+  };
+
   return (
     <aside className="git-panel" style={{ width }}>
       <div className="panel-header">
@@ -453,8 +497,14 @@ export function GitPanel({
       </div>
 
       {isSplit ? (
-        <div className="git-panel-split">
-          <section className="git-panel-section">
+        <div
+          className={`git-panel-split ${isResizingSplit ? "is-resizing" : ""}`}
+          ref={splitRef}
+        >
+          <section
+            className="git-panel-section"
+            style={{ flex: `0 0 ${splitRatio * 100}%` }}
+          >
             <GitTabBar
               tabs={topTabs}
               activeTab={activeTopTab}
@@ -472,7 +522,16 @@ export function GitPanel({
             />
             <div className="git-panel-content">{renderTabContent(activeTopTab)}</div>
           </section>
-          <section className="git-panel-section">
+          <div
+            className="git-panel-split-handle"
+            role="separator"
+            aria-orientation="horizontal"
+            onPointerDown={handleSplitPointerDown}
+          />
+          <section
+            className="git-panel-section"
+            style={{ flex: `0 0 ${(1 - splitRatio) * 100}%` }}
+          >
             <GitTabBar
               tabs={bottomTabs}
               activeTab={activeBottomTab}

@@ -419,6 +419,11 @@ button {
   min-height: 0;
 }
 
+.git-panel-split.is-resizing {
+  cursor: row-resize;
+  user-select: none;
+}
+
 .git-panel-section {
   flex: 1;
   display: flex;
@@ -426,8 +431,26 @@ button {
   min-height: 0;
 }
 
-.git-panel-section + .git-panel-section {
+.git-panel-split-handle {
+  height: 6px;
+  cursor: row-resize;
+  background: var(--surface-2);
   border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.git-panel-split-handle::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 2px;
+  background: var(--border-strong, var(--border));
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  opacity: 0.9;
 }
 
 .panel-header {
