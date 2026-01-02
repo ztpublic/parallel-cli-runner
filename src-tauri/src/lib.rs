@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
-use tauri::Emitter;
+
+use serde::Serialize;
+use tauri::{Emitter, Manager};
+use uuid::Uuid;
 
 mod command_error;
 use crate::command_error::CommandError;
@@ -9,6 +12,20 @@ use crate::git::{DiffRequestDto, DiffResponseDto, RepoInfoDto, RepoStatusDto};
 mod pty;
 use crate::pty::PtyManager;
 pub mod ws_server;
+
+#[derive(Clone, Serialize)]
+struct AppConfig {
+    #[serde(rename = "wsUrl")]
+    ws_url: String,
+    #[serde(rename = "authToken")]
+    auth_token: String,
+    settings: serde_json::Value,
+}
+
+fn build_init_script(config: &AppConfig) -> String {
+    let payload = serde_json::to_string(config).expect("failed to serialize app config");
+    format!("window.__APP_CONFIG__ = {payload};")
+}
 
 #[cfg(test)]
 mod export_types;
@@ -269,7 +286,32 @@ async fn git_delete_branch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let (listener, port) =
+        ws_server::bind_ws_listener(0).expect("failed to bind ws listener");
+    let auth_token = Uuid::new_v4().to_string();
+    let config = AppConfig {
+        ws_url: format!("ws://127.0.0.1:{port}"),
+        auth_token: auth_token.clone(),
+        settings: serde_json::json!({}),
+    };
+    let init_script = build_init_script(&config);
+    let init_script_for_builder = init_script.clone();
+
     tauri::Builder::default()
+        .append_invoke_initialization_script(init_script_for_builder)
+        .setup(move |app| {
+            app.manage(config.clone());
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.eval(&init_script);
+            }
+            let token = auth_token.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = ws_server::run_ws_server_on_listener(listener, token).await {
+                    eprintln!("ws server error: {err}");
+                }
+            });
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::default())

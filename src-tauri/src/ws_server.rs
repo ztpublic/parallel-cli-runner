@@ -5,7 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::net::TcpListener;
+use tokio::net::TcpListener as TokioTcpListener;
 use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
@@ -247,7 +247,30 @@ struct OpenPathParams {
 }
 
 pub async fn run_ws_server(port: u16, auth_token: String) -> anyhow::Result<()> {
-    let listener = TcpListener::bind(("127.0.0.1", port)).await?;
+    let listener = TokioTcpListener::bind(("127.0.0.1", port)).await?;
+    run_ws_server_on_tokio_listener(listener, auth_token).await
+}
+
+pub fn bind_ws_listener(port: u16) -> anyhow::Result<(std::net::TcpListener, u16)> {
+    let std_listener = std::net::TcpListener::bind(("127.0.0.1", port))?;
+    std_listener.set_nonblocking(true)?;
+    let actual_port = std_listener.local_addr()?.port();
+    Ok((std_listener, actual_port))
+}
+
+pub async fn run_ws_server_on_listener(
+    listener: std::net::TcpListener,
+    auth_token: String,
+) -> anyhow::Result<()> {
+    listener.set_nonblocking(true)?;
+    let listener = TokioTcpListener::from_std(listener)?;
+    run_ws_server_on_tokio_listener(listener, auth_token).await
+}
+
+async fn run_ws_server_on_tokio_listener(
+    listener: TokioTcpListener,
+    auth_token: String,
+) -> anyhow::Result<()> {
     let state = WsState {
         manager: PtyManager::default(),
         events: broadcast::channel(256).0,
