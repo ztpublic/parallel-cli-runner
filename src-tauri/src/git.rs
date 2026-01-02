@@ -121,6 +121,8 @@ pub struct SubmoduleInfoDto {
 pub struct WorktreeInfoDto {
     pub branch: String,
     pub path: String,
+    pub ahead: i32,
+    pub behind: i32,
 }
 
 #[derive(Clone, Debug, Serialize, TS)]
@@ -785,12 +787,15 @@ pub fn list_submodules(cwd: &Path) -> Result<Vec<SubmoduleInfoDto>, GitError> {
 pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
     let repo = open_repo(cwd)?;
     let mut worktrees = Vec::new();
+    let active_head_oid = repo.head().ok().and_then(|head| head.target());
 
     if let Some(workdir) = repo.workdir() {
         let branch = current_branch_from_repo(&repo)?;
         worktrees.push(WorktreeInfoDto {
             branch,
             path: canonicalize_path(workdir).to_string_lossy().to_string(),
+            ahead: 0,
+            behind: 0,
         });
     }
 
@@ -828,13 +833,27 @@ pub fn list_worktrees(cwd: &Path) -> Result<Vec<WorktreeInfoDto>, GitError> {
             continue;
         }
 
-        let branch = match Repository::open(path) {
-            Ok(worktree_repo) => current_branch_from_repo(&worktree_repo).unwrap_or_else(|_| "HEAD".to_string()),
-            Err(_) => "HEAD".to_string(),
+        let (branch, ahead, behind) = match Repository::open(path) {
+            Ok(worktree_repo) => {
+                let branch = current_branch_from_repo(&worktree_repo)
+                    .unwrap_or_else(|_| "HEAD".to_string());
+                let worktree_head_oid = worktree_repo.head().ok().and_then(|head| head.target());
+                let (ahead, behind) = match (worktree_head_oid, active_head_oid) {
+                    (Some(worktree_oid), Some(active_oid)) => repo
+                        .graph_ahead_behind(worktree_oid, active_oid)
+                        .map(|(ahead, behind)| (ahead as i32, behind as i32))
+                        .unwrap_or((0, 0)),
+                    _ => (0, 0),
+                };
+                (branch, ahead, behind)
+            }
+            Err(_) => ("HEAD".to_string(), 0, 0),
         };
         worktrees.push(WorktreeInfoDto {
             branch,
             path: canonicalize_path(path).to_string_lossy().to_string(),
+            ahead,
+            behind,
         });
     }
 

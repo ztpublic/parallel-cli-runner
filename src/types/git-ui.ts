@@ -36,6 +36,8 @@ export type CommitItem = {
 export type WorktreeItem = {
   branch: string;
   path: string;
+  ahead?: number;
+  behind?: number;
 };
 
 export type WorktreeCommits = {

@@ -34,6 +34,6 @@ export type RemoteInfoDto = { name: string, fetch: string, push: string, };
 
 export type SubmoduleInfoDto = { name: string, path: string, url: string | null, };
 
-export type WorktreeInfoDto = { branch: string, path: string, };
+export type WorktreeInfoDto = { branch: string, path: string, ahead: number, behind: number, };
 
 export type StashInfoDto = { index: number, message: string, id: string, relative_time: string, };

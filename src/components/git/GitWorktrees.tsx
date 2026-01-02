@@ -56,12 +56,24 @@ export function GitWorktrees({
       ],
       children: group.items
         .filter((worktree) => worktree.path !== group.repo.path)
-        .map((worktree) => ({
-          id: `${group.repo.repoId}:${worktree.branch}`,
-          label: worktree.branch,
-          description: worktree.path,
-          icon: "folder",
-          contextMenu: [
+        .map((worktree) => {
+          const isAhead = (worktree.ahead ?? 0) > 0;
+          const isBehind = (worktree.behind ?? 0) > 0;
+          const hasStatus = isAhead || isBehind;
+          const rightSlot = hasStatus ? (
+            <span className="git-branch-status text-xs text-muted">
+              {isBehind ? `↓${worktree.behind} ` : ""}
+              {isAhead ? `↑${worktree.ahead}` : ""}
+            </span>
+          ) : null;
+
+          return {
+            id: `${group.repo.repoId}:${worktree.branch}`,
+            label: worktree.branch,
+            description: worktree.path,
+            icon: "folder",
+            rightSlot,
+            contextMenu: [
             {
               id: "separator-update-worktree",
               label: "Update work tree",
@@ -96,8 +108,8 @@ export function GitWorktrees({
                 : `Rebase active branch on ${worktree.branch}`,
               disabled: !activeBranch || worktree.branch === activeBranch,
             },
-          ],
-          actions: [
+            ],
+            actions: [
             {
               id: "open-folder",
               icon: "folder",
@@ -115,8 +127,9 @@ export function GitWorktrees({
               label: "Delete",
               intent: "danger",
             },
-          ],
-        })),
+            ],
+          };
+        }),
     };
   });
 

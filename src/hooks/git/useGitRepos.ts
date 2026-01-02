@@ -109,6 +109,8 @@ function mapWorktrees(worktrees: WorktreeInfoDto[]): WorktreeItem[] {
   return worktrees.map((worktree) => ({
     branch: worktree.branch,
     path: worktree.path,
+    ahead: worktree.ahead,
+    behind: worktree.behind,
   }));
 }
 
