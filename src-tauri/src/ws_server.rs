@@ -301,7 +301,7 @@ async fn handle_connection(
                     payload: event.payload,
                 };
                 if let Ok(text) = serde_json::to_string(&payload) {
-                    if out_tx.send(Message::Text(text)).is_err() {
+                    if out_tx.send(Message::Text(text.into())).is_err() {
                         break;
                     }
                 }
@@ -347,7 +347,7 @@ async fn handle_connection(
                 };
 
                 if let Ok(text) = serde_json::to_string(&response) {
-                    let _ = out_tx.send(Message::Text(text));
+                    let _ = out_tx.send(Message::Text(text.into()));
                 }
             });
         }
@@ -471,7 +471,10 @@ async fn handle_request(
         }
         "git_unified_diff" => {
             let params: DiffRequestDto = parse_params(params)?;
-            let result = run_blocking(move || git::get_unified_diff(params)).await?;
+            let result = run_blocking(move || {
+                git::get_unified_diff(params).map_err(CommandError::from)
+            })
+            .await?;
             to_value(result)
         }
         "git_list_branches" => {
