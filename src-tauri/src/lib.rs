@@ -203,6 +203,11 @@ async fn git_checkout_branch(cwd: String, branch_name: String) -> Result<(), Com
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn git_detach_worktree_head(cwd: String) -> Result<(), CommandError> {
+    with_cwd(cwd, git::detach_worktree_head)
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn git_smart_checkout_branch(cwd: String, branch_name: String) -> Result<(), CommandError> {
     with_cwd(cwd, |path| git::smart_checkout_branch(path, &branch_name))
 }
@@ -299,6 +304,7 @@ pub fn run() {
             git_rebase_branch,
             git_create_branch,
             git_checkout_branch,
+            git_detach_worktree_head,
             git_smart_checkout_branch,
             git_reset,
             git_revert,
