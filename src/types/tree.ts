@@ -11,12 +11,19 @@ export type TreeNodeAction = {
   intent?: "default" | "danger";
 };
 
-export type TreeNodeContextMenuItem = {
-  id: string;
-  label: string;
-  icon?: IconName;
-  disabled?: boolean;
-};
+export type TreeNodeContextMenuItem =
+  | {
+      id: string;
+      label: string;
+      icon?: IconName;
+      disabled?: boolean;
+      type?: "item";
+    }
+  | {
+      id: string;
+      label: string;
+      type: "separator";
+    };
 
 export type TreeNode = {
   id: string;

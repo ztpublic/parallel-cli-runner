@@ -13,6 +13,7 @@ type GitWorktreesProps = {
   onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
+  onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
 };
 
 export function GitWorktrees({
@@ -22,6 +23,7 @@ export function GitWorktrees({
   onOpenTerminal,
   onOpenWorktreeFolder,
   onMergeBranch,
+  onRebaseBranch,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -61,13 +63,37 @@ export function GitWorktrees({
           icon: "folder",
           contextMenu: [
             {
+              id: "separator-update-worktree",
+              label: "Update work tree",
+              type: "separator",
+            },
+            {
               id: "update-from-active",
-              label: activeBranch ? `Update from ${activeBranch}` : "Update from active branch",
+              label: activeBranch ? `Merge from ${activeBranch}` : "Merge from active branch",
               disabled: !activeBranch || worktree.branch === activeBranch,
+            },
+            {
+              id: "rebase-branch-on-active",
+              label: activeBranch
+                ? `Rebase ${worktree.branch} on ${activeBranch}`
+                : `Rebase ${worktree.branch} on active branch`,
+              disabled: !activeBranch || worktree.branch === activeBranch,
+            },
+            {
+              id: "separator-update-repo",
+              label: "Update repo",
+              type: "separator",
             },
             {
               id: "merge-to-active",
               label: activeBranch ? `Merge to ${activeBranch}` : "Merge to active branch",
+              disabled: !activeBranch || worktree.branch === activeBranch,
+            },
+            {
+              id: "rebase-active-on-branch",
+              label: activeBranch
+                ? `Rebase ${activeBranch} on ${worktree.branch}`
+                : `Rebase active branch on ${worktree.branch}`,
               disabled: !activeBranch || worktree.branch === activeBranch,
             },
           ],
@@ -151,6 +177,14 @@ export function GitWorktrees({
     }
     if (itemId === "update-from-active") {
       onMergeBranch?.(repoId, branchName, targetBranch);
+      return;
+    }
+    if (itemId === "rebase-branch-on-active") {
+      onRebaseBranch?.(repoId, branchName, targetBranch);
+      return;
+    }
+    if (itemId === "rebase-active-on-branch") {
+      onRebaseBranch?.(repoId, targetBranch, branchName);
     }
   };
 

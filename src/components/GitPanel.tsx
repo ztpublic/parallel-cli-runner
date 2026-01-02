@@ -314,6 +314,7 @@ export function GitPanel({
                 onOpenTerminal={onOpenWorktreeTerminal}
                 onOpenWorktreeFolder={onOpenWorktreeFolder}
                 onMergeBranch={onMergeBranch}
+                onRebaseBranch={onRebaseBranch}
               />
             ) : null}
 

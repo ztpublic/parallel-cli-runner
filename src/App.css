@@ -848,6 +848,35 @@ button {
   color: var(--text-muted);
 }
 
+.context-menu-separator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 6px;
+  color: var(--text-muted);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  justify-content: flex-start;
+}
+
+.context-menu-separator::before,
+.context-menu-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
+
+.context-menu-separator::before {
+  display: none;
+}
+
+.context-menu-separator span {
+  white-space: nowrap;
+}
+
 .git-badge {
   font-size: 10px;
   color: var(--accent);
