@@ -11,6 +11,7 @@ import { GitStashes } from "./git/GitStashes";
 import { GitWorktrees } from "./git/GitWorktrees";
 import { GitRemotes } from "./git/GitRemotes";
 import { GitSubmodules } from "./git/GitSubmodules";
+import { GitTags } from "./git/GitTags";
 import {
   ChangedFile,
   GitTab,
@@ -21,6 +22,7 @@ import {
   RepoHeader,
   StashItem,
   SubmoduleItem,
+  TagItem,
   WorktreeCommits,
   WorktreeItem,
 } from "../types/git-ui";
@@ -40,6 +42,7 @@ type GitPanelProps = {
   remoteGroups?: RepoGroup<RemoteItem>[];
   submoduleGroups?: RepoGroup<SubmoduleItem>[];
   stashGroups?: RepoGroup<StashItem>[];
+  tagGroups?: RepoGroup<TagItem>[];
   width?: number;
   loading?: boolean;
   error?: string | null;
@@ -78,6 +81,9 @@ type GitPanelProps = {
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onApplyStash?: (repoId: string, stashIndex: number) => void;
   onDeleteStash?: (repoId: string, stashIndex: number) => void;
+  onLoadMoreTags?: (repoId: string) => void;
+  canLoadMoreTags?: (repoId: string) => boolean;
+  isLoadingMoreTags?: (repoId: string) => boolean;
   onRemoveRepo?: (repoId: string) => void;
   onActivateRepo?: (repoId: string) => void;
   onOpenRepoTerminal?: (repo: RepoHeader) => void;
@@ -93,6 +99,7 @@ const defaultTabs: GitTab[] = [
   { id: "worktrees", label: "Worktrees", icon: "folder" },
   { id: "repos", label: "Repos", icon: "folder" },
   { id: "stashes", label: "Stashes", icon: "archive" },
+  { id: "tags", label: "Tags", icon: "tag" },
   { id: "remotes", label: "Remotes", icon: "cloud" },
   { id: "submodules", label: "Submodules", icon: "merge" },
 ];
@@ -109,6 +116,7 @@ export function GitPanel({
   remoteGroups = [],
   submoduleGroups = [],
   stashGroups = [],
+  tagGroups = [],
   width,
   loading = false,
   error,
@@ -142,6 +150,9 @@ export function GitPanel({
   onDeleteWorktree,
   onApplyStash,
   onDeleteStash,
+  onLoadMoreTags,
+  canLoadMoreTags,
+  isLoadingMoreTags,
   onRemoveRepo,
   onActivateRepo,
   onOpenRepoTerminal,
@@ -397,6 +408,15 @@ export function GitPanel({
               stashGroups={stashGroups}
               onApplyStash={onApplyStash}
               onDeleteStash={onDeleteStash}
+            />
+          ) : null}
+
+          {tabId === "tags" ? (
+            <GitTags
+              tagGroups={tagGroups}
+              onLoadMore={onLoadMoreTags}
+              canLoadMore={canLoadMoreTags}
+              isLoadingMore={isLoadingMoreTags}
             />
           ) : null}
 

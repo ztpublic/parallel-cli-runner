@@ -28,6 +28,7 @@ import type {
   RepoHeader,
   StashItem,
   SubmoduleItem,
+  TagItem,
   WorktreeCommits,
   WorktreeItem,
 } from "./types/git-ui";
@@ -63,6 +64,7 @@ function App() {
     remotesByRepo,
     submodulesByRepo,
     stashesByRepo,
+    tagsByRepo,
     changedFilesByRepo,
     changedFilesByWorktreeByRepo,
     loading: gitLoading,
@@ -92,6 +94,9 @@ function App() {
     removeWorktree,
     applyStash,
     dropStash,
+    loadMoreTags,
+    canLoadMoreTags,
+    isLoadingMoreTags,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
@@ -390,6 +395,15 @@ function App() {
     [enabledRepoHeaders, stashesByRepo]
   );
 
+  const tagGroups = useMemo<RepoGroup<TagItem>[]>(
+    () =>
+      enabledRepoHeaders.map((repo) => ({
+        repo,
+        items: tagsByRepo[repo.repoId] ?? [],
+      })),
+    [enabledRepoHeaders, tagsByRepo]
+  );
+
   const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(() => {
     const repoGroups = enabledRepoHeaders.map((repo) => ({
       repo,
@@ -645,6 +659,10 @@ function App() {
         remoteGroups={remoteGroups}
         submoduleGroups={submoduleGroups}
         stashGroups={stashGroups}
+        tagGroups={tagGroups}
+        onLoadMoreTags={loadMoreTags}
+        canLoadMoreTags={canLoadMoreTags}
+        isLoadingMoreTags={isLoadingMoreTags}
         changedFileGroups={changedFileGroups}
         onRemoveRepo={handleRemoveRepo}
         onRefresh={() => {

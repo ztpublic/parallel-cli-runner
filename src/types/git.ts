@@ -37,3 +37,5 @@ export type SubmoduleInfoDto = { name: string, path: string, url: string | null,
 export type WorktreeInfoDto = { branch: string, path: string, ahead: number, behind: number, };
 
 export type StashInfoDto = { index: number, message: string, id: string, relative_time: string, };
+
+export type TagInfoDto = { name: string, };

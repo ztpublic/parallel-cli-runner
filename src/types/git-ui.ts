@@ -58,6 +58,10 @@ export type StashItem = {
   relativeTime: string;
 };
 
+export type TagItem = {
+  name: string;
+};
+
 export type ChangeStatus = "modified" | "added" | "deleted";
 
 export type ChangedFile = {
@@ -76,7 +80,8 @@ export type GitTabId =
   | "submodules"
   | "worktrees"
   | "remotes"
-  | "stashes";
+  | "stashes"
+  | "tags";
 
 export type GitTab = {
   id: GitTabId;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RemoteItem, StashItem, SubmoduleItem } from "../../types/git-ui";
+import type { RemoteItem, StashItem, SubmoduleItem, TagItem } from "../../types/git-ui";
 
 type RepoId = string;
 
@@ -7,6 +7,7 @@ export function useGitRepoMetadata() {
   const [remotesByRepo, setRemotesByRepo] = useState<Record<RepoId, RemoteItem[]>>({});
   const [submodulesByRepo, setSubmodulesByRepo] = useState<Record<RepoId, SubmoduleItem[]>>({});
   const [stashesByRepo, setStashesByRepo] = useState<Record<RepoId, StashItem[]>>({});
+  const [tagsByRepo, setTagsByRepo] = useState<Record<RepoId, TagItem[]>>({});
 
   return {
     remotesByRepo,
@@ -15,5 +16,7 @@ export function useGitRepoMetadata() {
     setSubmodulesByRepo,
     stashesByRepo,
     setStashesByRepo,
+    tagsByRepo,
+    setTagsByRepo,
   };
 }

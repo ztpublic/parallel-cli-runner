@@ -131,6 +131,15 @@ async fn git_list_stashes(cwd: String) -> Result<Vec<git::StashInfoDto>, Command
     with_cwd(cwd, git::list_stashes)
 }
 
+#[tauri::command]
+async fn git_list_tags(
+    cwd: String,
+    limit: usize,
+    skip: Option<usize>,
+) -> Result<Vec<git::TagInfoDto>, CommandError> {
+    with_cwd(cwd, |path| git::list_tags(path, limit, skip))
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn git_apply_stash(cwd: String, index: i32) -> Result<(), CommandError> {
     with_cwd(cwd, |path| git::apply_stash(path, index))
@@ -333,6 +342,7 @@ pub fn run() {
             git_list_remotes,
             git_list_submodules,
             git_list_stashes,
+            git_list_tags,
             git_apply_stash,
             git_drop_stash,
             git_pull,

@@ -16,6 +16,7 @@ import {
   gitListRemotes,
   gitListSubmodules,
   gitListStashes,
+  gitListTags,
   gitListWorktrees,
   gitMergeIntoBranch,
   gitRebaseBranch,
@@ -39,6 +40,7 @@ import type {
   RepoInfoDto,
   StashInfoDto,
   SubmoduleInfoDto,
+  TagInfoDto,
   WorktreeInfoDto,
 } from "../../types/git";
 import type {
@@ -46,6 +48,7 @@ import type {
   RemoteItem,
   StashItem,
   SubmoduleItem,
+  TagItem,
   WorktreeItem,
 } from "../../types/git-ui";
 import { parseWorktreeTargetId } from "./gitTargets";
@@ -100,14 +103,23 @@ function mapStashes(stashes: StashInfoDto[]): StashItem[] {
   }));
 }
 
+function mapTags(tags: TagInfoDto[]): TagItem[] {
+  return tags.map((tag) => ({
+    name: tag.name,
+  }));
+}
+
 type RepoId = string;
 type WithRepoOptions = {
   refresh?: boolean;
   errorMessage?: string;
 };
 
+const TAGS_PAGE_SIZE = 25;
+
 export function useGitRepos() {
   const refreshSeqRef = useRef(0);
+  const loadMoreTagsSeqRef = useRef<Record<RepoId, number>>({});
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,7 +154,12 @@ export function useGitRepos() {
     setSubmodulesByRepo,
     stashesByRepo,
     setStashesByRepo,
+    tagsByRepo,
+    setTagsByRepo,
   } = useGitRepoMetadata();
+  const [tagsSkipByRepo, setTagsSkipByRepo] = useState<Record<RepoId, number>>({});
+  const [hasMoreTagsByRepo, setHasMoreTagsByRepo] = useState<Record<RepoId, boolean>>({});
+  const [loadingMoreTagsByRepo, setLoadingMoreTagsByRepo] = useState<Record<RepoId, boolean>>({});
   const {
     worktreeCommitsByRepo,
     setWorktreeCommitsByRepo,
@@ -174,6 +191,10 @@ export function useGitRepos() {
     setRemotesByRepo(filterState);
     setSubmodulesByRepo(filterState);
     setStashesByRepo(filterState);
+    setTagsByRepo(filterState);
+    setTagsSkipByRepo(filterState);
+    setHasMoreTagsByRepo(filterState);
+    setLoadingMoreTagsByRepo(filterState);
     
     setCommitsSkipByWorktreeByRepo(filterState);
     setHasMoreCommitsByWorktreeByRepo(filterState);
@@ -203,6 +224,13 @@ export function useGitRepos() {
           targets.forEach((r) => { next[r.repo_id] = 10; });
           return next;
         });
+        setTagsSkipByRepo((prev) => {
+          const next = { ...prev };
+          targets.forEach((r) => {
+            next[r.repo_id] = 0;
+          });
+          return next;
+        });
 
         const results = await Promise.all(
           targets.map(async (repo) => {
@@ -214,6 +242,7 @@ export function useGitRepos() {
               remoteDtos,
               submoduleDtos,
               stashDtos,
+              tagDtos,
             ] = await Promise.all([
               gitStatus({ cwd: repo.root_path }),
               gitListBranches({ cwd: repo.root_path }),
@@ -222,6 +251,7 @@ export function useGitRepos() {
               gitListRemotes({ cwd: repo.root_path }),
               gitListSubmodules({ cwd: repo.root_path }),
               gitListStashes({ cwd: repo.root_path }),
+              gitListTags({ cwd: repo.root_path, limit: TAGS_PAGE_SIZE, skip: 0 }),
             ]);
             const worktrees = mapWorktrees(worktreeDtos);
             const resolvedWorktrees =
@@ -278,6 +308,10 @@ export function useGitRepos() {
               remotes: mapRemotes(remoteDtos),
               submodules: mapSubmodules(submoduleDtos),
               stashes: mapStashes(stashDtos),
+              tags: mapTags(tagDtos),
+              tagsSkip: 0,
+              hasMoreTags: tagDtos.length === TAGS_PAGE_SIZE,
+              loadingMoreTags: false,
             };
           })
         );
@@ -344,6 +378,26 @@ export function useGitRepos() {
         setStashesByRepo((prev) => {
           const next = { ...prev };
           for (const result of results) next[result.repoId] = result.stashes;
+          return next;
+        });
+        setTagsByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.tags;
+          return next;
+        });
+        setTagsSkipByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.tagsSkip;
+          return next;
+        });
+        setHasMoreTagsByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.hasMoreTags;
+          return next;
+        });
+        setLoadingMoreTagsByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.loadingMoreTags;
           return next;
         });
       } catch (err) {
@@ -743,6 +797,55 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const loadMoreTags = useCallback(
+    async (repoId: RepoId) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      const hasMore = hasMoreTagsByRepo[repoId] ?? false;
+      const isLoading = loadingMoreTagsByRepo[repoId] ?? false;
+      if (!hasMore || isLoading) return;
+
+      const requestId = (loadMoreTagsSeqRef.current[repoId] ?? 0) + 1;
+      loadMoreTagsSeqRef.current = { ...loadMoreTagsSeqRef.current, [repoId]: requestId };
+      setLoadingMoreTagsByRepo((prev) => ({ ...prev, [repoId]: true }));
+      try {
+        const skip = tagsSkipByRepo[repoId] ?? 0;
+        const nextSkip = skip + TAGS_PAGE_SIZE;
+        const moreTags = await gitListTags({
+          cwd: repo.root_path,
+          limit: TAGS_PAGE_SIZE,
+          skip: nextSkip,
+        });
+
+        if ((loadMoreTagsSeqRef.current[repoId] ?? 0) !== requestId) return;
+
+        setTagsByRepo((prev) => ({
+          ...prev,
+          [repoId]: [...(prev[repoId] ?? []), ...mapTags(moreTags)],
+        }));
+        setTagsSkipByRepo((prev) => ({ ...prev, [repoId]: nextSkip }));
+        if (moreTags.length < TAGS_PAGE_SIZE) {
+          setHasMoreTagsByRepo((prev) => ({ ...prev, [repoId]: false }));
+        }
+      } finally {
+        if ((loadMoreTagsSeqRef.current[repoId] ?? 0) === requestId) {
+          setLoadingMoreTagsByRepo((prev) => ({ ...prev, [repoId]: false }));
+        }
+      }
+    },
+    [hasMoreTagsByRepo, loadingMoreTagsByRepo, resolveRepo, tagsSkipByRepo]
+  );
+
+  const canLoadMoreTags = useCallback(
+    (repoId: string) => hasMoreTagsByRepo[repoId] ?? false,
+    [hasMoreTagsByRepo]
+  );
+
+  const isLoadingMoreTags = useCallback(
+    (repoId: string) => loadingMoreTagsByRepo[repoId] ?? false,
+    [loadingMoreTagsByRepo]
+  );
+
   return {
     repos,
     setRepos,
@@ -755,6 +858,10 @@ export function useGitRepos() {
     remotesByRepo,
     submodulesByRepo,
     stashesByRepo,
+    tagsByRepo,
+    tagsSkipByRepo,
+    hasMoreTagsByRepo,
+    loadingMoreTagsByRepo,
     changedFilesByRepo,
     changedFilesByWorktreeByRepo,
     loading,
@@ -784,6 +891,9 @@ export function useGitRepos() {
     removeWorktree,
     applyStash,
     dropStash,
+    loadMoreTags,
+    canLoadMoreTags,
+    isLoadingMoreTags,
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,

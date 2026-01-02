@@ -14,6 +14,7 @@ const defaultBottomTabs = new Set<GitTabId>([
   "commits",
   "commit",
   "stashes",
+  "tags",
   "remotes",
 ]);
 

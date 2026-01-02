@@ -29,6 +29,7 @@ export type IconName =
   | "sparkle"
   | "split"
   | "terminal"
+  | "tag"
   | "trash"
   | "undo";
 
@@ -195,6 +196,12 @@ const iconPaths: Record<IconName, ReactNode> = {
       <rect x="3" y="5" width="18" height="14" rx="2" />
       <polyline points="7 10 10 12 7 14" />
       <line x1="12" y1="14" x2="17" y2="14" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M20.6 13.4 11 3.8A2 2 0 0 0 9.6 3H4a1 1 0 0 0-1 1v5.6a2 2 0 0 0 .6 1.4l9.6 9.6a2 2 0 0 0 2.8 0l4.4-4.4a2 2 0 0 0 0-2.8z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
     </>
   ),
   trash: (

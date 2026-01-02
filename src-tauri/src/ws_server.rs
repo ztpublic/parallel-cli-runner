@@ -117,6 +117,13 @@ struct GitListCommitsParams {
 }
 
 #[derive(Deserialize)]
+struct GitListTagsParams {
+    cwd: String,
+    limit: usize,
+    skip: Option<usize>,
+}
+
+#[derive(Deserialize)]
 struct GitApplyStashParams {
     cwd: String,
     index: i32,
@@ -537,6 +544,14 @@ async fn handle_request(
         "git_list_stashes" => {
             let params: CwdParams = parse_params(params)?;
             let result = run_blocking(move || with_cwd(params.cwd, git::list_stashes)).await?;
+            to_value(result)
+        }
+        "git_list_tags" => {
+            let params: GitListTagsParams = parse_params(params)?;
+            let result = run_blocking(move || {
+                with_cwd(params.cwd, |path| git::list_tags(path, params.limit, params.skip))
+            })
+            .await?;
             to_value(result)
         }
         "git_apply_stash" => {

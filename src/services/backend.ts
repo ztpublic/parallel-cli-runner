@@ -9,6 +9,7 @@ import type {
   RepoStatusDto,
   StashInfoDto,
   SubmoduleInfoDto,
+  TagInfoDto,
   WorktreeInfoDto,
 } from "../types/git";
 
@@ -91,6 +92,14 @@ export function gitListSubmodules(params: { cwd: string }): Promise<SubmoduleInf
 
 export function gitListStashes(params: { cwd: string }): Promise<StashInfoDto[]> {
   return request<StashInfoDto[]>("git_list_stashes", params);
+}
+
+export function gitListTags(params: {
+  cwd: string;
+  limit: number;
+  skip?: number;
+}): Promise<TagInfoDto[]> {
+  return request<TagInfoDto[]>("git_list_tags", params);
 }
 
 export function gitApplyStash(params: { cwd: string; index: number }): Promise<void> {
