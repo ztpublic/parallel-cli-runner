@@ -165,7 +165,11 @@ export function useLayoutState() {
         return;
       }
 
-      await killSession({ id: paneToRemove.sessionId });
+      try {
+        await killSession({ id: paneToRemove.sessionId });
+      } catch (error) {
+        console.warn("Failed to kill session", error);
+      }
       disposeTerminal(paneToRemove.sessionId);
 
       setTabs((prev) =>
@@ -197,7 +201,11 @@ export function useLayoutState() {
         return;
       }
 
-      await killSession({ id: paneToRemove.sessionId });
+      try {
+        await killSession({ id: paneToRemove.sessionId });
+      } catch (error) {
+        console.warn("Failed to kill session", error);
+      }
       disposeTerminal(paneToRemove.sessionId);
 
       setTabs((prev) =>
