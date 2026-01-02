@@ -732,3 +732,235 @@ fn pull_changes() {
     // Let's skip testing `pull` with `git pull` command for now as setting up the environment via git2 for a CLI `git pull` to work out of box is verbose.
     // I'll stick to the other 3 tests which use `git2` mostly (except smart checkout uses git2 stash).
 }
+
+#[test]
+fn squash_commits_fails_for_single_commit() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "v1\n");
+    commit_all(temp.path(), "Commit 1");
+    let _commit1 = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "v2\n");
+    commit_all(temp.path(), "Commit 2");
+    let commit2 = head_oid(&repo);
+
+    let result = git::squash_commits(temp.path(), &[commit2]);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("select at least two commits"));
+}
+
+#[test]
+fn squash_commits_fails_for_merge_commit() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    git::create_branch(temp.path(), "feature/merge", None).expect("create branch");
+    git::checkout_local_branch(temp.path(), "feature/merge").expect("checkout feature");
+    write_file(temp.path(), "feature.txt", "feature\n");
+    commit_all(temp.path(), "Feature commit");
+    let _feature_commit = head_oid(&repo);
+
+    git::checkout_local_branch(temp.path(), "master").expect("checkout master");
+    write_file(temp.path(), "master.txt", "master\n");
+    commit_all(temp.path(), "Master commit");
+    let master_commit = head_oid(&repo);
+
+    git::merge_into_branch(temp.path(), "master", "feature/merge").expect("merge");
+    let merge_commit = head_oid(&repo);
+
+    // Try to squash merge commit with its parent
+    let result = git::squash_commits(temp.path(), &[merge_commit, master_commit]);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("cannot squash merge commits"));
+}
+
+#[test]
+fn squash_commits_fails_for_root_commit() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+    let base_commit = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "v2\n");
+    commit_all(temp.path(), "Commit 2");
+    let commit2 = head_oid(&repo);
+
+    // Try to squash root commit
+    let result = git::squash_commits(temp.path(), &[commit2, base_commit]);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(format!("{}", err).contains("cannot squash the root commit"));
+}
+
+#[test]
+fn squash_commits_fails_for_non_contiguous_range() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    write_file(temp.path(), "file.txt", "a\n");
+    commit_all(temp.path(), "Commit A");
+    let commit_a = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "b\n");
+    commit_all(temp.path(), "Commit B");
+    let _commit_b = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "c\n");
+    commit_all(temp.path(), "Commit C");
+    let commit_c = head_oid(&repo);
+
+    // Try to squash A and C, skipping B
+    let result = git::squash_commits(temp.path(), &[commit_c, commit_a]);
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    // Implementation might fail with "contiguous" error or "linear range" depending on check order
+    assert!(
+        format!("{}", err).contains("contiguous") || format!("{}", err).contains("linear range")
+    );
+}
+
+#[test]
+fn squash_commits_middle_of_history() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "file.txt", "base\n");
+    commit_all(temp.path(), "Base");
+    let base = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "a\n");
+    commit_all(temp.path(), "Commit A");
+    let commit_a = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "b\n");
+    commit_all(temp.path(), "Commit B");
+    let commit_b = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "c\n");
+    commit_all(temp.path(), "Commit C");
+    let _commit_c = head_oid(&repo);
+
+    write_file(temp.path(), "file.txt", "d\n");
+    commit_all(temp.path(), "Commit D");
+    let _commit_d = head_oid(&repo);
+
+    // Squash A and B. C and D should be rebased on top.
+    git::squash_commits(temp.path(), &[commit_a, commit_b]).expect("squash A and B");
+
+    let commits = git::list_commits(temp.path(), 10, None).expect("list commits");
+    // Expected: Commit D', Commit C', Squashed(A+B), Base. Total 4.
+    assert_eq!(commits.len(), 4);
+    assert_eq!(commits[0].summary, "Commit D");
+    assert_eq!(commits[1].summary, "Commit C");
+    assert_eq!(commits[3].id, base);
+
+    // Check squashed commit message full content
+    let squashed_oid = git2::Oid::from_str(&commits[2].id).expect("oid");
+    let squashed_commit = repo.find_commit(squashed_oid).expect("find commit");
+    let message = squashed_commit.message().expect("message");
+    assert!(message.contains("Commit A"));
+    assert!(message.contains("Commit B"));
+
+    // Verify content is preserved (D state)
+    let content = fs::read_to_string(temp.path().join("file.txt")).unwrap();
+    assert_eq!(content, "d\n");
+}
+
+#[test]
+fn rebase_branch_success() {
+    let (temp, repo) = init_repo();
+    write_file(temp.path(), "base.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    git::create_branch(temp.path(), "feature/rebase", None).expect("create branch");
+    
+    // Advance master
+    write_file(temp.path(), "master.txt", "master\n");
+    commit_all(temp.path(), "Master commit");
+    let master_head = head_oid(&repo);
+
+    // Advance feature
+    git::checkout_local_branch(temp.path(), "feature/rebase").expect("checkout feature");
+    write_file(temp.path(), "feature.txt", "feature\n");
+    commit_all(temp.path(), "Feature commit");
+
+    // Rebase feature onto master
+    // Note: rebase_branch uses `git` CLI. Ensure git is installed and configured.
+    // The init_repo helper sets user/email, which is enough for rebase.
+    git::rebase_branch(temp.path(), "feature/rebase", "master").expect("rebase");
+
+    // Verify current branch is feature/rebase
+    let head = repo.head().expect("head");
+    assert_eq!(head.shorthand().unwrap(), "feature/rebase");
+
+    // Verify history: Feature -> Master -> Base
+    let commits = git::list_commits(temp.path(), 10, None).expect("list commits");
+    assert_eq!(commits.len(), 3);
+    assert_eq!(commits[0].summary, "Feature commit");
+    assert_eq!(commits[1].summary, "Master commit");
+    assert_eq!(commits[1].id, master_head); // Should match master's commit ID exactly
+}
+
+#[test]
+fn rebase_branch_conflict() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "conflict.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    git::create_branch(temp.path(), "feature/conflict", None).expect("create branch");
+
+    // Change on master
+    write_file(temp.path(), "conflict.txt", "master change\n");
+    commit_all(temp.path(), "Master change");
+
+    // Change on feature
+    git::checkout_local_branch(temp.path(), "feature/conflict").expect("checkout feature");
+    write_file(temp.path(), "conflict.txt", "feature change\n");
+    commit_all(temp.path(), "Feature change");
+
+    // Rebase feature onto master should fail
+    let result = git::rebase_branch(temp.path(), "feature/conflict", "master");
+    assert!(result.is_err());
+    
+    // In a real CLI, we might need to abort rebase to clean up, but TempDir handles it.
+    // However, if we want to be nice, we could check if rebase is in progress.
+    let _status = git::status(temp.path()).expect("status");
+    // When rebase fails, we are usually in a detached HEAD or special state.
+    // But detecting rebase state via status might be tricky with our current status implementation.
+    // `git status` would say "rebase in progress".
+    // Let's just assert failure for now.
+}
+
+#[test]
+fn rebase_branch_autostash() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "base.txt", "base\n");
+    commit_all(temp.path(), "Base");
+
+    git::create_branch(temp.path(), "feature/autostash", None).expect("create branch");
+
+    // Advance master
+    write_file(temp.path(), "master.txt", "master\n");
+    commit_all(temp.path(), "Master commit");
+
+    // Checkout feature and make dirty
+    git::checkout_local_branch(temp.path(), "feature/autostash").expect("checkout feature");
+    write_file(temp.path(), "feature.txt", "feature\n");
+    commit_all(temp.path(), "Feature commit");
+    
+    write_file(temp.path(), "dirty.txt", "dirty\n");
+
+    // Rebase feature onto master
+    git::rebase_branch(temp.path(), "feature/autostash", "master").expect("rebase");
+
+    // Verify dirty file exists
+    assert!(temp.path().join("dirty.txt").exists());
+    let content = fs::read_to_string(temp.path().join("dirty.txt")).unwrap();
+    assert_eq!(content, "dirty\n");
+
+    // Verify rebase happened
+    let commits = git::list_commits(temp.path(), 10, None).expect("list commits");
+    assert_eq!(commits[1].summary, "Master commit");
+}
