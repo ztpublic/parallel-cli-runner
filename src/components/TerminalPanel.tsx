@@ -41,7 +41,7 @@ export function TerminalPanel({
   onNewPane,
   onSetTerminalView,
 }: TerminalPanelProps) {
-  const [activeView, setActiveView] = useState<TerminalView>("terminals");
+  const activeView: TerminalView = "terminals";
   const [menuState, setMenuState] = useState<{
     tabId: string;
     position: { x: number; y: number };
@@ -79,28 +79,6 @@ export function TerminalPanel({
 
   return (
     <section className="terminal-panel">
-      <div className="terminal-topbar panel-header">
-        <div className="terminal-view-tabs" role="tablist" aria-label="Right panel views">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "terminals"}
-            className={`terminal-view-tab ${activeView === "terminals" ? "is-active" : ""}`}
-            onClick={() => setActiveView("terminals")}
-          >
-            Terminals
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeView === "acp"}
-            className={`terminal-view-tab ${activeView === "acp" ? "is-active" : ""}`}
-            onClick={() => setActiveView("acp")}
-          >
-            ACP Sessions
-          </button>
-        </div>
-      </div>
       <div className="terminal-tabbar">
         {activeView === "terminals" ? (
           <>
