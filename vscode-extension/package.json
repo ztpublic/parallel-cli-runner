@@ -1,0 +1,57 @@
+{
+  "name": "parallel-cli-runner-vscode",
+  "displayName": "Parallel CLI Runner",
+  "description": "VSCode extension for Parallel CLI Runner",
+  "version": "0.1.0",
+  "publisher": "zt",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onCommand:parallelCliRunner.open"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "parallelCliRunner.open",
+        "title": "Parallel CLI Runner: Open"
+      }
+    ],
+    "configuration": {
+      "title": "Parallel CLI Runner",
+      "properties": {
+        "parallelCliRunner.backendPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the backend binary. If empty, use the bundled binary."
+        },
+        "parallelCliRunner.backendArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra arguments passed to the backend binary."
+        },
+        "parallelCliRunner.backendEnv": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables passed to the backend binary."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "~5.8.3"
+  }
+}

@@ -8,7 +8,10 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 const useTauriMock = process.env.TAURI_MOCK === "1";
 
-export default defineConfig(async () => ({
+export default defineConfig(async ({ mode }) => {
+  const isVscodeWebview = mode === "vscode";
+
+  return {
   plugins: [react()],
   resolve: {
     alias: useTauriMock
@@ -24,6 +27,14 @@ export default defineConfig(async () => ({
         }
       : undefined,
   },
+
+  base: isVscodeWebview ? "./" : undefined,
+  build: isVscodeWebview
+    ? {
+        outDir: "vscode-extension/webview",
+        emptyOutDir: true,
+      }
+    : undefined,
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -46,4 +57,5 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
-}));
+  };
+});

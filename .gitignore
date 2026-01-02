@@ -13,6 +13,8 @@ dist
 dist-ssr
 storybook-static
 coverage
+vscode-extension/dist
+vscode-extension/webview
 
 # Test output
 playwright-report
@@ -35,6 +37,8 @@ test-results
 .DS_Store
 .idea
 .vscode
+!.vscode/launch.json
+!.vscode/tasks.json
 
 # Tauri (Rust)
 src-tauri/target

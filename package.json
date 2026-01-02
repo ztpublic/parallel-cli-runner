@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:browser": "TAURI_MOCK=1 vite --open",
+    "frontend:build:vscode": "vite build --mode vscode",
     "build": "tsc -p tsconfig.build.json && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
