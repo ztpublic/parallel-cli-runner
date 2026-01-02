@@ -74,10 +74,22 @@ export function GitStaging({
       const formatDescription = (file: ChangedFile) => {
         if (file.insertions !== undefined && file.deletions !== undefined) {
           const parts = [];
-          if (file.insertions > 0) parts.push(`+${file.insertions}`);
-          if (file.deletions > 0) parts.push(`-${file.deletions}`);
+          if (file.insertions > 0) {
+            parts.push(
+              <span key="ins" style={{ color: "#73c991", marginRight: file.deletions > 0 ? "4px" : "0" }}>
+                +{file.insertions}
+              </span>
+            );
+          }
+          if (file.deletions > 0) {
+            parts.push(
+              <span key="del" style={{ color: "#f48771" }}>
+                -{file.deletions}
+              </span>
+            );
+          }
           if (parts.length === 0) return "No changes"; // e.g. rename only?
-          return parts.join(" ");
+          return <>{parts}</>;
         }
         return file.status.charAt(0).toUpperCase() + file.status.slice(1);
       };

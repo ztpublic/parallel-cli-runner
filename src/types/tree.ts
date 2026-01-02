@@ -35,7 +35,7 @@ export type TreeNodeContextMenuItem =
 export type TreeNode = {
   id: string;
   label: string;
-  description?: string;
+  description?: string | ReactNode;
   icon?: IconName;
   iconClassName?: string;
   children?: TreeNode[];
