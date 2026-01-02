@@ -1,6 +1,7 @@
 export type AppConfig = {
   wsUrl?: string;
   authToken?: string;
+  workspacePath?: string;
   settings?: Record<string, unknown>;
 };
 
@@ -13,6 +14,7 @@ declare global {
 const defaultConfig: AppConfig = {
   wsUrl: "",
   authToken: "",
+  workspacePath: "",
   settings: {},
 };
 

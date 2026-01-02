@@ -49,6 +49,17 @@ let panel: vscode.WebviewPanel | null = null;
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("Parallel CLI Runner");
   context.subscriptions.push(output);
+
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100
+  );
+  statusBarItem.text = "$(terminal) Parallel CLI Runner";
+  statusBarItem.tooltip = "Open Parallel CLI Runner";
+  statusBarItem.command = "parallelCliRunner.open";
+  statusBarItem.show();
+  context.subscriptions.push(statusBarItem);
+
   void ensureBackend(context, output).catch((error) => {
     output.appendLine(`Backend init failed: ${(error as Error).message}`);
   });
@@ -78,6 +89,10 @@ export function activate(context: vscode.ExtensionContext): void {
         localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "webview")],
       }
     );
+    panel.iconPath = {
+      light: vscode.Uri.joinPath(context.extensionUri, "resources", "terminal-light.svg"),
+      dark: vscode.Uri.joinPath(context.extensionUri, "resources", "terminal-dark.svg"),
+    };
 
     panel.webview.html = buildWebviewHtml(panel.webview, context.extensionUri, backend);
 
@@ -335,6 +350,7 @@ function buildWebviewHtml(
   const runtimeConfig = {
     wsUrl: backend.wsUrl,
     authToken: backend.authToken,
+    workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
     settings: backend.settings,
   };
 

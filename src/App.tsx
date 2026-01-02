@@ -12,6 +12,7 @@ import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 import { gitScanRepos } from "./services/backend";
 import { formatInvokeError } from "./services/errors";
 import { openDialog, openPath } from "./platform/actions";
+import { getAppConfig } from "./platform/config";
 import { RepoPickerModal } from "./components/RepoPickerModal";
 import { ScanProgressModal } from "./components/ScanProgressModal";
 import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
@@ -109,6 +110,7 @@ function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [repoScanError, setRepoScanError] = useState<string | null>(null);
   const [enabledRepoIds, setEnabledRepoIds] = useState<string[]>([]);
+  const [autoOpenedWorkspace, setAutoOpenedWorkspace] = useState(false);
   const [terminalSplitPaneIds, setTerminalSplitPaneIds] = useState<
     Record<string, string[]>
   >({});
@@ -270,6 +272,15 @@ function App() {
       console.error("Failed to open folder picker", error);
     }
   }, [handleOpenFolder]);
+
+  useEffect(() => {
+    if (autoOpenedWorkspace) return;
+    if (repos.length > 0 || isRepoPickerOpen || isScanning) return;
+    const { workspacePath } = getAppConfig();
+    if (!workspacePath) return;
+    setAutoOpenedWorkspace(true);
+    void handleOpenFolder(workspacePath);
+  }, [autoOpenedWorkspace, handleOpenFolder, isRepoPickerOpen, isScanning, repos.length]);
 
   const handleToggleRepo = useCallback((repoId: string) => {
     setSelectedRepoIds((prev) =>
