@@ -8,18 +8,29 @@ Your goal is feasible and can be done cleanly, but there are a few hard constrai
 - **Tauri APIs are not available:** Any frontend code that depends on Tauri (`@tauri-apps/api`, `invoke`, filesystem/OS APIs, window APIs) will not work in VSCode. You will need a transport and platform abstraction layer.
 - **Native binary distribution:** VSCode extensions can ship native binaries, but you must package per-OS (and often per-arch) bundles. This is manageable but adds CI/build complexity.
 - **Security and CSP:** Webviews have strict CSP. You must explicitly allow `connect-src` for `http://127.0.0.1:<port>` and `ws://127.0.0.1:<port>`, and keep auth scoped to `127.0.0.1` with a per-session token.
-- **Remote scenarios:** In VSCode Remote (SSH/Codespaces), a local port might not be reachable by the webview without `vscode.env.asExternalUri`. If remote support is needed, plan for it now.
+- **Remote scenarios:** VSCode Remote (SSH/Codespaces) is intentionally out of scope, so you can assume localhost connectivity from the webview.
 
 Overall: the idea is sound **if you commit to a shared transport (HTTP/WS) and a small platform layer** so the React UI can run in both Tauri and VSCode. The Rust backend-as-binary is a strong fit for VSCode, but you must handle packaging and lifecycle carefully.
 
 ---
 
+## Decisions to make before execution
+
+- **Feature parity boundary:** list which Tauri-only features are excluded from the VSCode build.
+- **Protocol contract details:** finalize endpoints/events, payload schema, error model, and versioning (transport is HTTP+WS).
+- **Backend lifecycle model:** in-process vs sidecar in Tauri; start/stop triggers and shutdown timeouts.
+- **Port + multi-window strategy:** fixed vs ephemeral ports; shared backend vs per-window; collision handling.
+- **Auth token policy:** generation, header name, rotation/expiry, and storage in the webview.
+- **Context handoff:** CLI args vs env vars vs config file for workspace path and user settings.
+- **Target platform matrix:** which OS/arch to ship first; binary naming and packaging rules.
+- **Logging/diagnostics:** output channel naming, log levels, and user-facing error strategy.
+
 ## Step-by-step integration plan
 
 ### Phase 0: Discovery and constraints
 1. **Inventory Tauri dependencies** used by the React app (APIs, file access, window management, IPC). Decide which must be supported in VSCode and which are Tauri-only.
-2. **Define the shared transport contract** (request/response shape, streaming needs, events). Decide on HTTP + WebSocket (recommended) or pure WebSocket.
-3. **Decide on remote support** (local desktop only vs. VSCode Remote). This affects URL generation and CSP.
+2. **Define the shared transport contract** (request/response shape, streaming needs, events). Use HTTP + WebSocket (recommended) or WebSocket-only if you want a single channel.
+3. **Confirm remote support is out of scope** so URL generation and CSP can assume local desktop only.
 
 ### Phase 1: Create a shared transport layer
 4. **Add a frontend transport abstraction** (e.g., `src/platform/transport.ts`) with a concrete `HttpTransport`/`WsTransport` implementation.
@@ -35,7 +46,7 @@ Overall: the idea is sound **if you commit to a shared transport (HTTP/WS) and a
 ### Phase 3: Tauri compatibility
 11. **Run the Rust server inside Tauri** (background task or sidecar) and point the Tauri webview frontend at `http://127.0.0.1:<port>`.
 12. **Update Tauri CSP/permissions** to allow `connect-src` to localhost and `ws://` for the chosen port.
-13. **Remove direct `invoke` usage** or keep it behind a debug-only transport for local development.
+13. **Remove direct `invoke` usage** after migration (allow a short-lived fallback only if needed).
 
 ### Phase 4: VSCode extension scaffold
 14. **Create a new `vscode-extension/` folder** with a standard extension scaffold (`package.json`, `src/extension.ts`, `tsconfig.json`).
@@ -69,7 +80,6 @@ Overall: the idea is sound **if you commit to a shared transport (HTTP/WS) and a
 ### Phase 9: Validation and QA
 27. **Desktop smoke test**: run VSCode, open the extension webview, verify backend connectivity and feature parity.
 28. **Offline test**: ensure no network calls are required except localhost.
-29. **Remote test (if supported)**: VSCode Remote + port forwarding (use `vscode.env.asExternalUri`).
 
 ### Phase 10: Documentation
 30. **Add developer docs** describing:
@@ -79,8 +89,7 @@ Overall: the idea is sound **if you commit to a shared transport (HTTP/WS) and a
 
 ---
 
-## Recommended next decisions
+## Confirmed decisions
 
-1. Confirm whether VSCode Remote support is required. This impacts URL generation and CSP.
-2. Decide whether to keep Tauri `invoke` as a secondary transport for local dev, or fully migrate to HTTP/WS.
-3. Decide on a preferred folder for the extension (I suggested `vscode-extension/`).
+1. Fully migrate to HTTP/WS; do not keep Tauri `invoke` beyond a short-lived migration fallback if needed.
+2. Use `vscode-extension/` as the extension folder.
