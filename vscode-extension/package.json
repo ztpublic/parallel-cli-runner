@@ -4,6 +4,12 @@
   "description": "VSCode extension for Parallel CLI Runner",
   "version": "0.1.0",
   "publisher": "zt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/parallel-cli-runner.git"
+  },
+
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -11,11 +17,6 @@
   "activationEvents": [
   ],
   "main": "./dist/extension.js",
-  "files": [
-    "dist",
-    "webview",
-    "bin/**"
-  ],
   "contributes": {
     "commands": [
       {
@@ -52,6 +53,7 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "prepackage:mac-arm64": "cargo build --release --manifest-path ../src-tauri/Cargo.toml && mkdir -p bin/darwin-arm64 && cp ../src-tauri/target/release/parallel-cli-runner bin/darwin-arm64/parallel-cli-runner",
     "package:win-x64": "vsce package --target win32-x64 --out parallel-cli-runner-win32-x64.vsix",
     "package:mac-arm64": "vsce package --target darwin-arm64 --out parallel-cli-runner-darwin-arm64.vsix"
   },
