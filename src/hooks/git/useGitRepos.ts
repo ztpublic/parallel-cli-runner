@@ -854,6 +854,7 @@ export function useGitRepos() {
     repos,
     setRepos,
     statusByRepo,
+    statusByWorktreeByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
     worktreeCommitsByRepo,

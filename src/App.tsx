@@ -54,6 +54,7 @@ function App() {
     repos,
     setRepos,
     statusByRepo,
+    statusByWorktreeByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
     worktreeCommitsByRepo,
@@ -368,20 +369,35 @@ function App() {
     }));
     const worktreeGroups = enabledRepoHeaders.flatMap((repo) => {
       const worktrees = worktreesByRepo[repo.repoId] ?? [];
-      return worktrees
-        .filter((worktree) => worktree.path !== repo.path)
-        .map((worktree) => ({
-          repo: {
-            repoId: makeWorktreeTargetId(repo.repoId, worktree.path),
-            name: `${repo.name}:${worktree.branch}`,
-            path: worktree.path,
-            activeBranch: worktree.branch,
-          },
-          items: changedFilesByWorktreeByRepo[repo.repoId]?.[worktree.path] ?? [],
-        }));
+      const worktreeByPath = new Map(worktrees.map((worktree) => [worktree.path, worktree]));
+      const statusByPath = statusByWorktreeByRepo[repo.repoId] ?? {};
+      const paths = new Set([...worktreeByPath.keys(), ...Object.keys(statusByPath)]);
+
+      return Array.from(paths)
+        .filter((path) => path !== repo.path)
+        .map((path) => {
+          const worktree = worktreeByPath.get(path);
+          const branchName = worktree?.branch ?? statusByPath[path]?.branch ?? "HEAD";
+
+          return {
+            repo: {
+              repoId: makeWorktreeTargetId(repo.repoId, path),
+              name: `${repo.name}:${branchName}`,
+              path,
+              activeBranch: branchName,
+            },
+            items: changedFilesByWorktreeByRepo[repo.repoId]?.[path] ?? [],
+          };
+        });
     });
     return [...repoGroups, ...worktreeGroups];
-  }, [enabledRepoHeaders, changedFilesByRepo, worktreesByRepo, changedFilesByWorktreeByRepo]);
+  }, [
+    enabledRepoHeaders,
+    changedFilesByRepo,
+    worktreesByRepo,
+    statusByWorktreeByRepo,
+    changedFilesByWorktreeByRepo,
+  ]);
 
   const openTerminalAt = useCallback(
     async ({ cwd, title, subtitle }: { cwd: string; title: string; subtitle?: string }) => {
