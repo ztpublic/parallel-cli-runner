@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { openPath } from "../../platform/actions";
+import { openFileInEditor } from "../../platform/actions";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";
@@ -196,7 +196,7 @@ export function GitStaging({
       if (stagedFile) {
         if (actionId === "open-file") {
           const fullPath = `${group.repo.path}/${stagedFile.path}`;
-          openPath(fullPath, "Visual Studio Code");
+          openFileInEditor(fullPath);
         }
         if (actionId === "unstage")
           onUnstageFile(group.repo.repoId, stagedFile.path);
@@ -213,7 +213,7 @@ export function GitStaging({
       if (unstagedFile) {
         if (actionId === "open-file") {
           const fullPath = `${group.repo.path}/${unstagedFile.path}`;
-          openPath(fullPath, "Visual Studio Code");
+          openFileInEditor(fullPath);
         }
         if (actionId === "stage")
           onStageFile(group.repo.repoId, unstagedFile.path);

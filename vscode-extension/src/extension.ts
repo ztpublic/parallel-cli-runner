@@ -21,6 +21,25 @@ type BackendState = {
   settings: ExtensionSettings;
 };
 
+type WebviewRequest = {
+  type: "vscode-request";
+  id: string;
+  method: string;
+  params?: unknown;
+};
+
+type WebviewResponse = {
+  type: "vscode-response";
+  id: string;
+  ok: boolean;
+  result?: unknown;
+  error?: {
+    message: string;
+    code?: string;
+    data?: unknown;
+  };
+};
+
 const ENV_WS_URL = "PARALLEL_CLI_RUNNER_WS_URL";
 const ENV_AUTH_TOKEN = "PARALLEL_CLI_RUNNER_AUTH_TOKEN";
 
@@ -61,12 +80,81 @@ export function activate(context: vscode.ExtensionContext): void {
 
     panel.webview.html = buildWebviewHtml(panel.webview, context.extensionUri, backend);
 
+    const messageDisposable = panel.webview.onDidReceiveMessage(async (message) => {
+      const request = message as WebviewRequest | undefined;
+      if (!request || request.type !== "vscode-request" || !request.id) {
+        return;
+      }
+
+      try {
+        const result = await handleWebviewRequest(request);
+        const response: WebviewResponse = {
+          type: "vscode-response",
+          id: request.id,
+          ok: true,
+          result,
+        };
+        void panel?.webview.postMessage(response);
+      } catch (error) {
+        const response: WebviewResponse = {
+          type: "vscode-response",
+          id: request.id,
+          ok: false,
+          error: { message: (error as Error).message || "Request failed" },
+        };
+        void panel?.webview.postMessage(response);
+      }
+    });
+
     panel.onDidDispose(() => {
+      messageDisposable.dispose();
       panel = null;
     });
   });
 
   context.subscriptions.push(openCommand);
+}
+
+async function handleWebviewRequest(request: WebviewRequest): Promise<unknown> {
+  switch (request.method) {
+    case "vscode.showOpenDialog": {
+      const params = request.params as
+        | {
+            canSelectFiles?: boolean;
+            canSelectFolders?: boolean;
+            canSelectMany?: boolean;
+            title?: string;
+            defaultUri?: string;
+          }
+        | undefined;
+      const options: vscode.OpenDialogOptions = {
+        canSelectFiles: params?.canSelectFiles ?? true,
+        canSelectFolders: params?.canSelectFolders ?? false,
+        canSelectMany: params?.canSelectMany ?? false,
+        title: params?.title,
+      };
+      if (params?.defaultUri) {
+        options.defaultUri = vscode.Uri.file(params.defaultUri);
+      }
+      const result = await vscode.window.showOpenDialog(options);
+      return result?.map((uri) => uri.fsPath) ?? null;
+    }
+    case "vscode.openFile": {
+      const params = request.params as { path?: string; preview?: boolean } | undefined;
+      if (!params?.path) {
+        throw new Error("Missing file path");
+      }
+      const document = await vscode.workspace.openTextDocument(
+        vscode.Uri.file(params.path)
+      );
+      await vscode.window.showTextDocument(document, {
+        preview: params.preview ?? true,
+      });
+      return null;
+    }
+    default:
+      throw new Error(`Unknown VS Code request: ${request.method}`);
+  }
 }
 
 export function deactivate(): void {
