@@ -9,7 +9,6 @@
   },
   "categories": ["Other"],
   "activationEvents": [
-    "onCommand:parallelCliRunner.open"
   ],
   "main": "./dist/extension.js",
   "files": [
