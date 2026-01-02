@@ -82,6 +82,16 @@ export function TerminalPanel({
                     <span>{tab.title || `Terminal ${index + 1}`}</span>
                     <button
                       type="button"
+                      className="terminal-tab-menu"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                      }}
+                      title="Terminal options"
+                    >
+                      <Icon name="ellipsis" size={14} />
+                    </button>
+                    <button
+                      type="button"
                       className="terminal-tab-close"
                       onClick={(event) => {
                         event.stopPropagation();

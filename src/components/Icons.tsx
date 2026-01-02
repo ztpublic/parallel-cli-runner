@@ -12,6 +12,7 @@ export type IconName =
   | "close"
   | "cloud"
   | "commit"
+  | "ellipsis"
   | "fileAdd"
   | "fileEdit"
   | "fileRemove"
@@ -84,6 +85,13 @@ const iconPaths: Record<IconName, ReactNode> = {
     <>
       <line x1="3" y1="12" x2="21" y2="12" />
       <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  ellipsis: (
+    <>
+      <circle cx="6" cy="12" r="1.5" />
+      <circle cx="12" cy="12" r="1.5" />
+      <circle cx="18" cy="12" r="1.5" />
     </>
   ),
   fileAdd: (

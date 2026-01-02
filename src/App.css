@@ -1284,12 +1284,31 @@ button {
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 
+.terminal-tab-menu {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  margin-left: 6px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
 .terminal-tab-close:hover {
   color: var(--text-strong);
 }
 
+.terminal-tab-menu:hover {
+  color: var(--text-strong);
+}
+
 .terminal-tab:hover .terminal-tab-close,
-.terminal-tab.is-active .terminal-tab-close {
+.terminal-tab.is-active .terminal-tab-close,
+.terminal-tab:hover .terminal-tab-menu,
+.terminal-tab.is-active .terminal-tab-menu {
   opacity: 1;
 }
 
