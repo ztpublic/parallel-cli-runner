@@ -39,6 +39,8 @@ export function GitWorktrees({
 
   const nodes: TreeNode[] = worktreeGroups.map((group) => {
     const activeBranch = group.repo.activeBranch;
+    const worktrees = group.items.filter((worktree) => worktree.path !== group.repo.path);
+
     return {
       id: group.repo.repoId,
       label: group.repo.name,
@@ -46,7 +48,7 @@ export function GitWorktrees({
       icon: "folder",
       defaultExpanded: true,
       selectable: false,
-      rightSlot: <span className="git-pill">{group.items.length}</span>,
+      rightSlot: <span className="git-pill">{worktrees.length}</span>,
       actions: [
         {
           id: "create-worktree",
@@ -54,9 +56,7 @@ export function GitWorktrees({
           label: "Create Worktree",
         },
       ],
-      children: group.items
-        .filter((worktree) => worktree.path !== group.repo.path)
-        .map((worktree) => {
+      children: worktrees.map((worktree) => {
           const isAhead = (worktree.ahead ?? 0) > 0;
           const isBehind = (worktree.behind ?? 0) > 0;
           const hasStatus = isAhead || isBehind;
