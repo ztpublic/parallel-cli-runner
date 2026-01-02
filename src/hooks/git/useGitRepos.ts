@@ -143,7 +143,7 @@ type WithRepoOptions = {
 
 export function useGitRepos() {
   const refreshSeqRef = useRef(0);
-  const loadMoreSeqRef = useRef<Record<RepoId, number>>({});
+  const loadMoreSeqRef = useRef<Record<RepoId, Record<string, number>>>({});
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
   const [statusByRepo, setStatusByRepo] = useState<Record<RepoId, RepoStatusDto | null>>({});
   
@@ -151,7 +151,9 @@ export function useGitRepos() {
   const [allLocalBranchesByRepo, setAllLocalBranchesByRepo] = useState<Record<RepoId, BranchItem[]>>({});
   const [allRemoteBranchesByRepo, setAllRemoteBranchesByRepo] = useState<Record<RepoId, BranchItem[]>>({});
   
-  const [commitsByRepo, setCommitsByRepo] = useState<Record<RepoId, CommitItem[]>>({});
+  const [worktreeCommitsByRepo, setWorktreeCommitsByRepo] = useState<
+    Record<RepoId, Record<string, CommitItem[]>>
+  >({});
   const [worktreesByRepo, setWorktreesByRepo] = useState<Record<RepoId, WorktreeItem[]>>({});
   const [remotesByRepo, setRemotesByRepo] = useState<Record<RepoId, RemoteItem[]>>({});
   const [submodulesByRepo, setSubmodulesByRepo] = useState<Record<RepoId, SubmoduleItem[]>>({});
@@ -160,9 +162,15 @@ export function useGitRepos() {
   const [error, setError] = useState<string | null>(null);
 
   // Pagination state
-  const [commitsSkipByRepo, setCommitsSkipByRepo] = useState<Record<RepoId, number>>({});
-  const [hasMoreCommitsByRepo, setHasMoreCommitsByRepo] = useState<Record<RepoId, boolean>>({});
-  const [loadingMoreCommitsByRepo, setLoadingMoreCommitsByRepo] = useState<Record<RepoId, boolean>>({});
+  const [commitsSkipByWorktreeByRepo, setCommitsSkipByWorktreeByRepo] = useState<
+    Record<RepoId, Record<string, number>>
+  >({});
+  const [hasMoreCommitsByWorktreeByRepo, setHasMoreCommitsByWorktreeByRepo] = useState<
+    Record<RepoId, Record<string, boolean>>
+  >({});
+  const [loadingMoreCommitsByWorktreeByRepo, setLoadingMoreCommitsByWorktreeByRepo] = useState<
+    Record<RepoId, Record<string, boolean>>
+  >({});
   
   const [localBranchLimitByRepo, setLocalBranchLimitByRepo] = useState<Record<RepoId, number>>({});
   const [remoteBranchLimitByRepo, setRemoteBranchLimitByRepo] = useState<Record<RepoId, number>>({});
@@ -178,15 +186,15 @@ export function useGitRepos() {
     setStatusByRepo(filterState);
     setAllLocalBranchesByRepo(filterState);
     setAllRemoteBranchesByRepo(filterState);
-    setCommitsByRepo(filterState);
+    setWorktreeCommitsByRepo(filterState);
     setWorktreesByRepo(filterState);
     setRemotesByRepo(filterState);
     setSubmodulesByRepo(filterState);
     setStashesByRepo(filterState);
     
-    setCommitsSkipByRepo(filterState);
-    setHasMoreCommitsByRepo(filterState);
-    setLoadingMoreCommitsByRepo(filterState);
+    setCommitsSkipByWorktreeByRepo(filterState);
+    setHasMoreCommitsByWorktreeByRepo(filterState);
+    setLoadingMoreCommitsByWorktreeByRepo(filterState);
     setLocalBranchLimitByRepo(filterState);
     setRemoteBranchLimitByRepo(filterState);
   }, []);
@@ -202,17 +210,6 @@ export function useGitRepos() {
       setError(null);
 
       try {
-        // Reset pagination for targets
-        setCommitsSkipByRepo((prev) => {
-          const next = { ...prev };
-          targets.forEach((r) => { next[r.repo_id] = 0; });
-          return next;
-        });
-        setHasMoreCommitsByRepo((prev) => {
-          const next = { ...prev };
-          targets.forEach((r) => { next[r.repo_id] = true; });
-          return next;
-        });
         setLocalBranchLimitByRepo((prev) => {
           const next = { ...prev };
           targets.forEach((r) => { next[r.repo_id] = 10; });
@@ -230,7 +227,6 @@ export function useGitRepos() {
               statusDto,
               local,
               remote,
-              commitDtos,
               worktreeDtos,
               remoteDtos,
               submoduleDtos,
@@ -239,20 +235,49 @@ export function useGitRepos() {
               gitStatus({ cwd: repo.root_path }),
               gitListBranches({ cwd: repo.root_path }),
               gitListRemoteBranches({ cwd: repo.root_path }),
-              gitListCommits({ cwd: repo.root_path, limit: 10, skip: 0 }),
               gitListWorktrees({ cwd: repo.root_path }),
               gitListRemotes({ cwd: repo.root_path }),
               gitListSubmodules({ cwd: repo.root_path }),
               gitListStashes({ cwd: repo.root_path }),
             ]);
+            const worktrees = mapWorktrees(worktreeDtos);
+            const resolvedWorktrees =
+              worktrees.length > 0
+                ? worktrees
+                : [{ branch: statusDto.branch || "HEAD", path: repo.root_path }];
+            const worktreeCommitDtos = await Promise.all(
+              resolvedWorktrees.map((worktree) =>
+                gitListCommits({ cwd: worktree.path, limit: 10, skip: 0 })
+              )
+            );
+            const worktreeCommits = Object.fromEntries(
+              resolvedWorktrees.map((worktree, index) => [
+                worktree.path,
+                mapCommits(worktreeCommitDtos[index] ?? []),
+              ])
+            );
+            const worktreeSkips = Object.fromEntries(
+              resolvedWorktrees.map((worktree) => [worktree.path, 0])
+            );
+            const hasMoreCommitsByWorktree = Object.fromEntries(
+              resolvedWorktrees.map((worktree, index) => [
+                worktree.path,
+                (worktreeCommitDtos[index] ?? []).length === 10,
+              ])
+            );
+            const loadingMoreCommitsByWorktree = Object.fromEntries(
+              resolvedWorktrees.map((worktree) => [worktree.path, false])
+            );
             return {
               repoId: repo.repo_id,
               status: statusDto,
               localBranches: mapBranches(local),
               remoteBranches: mapBranches(remote),
-              commits: mapCommits(commitDtos),
-              hasMoreCommits: commitDtos.length === 10,
-              worktrees: mapWorktrees(worktreeDtos),
+              worktrees: resolvedWorktrees,
+              worktreeCommits,
+              worktreeSkips,
+              hasMoreCommitsByWorktree,
+              loadingMoreCommitsByWorktree,
               remotes: mapRemotes(remoteDtos),
               submodules: mapSubmodules(submoduleDtos),
               stashes: mapStashes(stashDtos),
@@ -279,14 +304,24 @@ export function useGitRepos() {
           for (const result of results) next[result.repoId] = result.remoteBranches;
           return next;
         });
-        setCommitsByRepo((prev) => {
+        setWorktreeCommitsByRepo((prev) => {
           const next = { ...prev };
-          for (const result of results) next[result.repoId] = result.commits;
+          for (const result of results) next[result.repoId] = result.worktreeCommits;
           return next;
         });
-        setHasMoreCommitsByRepo((prev) => {
+        setCommitsSkipByWorktreeByRepo((prev) => {
           const next = { ...prev };
-          for (const result of results) next[result.repoId] = result.hasMoreCommits;
+          for (const result of results) next[result.repoId] = result.worktreeSkips;
+          return next;
+        });
+        setHasMoreCommitsByWorktreeByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.hasMoreCommitsByWorktree;
+          return next;
+        });
+        setLoadingMoreCommitsByWorktreeByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.loadingMoreCommitsByWorktree;
           return next;
         });
         setWorktreesByRepo((prev) => {
@@ -324,40 +359,63 @@ export function useGitRepos() {
     [repos]
   );
 
-  const loadMoreCommits = useCallback(async (repoId: RepoId) => {
-    const repo = repos.find((r) => r.repo_id === repoId);
-    if (!repo || !hasMoreCommitsByRepo[repoId] || loadingMoreCommitsByRepo[repoId]) return;
+  const loadMoreCommits = useCallback(async (repoId: RepoId, worktreePath: string) => {
+    const worktrees = worktreesByRepo[repoId] ?? [];
+    const hasMore = hasMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath];
+    const isLoading = loadingMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath];
+    if (!worktrees.some((worktree) => worktree.path === worktreePath) || !hasMore || isLoading) {
+      return;
+    }
 
-    const requestId = (loadMoreSeqRef.current[repoId] ?? 0) + 1;
-    loadMoreSeqRef.current[repoId] = requestId;
-    setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: true }));
+    const repoRequests = loadMoreSeqRef.current[repoId] ?? {};
+    const requestId = (repoRequests[worktreePath] ?? 0) + 1;
+    loadMoreSeqRef.current[repoId] = { ...repoRequests, [worktreePath]: requestId };
+    setLoadingMoreCommitsByWorktreeByRepo((prev) => ({
+      ...prev,
+      [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: true },
+    }));
     try {
-      const skip = commitsSkipByRepo[repoId] ?? 0;
+      const skip = commitsSkipByWorktreeByRepo[repoId]?.[worktreePath] ?? 0;
       const nextSkip = skip + 10;
       const moreCommits = await gitListCommits({
-        cwd: repo.root_path,
+        cwd: worktreePath,
         limit: 10,
         skip: nextSkip,
       });
 
-      if (loadMoreSeqRef.current[repoId] !== requestId) {
+      if ((loadMoreSeqRef.current[repoId]?.[worktreePath] ?? 0) !== requestId) {
         return;
       }
 
-      setCommitsByRepo((prev) => ({
+      setWorktreeCommitsByRepo((prev) => ({
         ...prev,
-        [repoId]: [...(prev[repoId] ?? []), ...mapCommits(moreCommits)],
+        [repoId]: {
+          ...(prev[repoId] ?? {}),
+          [worktreePath]: [
+            ...(prev[repoId]?.[worktreePath] ?? []),
+            ...mapCommits(moreCommits),
+          ],
+        },
       }));
-      setCommitsSkipByRepo((prev) => ({ ...prev, [repoId]: nextSkip }));
+      setCommitsSkipByWorktreeByRepo((prev) => ({
+        ...prev,
+        [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: nextSkip },
+      }));
       if (moreCommits.length < 10) {
-        setHasMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
+        setHasMoreCommitsByWorktreeByRepo((prev) => ({
+          ...prev,
+          [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: false },
+        }));
       }
     } finally {
-      if (loadMoreSeqRef.current[repoId] === requestId) {
-        setLoadingMoreCommitsByRepo((prev) => ({ ...prev, [repoId]: false }));
+      if ((loadMoreSeqRef.current[repoId]?.[worktreePath] ?? 0) === requestId) {
+        setLoadingMoreCommitsByWorktreeByRepo((prev) => ({
+          ...prev,
+          [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: false },
+        }));
       }
     }
-  }, [repos, hasMoreCommitsByRepo, loadingMoreCommitsByRepo, commitsSkipByRepo]);
+  }, [worktreesByRepo, hasMoreCommitsByWorktreeByRepo, loadingMoreCommitsByWorktreeByRepo, commitsSkipByWorktreeByRepo]);
 
   const loadMoreLocalBranches = useCallback((repoId: RepoId) => {
     setLocalBranchLimitByRepo((prev) => ({ ...prev, [repoId]: (prev[repoId] ?? 10) + 10 }));
@@ -570,12 +628,17 @@ export function useGitRepos() {
   );
 
   const reset = useCallback(
-    async (repoId: RepoId, target: string, mode: "soft" | "mixed" | "hard") => {
+    async (
+      repoId: RepoId,
+      target: string,
+      mode: "soft" | "mixed" | "hard",
+      worktreePath?: string
+    ) => {
       await withRepo(
         repoId,
         (repo) =>
           gitReset({
-            cwd: repo.root_path,
+            cwd: worktreePath ?? repo.root_path,
             target,
             mode,
           }),
@@ -586,12 +649,12 @@ export function useGitRepos() {
   );
 
   const revert = useCallback(
-    async (repoId: RepoId, commitId: string) => {
+    async (repoId: RepoId, commitId: string, worktreePath?: string) => {
       await withRepo(
         repoId,
         (repo) =>
           gitRevert({
-            cwd: repo.root_path,
+            cwd: worktreePath ?? repo.root_path,
             commit: commitId,
           }),
         { errorMessage: "Failed to revert commit" }
@@ -601,12 +664,12 @@ export function useGitRepos() {
   );
 
   const squashCommits = useCallback(
-    async (repoId: RepoId, commitIds: string[]) => {
+    async (repoId: RepoId, commitIds: string[], worktreePath?: string) => {
       await withRepo(
         repoId,
         (repo) =>
           gitSquashCommits({
-            cwd: repo.root_path,
+            cwd: worktreePath ?? repo.root_path,
             commits: commitIds,
           }),
         { errorMessage: "Failed to squash commits" }
@@ -616,12 +679,12 @@ export function useGitRepos() {
   );
 
   const commitsInRemote = useCallback(
-    async (repoId: RepoId, commitIds: string[]) => {
+    async (repoId: RepoId, commitIds: string[], worktreePath?: string) => {
       const result = await withRepo(
         repoId,
         (repo) =>
           gitCommitsInRemote({
-            cwd: repo.root_path,
+            cwd: worktreePath ?? repo.root_path,
             commits: commitIds,
           }),
         { refresh: false, errorMessage: "Failed to check commits in remote" }
@@ -701,7 +764,7 @@ export function useGitRepos() {
     statusByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
-    commitsByRepo,
+    worktreeCommitsByRepo,
     worktreesByRepo,
     remotesByRepo,
     submodulesByRepo,
@@ -734,9 +797,17 @@ export function useGitRepos() {
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
-    canLoadMoreCommits: useCallback((repoId: string) => hasMoreCommitsByRepo[repoId] ?? false, [hasMoreCommitsByRepo]),
+    canLoadMoreCommits: useCallback(
+      (repoId: string, worktreePath: string) =>
+        hasMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath] ?? false,
+      [hasMoreCommitsByWorktreeByRepo]
+    ),
     canLoadMoreLocalBranches: useCallback((repoId: string) => (allLocalBranchesByRepo[repoId]?.length ?? 0) > (localBranchLimitByRepo[repoId] ?? 10), [allLocalBranchesByRepo, localBranchLimitByRepo]),
     canLoadMoreRemoteBranches: useCallback((repoId: string) => (allRemoteBranchesByRepo[repoId]?.length ?? 0) > (remoteBranchLimitByRepo[repoId] ?? 10), [allRemoteBranchesByRepo, remoteBranchLimitByRepo]),
-    isLoadingMoreCommits: useCallback((repoId: string) => loadingMoreCommitsByRepo[repoId] ?? false, [loadingMoreCommitsByRepo]),
+    isLoadingMoreCommits: useCallback(
+      (repoId: string, worktreePath: string) =>
+        loadingMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath] ?? false,
+      [loadingMoreCommitsByWorktreeByRepo]
+    ),
   };
 }

@@ -3,17 +3,22 @@ import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { ResetDialog } from "../dialogs/ResetDialog";
 import { RevertDialog } from "../dialogs/RevertDialog";
-import type { CommitItem, RepoGroup } from "../../types/git-ui";
+import type { RepoGroup, WorktreeCommits } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
 type GitCommitsProps = {
-  commitGroups: RepoGroup<CommitItem>[];
-  onLoadMore?: (repoId: string) => void;
-  canLoadMore?: (repoId: string) => boolean;
-  isLoadingMore?: (repoId: string) => boolean;
-  onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
-  onRevert?: (repoId: string, commitId: string) => void;
-  onSquashCommits?: (repoId: string, commitIds: string[]) => void;
+  commitGroups: RepoGroup<WorktreeCommits>[];
+  onLoadMore?: (repoId: string, worktreePath: string) => void;
+  canLoadMore?: (repoId: string, worktreePath: string) => boolean;
+  isLoadingMore?: (repoId: string, worktreePath: string) => boolean;
+  onReset?: (
+    repoId: string,
+    worktreePath: string,
+    commitId: string,
+    mode: "soft" | "mixed" | "hard"
+  ) => void;
+  onRevert?: (repoId: string, worktreePath: string, commitId: string) => void;
+  onSquashCommits?: (repoId: string, worktreePath: string, commitIds: string[]) => void;
 };
 
 export function GitCommits({
@@ -28,43 +33,70 @@ export function GitCommits({
   const [resetDialog, setResetDialog] = useState<{
     open: boolean;
     repoId: string;
+    worktreePath: string;
     commitId: string;
-  }>({ open: false, repoId: "", commitId: "" });
+  }>({ open: false, repoId: "", worktreePath: "", commitId: "" });
 
   const [revertDialog, setRevertDialog] = useState<{
     open: boolean;
     repoId: string;
+    worktreePath: string;
     commitId: string;
-  }>({ open: false, repoId: "", commitId: "" });
+  }>({ open: false, repoId: "", worktreePath: "", commitId: "" });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  const nodes: TreeNode[] = commitGroups.map((group) => {
-    const children: TreeNode[] = group.items.map((commit) => ({
-      id: `${group.repo.repoId}:${commit.id}`,
-      label: commit.message,
-      description: `${commit.author} - ${commit.date}`,
-      icon: "commit",
-      contextMenu: [
-        {
-          id: "reset",
-          label: "Reset...",
-        },
-        {
-          id: "revert",
-          label: "Revert...",
-        },
-      ],
-    }));
+  const idSeparator = "::";
+  const encodeNodePart = (value: string) => encodeURIComponent(value);
+  const decodeNodePart = (value: string) => decodeURIComponent(value);
+  const makeWorktreeNodeId = (repoId: string, worktreePath: string) =>
+    `worktree${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}`;
+  const makeCommitNodeId = (repoId: string, worktreePath: string, commitId: string) =>
+    `commit${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}${idSeparator}${commitId}`;
+  const makeLoadMoreNodeId = (repoId: string, worktreePath: string) =>
+    `commit-load-more${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}`;
 
-    if (canLoadMore?.(group.repo.repoId)) {
-      children.push({
-        id: `${group.repo.repoId}:load-more-commits`,
-        label: "Load More...",
-        variant: "load-more",
-        isLoading: isLoadingMore?.(group.repo.repoId),
+  const nodes: TreeNode[] = commitGroups.map((group) => {
+    const worktreeNodes: TreeNode[] = group.items.map((worktreeGroup) => {
+      const commitNodes: TreeNode[] = worktreeGroup.commits.map((commit) => ({
+        id: makeCommitNodeId(group.repo.repoId, worktreeGroup.worktree.path, commit.id),
+        label: commit.message,
+        description: `${commit.author} - ${commit.date}`,
+        icon: "commit",
+        contextMenu: [
+          {
+            id: "reset",
+            label: "Reset...",
+          },
+          {
+            id: "revert",
+            label: "Revert...",
+          },
+        ],
+      }));
+
+      if (canLoadMore?.(group.repo.repoId, worktreeGroup.worktree.path)) {
+        commitNodes.push({
+          id: makeLoadMoreNodeId(group.repo.repoId, worktreeGroup.worktree.path),
+          label: "Load More...",
+          variant: "load-more",
+          isLoading: isLoadingMore?.(group.repo.repoId, worktreeGroup.worktree.path),
+          selectable: false,
+        });
+      }
+
+      return {
+        id: makeWorktreeNodeId(group.repo.repoId, worktreeGroup.worktree.path),
+        label: worktreeGroup.worktree.branch,
+        description: worktreeGroup.worktree.path,
+        icon: "folder",
+        defaultExpanded: true,
         selectable: false,
-      });
-    }
+        rightSlot: <span className="git-pill">{worktreeGroup.commits.length}</span>,
+        children: commitNodes,
+      };
+    });
+
+    const totalCommits = group.items.reduce((sum, item) => sum + item.commits.length, 0);
 
     return {
       id: group.repo.repoId,
@@ -75,49 +107,65 @@ export function GitCommits({
       icon: "folder",
       defaultExpanded: true,
       selectable: false,
-      rightSlot: <span className="git-pill">{group.items.length}</span>,
-      children,
+      rightSlot: <span className="git-pill">{totalCommits}</span>,
+      children: worktreeNodes,
     };
   });
 
   const parseCommitNodeId = (nodeId: string) => {
-    const lastColonIndex = nodeId.lastIndexOf(":");
-    if (lastColonIndex === -1) return null;
+    const parts = nodeId.split(idSeparator);
+    if (parts.length !== 4 || parts[0] !== "commit") return null;
     return {
-      repoId: nodeId.substring(0, lastColonIndex),
-      commitId: nodeId.substring(lastColonIndex + 1),
+      repoId: decodeNodePart(parts[1]),
+      worktreePath: decodeNodePart(parts[2]),
+      commitId: parts[3],
     };
   };
 
-  const getSelectedCommitIdsForRepo = (repoId: string, ids: string[]) =>
+  const parseLoadMoreNodeId = (nodeId: string) => {
+    const parts = nodeId.split(idSeparator);
+    if (parts.length !== 3 || parts[0] !== "commit-load-more") return null;
+    return {
+      repoId: decodeNodePart(parts[1]),
+      worktreePath: decodeNodePart(parts[2]),
+    };
+  };
+
+  const getSelectedCommitIdsForWorktree = (
+    repoId: string,
+    worktreePath: string,
+    ids: string[]
+  ) =>
     ids
       .map(parseCommitNodeId)
-      .filter((parsed): parsed is { repoId: string; commitId: string } => Boolean(parsed))
-      .filter((parsed) => parsed.repoId === repoId)
+      .filter(
+        (parsed): parsed is { repoId: string; worktreePath: string; commitId: string } =>
+          Boolean(parsed)
+      )
+      .filter((parsed) => parsed.repoId === repoId && parsed.worktreePath === worktreePath)
       .map((parsed) => parsed.commitId);
 
   const handleNodeActivate = (node: TreeNode) => {
-    if (node.id.endsWith(":load-more-commits")) {
-      const repoId = node.id.replace(":load-more-commits", "");
-      onLoadMore?.(repoId);
+    const parsed = parseLoadMoreNodeId(node.id);
+    if (parsed) {
+      onLoadMore?.(parsed.repoId, parsed.worktreePath);
     }
   };
 
   const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
-    // Node ID format: repoId:commitId
     const parsed = parseCommitNodeId(node.id);
     if (!parsed) return;
 
-    const { repoId, commitId } = parsed;
+    const { repoId, worktreePath, commitId } = parsed;
 
     if (itemId === "reset") {
-      setResetDialog({ open: true, repoId, commitId });
+      setResetDialog({ open: true, repoId, worktreePath, commitId });
     } else if (itemId === "revert") {
-      setRevertDialog({ open: true, repoId, commitId });
+      setRevertDialog({ open: true, repoId, worktreePath, commitId });
     } else if (itemId === "squash-commits") {
-      const commitIds = getSelectedCommitIdsForRepo(repoId, selectedIds);
+      const commitIds = getSelectedCommitIdsForWorktree(repoId, worktreePath, selectedIds);
       if (commitIds.length > 1) {
-        onSquashCommits?.(repoId, commitIds);
+        onSquashCommits?.(repoId, worktreePath, commitIds);
       }
     }
   };
@@ -129,7 +177,11 @@ export function GitCommits({
     const parsed = parseCommitNodeId(node.id);
     if (!parsed) return baseItems;
 
-    const commitIds = getSelectedCommitIdsForRepo(parsed.repoId, activeSelectedIds);
+    const commitIds = getSelectedCommitIdsForWorktree(
+      parsed.repoId,
+      parsed.worktreePath,
+      activeSelectedIds
+    );
     if (commitIds.length < 2) return baseItems;
 
     return [{ id: "squash-commits", label: "Squash Commits" }, ...baseItems];
@@ -159,7 +211,7 @@ export function GitCommits({
         commitHash={resetDialog.commitId}
         onClose={() => setResetDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={(mode) => {
-          onReset?.(resetDialog.repoId, resetDialog.commitId, mode);
+          onReset?.(resetDialog.repoId, resetDialog.worktreePath, resetDialog.commitId, mode);
         }}
       />
 
@@ -168,7 +220,7 @@ export function GitCommits({
         commitHash={revertDialog.commitId}
         onClose={() => setRevertDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={() => {
-          onRevert?.(revertDialog.repoId, revertDialog.commitId);
+          onRevert?.(revertDialog.repoId, revertDialog.worktreePath, revertDialog.commitId);
         }}
       />
     </div>

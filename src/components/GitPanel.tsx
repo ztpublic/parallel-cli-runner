@@ -11,7 +11,6 @@ import { GitRemotes } from "./git/GitRemotes";
 import { GitSubmodules } from "./git/GitSubmodules";
 import {
   ChangedFile,
-  CommitItem,
   GitTab,
   RemoteItem,
   RepoBranchGroup,
@@ -19,6 +18,7 @@ import {
   RepoHeader,
   StashItem,
   SubmoduleItem,
+  WorktreeCommits,
   WorktreeItem,
 } from "../types/git-ui";
 
@@ -27,7 +27,7 @@ type GitPanelProps = {
   repos?: RepoHeader[];
   enabledRepoIds?: string[];
   branchGroups?: RepoBranchGroup[];
-  commitGroups?: RepoGroup<CommitItem>[];
+  commitGroups?: RepoGroup<WorktreeCommits>[];
   worktreeGroups?: RepoGroup<WorktreeItem>[];
   changedFileGroups?: RepoGroup<ChangedFile>[];
   remoteGroups?: RepoGroup<RemoteItem>[];
@@ -46,21 +46,26 @@ type GitPanelProps = {
   onStageFile?: (repoId: string, path: string) => void;
   onUnstageFile?: (repoId: string, path: string) => void;
   onRollbackFiles?: (repoId: string, paths: string[]) => void;
-  onLoadMoreCommits?: (repoId: string) => void;
+  onLoadMoreCommits?: (repoId: string, worktreePath: string) => void;
   onLoadMoreLocalBranches?: (repoId: string) => void;
   onLoadMoreRemoteBranches?: (repoId: string) => void;
-  canLoadMoreCommits?: (repoId: string) => boolean;
+  canLoadMoreCommits?: (repoId: string, worktreePath: string) => boolean;
   canLoadMoreLocalBranches?: (repoId: string) => boolean;
   canLoadMoreRemoteBranches?: (repoId: string) => boolean;
-  isLoadingMoreCommits?: (repoId: string) => boolean;
+  isLoadingMoreCommits?: (repoId: string, worktreePath: string) => boolean;
   onCreateBranch?: (repoId: string, name: string, sourceBranch?: string) => void;
   onOpenFolder?: () => void;
   onSwitchBranch?: (repoId: string, branchName: string) => void;
   onDeleteBranch?: (repoId: string, branchName: string) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
-  onReset?: (repoId: string, commitId: string, mode: "soft" | "mixed" | "hard") => void;
-  onRevert?: (repoId: string, commitId: string) => void;
-  onSquashCommits?: (repoId: string, commitIds: string[]) => void;
+  onReset?: (
+    repoId: string,
+    worktreePath: string,
+    commitId: string,
+    mode: "soft" | "mixed" | "hard"
+  ) => void;
+  onRevert?: (repoId: string, worktreePath: string, commitId: string) => void;
+  onSquashCommits?: (repoId: string, worktreePath: string, commitIds: string[]) => void;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onApplyStash?: (repoId: string, stashIndex: number) => void;

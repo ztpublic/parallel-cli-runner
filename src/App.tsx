@@ -20,13 +20,13 @@ import { SquashCommitsDialog } from "./components/dialogs/SquashCommitsDialog";
 import type { RepoInfoDto } from "./types/git";
 import type {
   ChangedFile,
-  CommitItem,
   RemoteItem,
   RepoBranchGroup,
   RepoGroup,
   RepoHeader,
   StashItem,
   SubmoduleItem,
+  WorktreeCommits,
   WorktreeItem,
 } from "./types/git-ui";
 
@@ -56,7 +56,7 @@ function App() {
     statusByRepo,
     localBranchesByRepo,
     remoteBranchesByRepo,
-    commitsByRepo,
+    worktreeCommitsByRepo,
     worktreesByRepo,
     remotesByRepo,
     submodulesByRepo,
@@ -113,8 +113,9 @@ function App() {
   const [squashDialog, setSquashDialog] = useState<{
     open: boolean;
     repoId: string;
+    worktreePath: string;
     commitIds: string[];
-  }>({ open: false, repoId: "", commitIds: [] });
+  }>({ open: false, repoId: "", worktreePath: "", commitIds: [] });
 
   const startResizing = useCallback(() => {
     setIsResizing(true);
@@ -261,13 +262,16 @@ function App() {
     [localBranchesByRepo, remoteBranchesByRepo, enabledRepoHeaders]
   );
 
-  const commitGroups = useMemo<RepoGroup<CommitItem>[]>(
+  const commitGroups = useMemo<RepoGroup<WorktreeCommits>[]>(
     () =>
       enabledRepoHeaders.map((repo) => ({
         repo,
-        items: commitsByRepo[repo.repoId] ?? [],
+        items: (worktreesByRepo[repo.repoId] ?? []).map((worktree) => ({
+          worktree,
+          commits: worktreeCommitsByRepo[repo.repoId]?.[worktree.path] ?? [],
+        })),
       })),
-    [commitsByRepo, enabledRepoHeaders]
+    [enabledRepoHeaders, worktreesByRepo, worktreeCommitsByRepo]
   );
 
   const worktreeGroups = useMemo<RepoGroup<WorktreeItem>[]>(
@@ -479,24 +483,24 @@ function App() {
             mergeIntoBranch(repoId, targetBranch, sourceBranch)
           );
         }}
-        onReset={(repoId, commitId, mode) => {
+        onReset={(repoId, worktreePath, commitId, mode) => {
           void runGitCommand("Reset failed", "Failed to reset commit.", () =>
-            reset(repoId, commitId, mode)
+            reset(repoId, commitId, mode, worktreePath)
           );
         }}
-        onRevert={(repoId, commitId) => {
+        onRevert={(repoId, worktreePath, commitId) => {
           void runGitCommand("Revert failed", "Failed to revert commit.", () =>
-            revert(repoId, commitId)
+            revert(repoId, commitId, worktreePath)
           );
         }}
-        onSquashCommits={(repoId, commitIds) => {
+        onSquashCommits={(repoId, worktreePath, commitIds) => {
           void runGitCommand("Squash failed", "Failed to squash commits.", async () => {
-            const alreadyInRemote = await commitsInRemote(repoId, commitIds);
+            const alreadyInRemote = await commitsInRemote(repoId, commitIds, worktreePath);
             if (alreadyInRemote) {
-              setSquashDialog({ open: true, repoId, commitIds });
+              setSquashDialog({ open: true, repoId, worktreePath, commitIds });
               return;
             }
-            await squashCommits(repoId, commitIds);
+            await squashCommits(repoId, commitIds, worktreePath);
           });
         }}
         onCreateWorktree={(repoId, branchName, path) => {
@@ -524,9 +528,9 @@ function App() {
         onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
         onOpenWorktreeFolder={handleOpenWorktreeFolder}
         onOpenFolder={handleTriggerOpenFolder}
-        onLoadMoreCommits={(repoId) => {
+        onLoadMoreCommits={(repoId, worktreePath) => {
           void runGitCommand("Load commits failed", "Failed to load more commits.", () =>
-            loadMoreCommits(repoId)
+            loadMoreCommits(repoId, worktreePath)
           );
         }}
         onLoadMoreLocalBranches={loadMoreLocalBranches}
@@ -590,7 +594,7 @@ function App() {
         onClose={() => setSquashDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={() => {
           void runGitCommand("Squash failed", "Failed to squash commits.", () =>
-            squashCommits(squashDialog.repoId, squashDialog.commitIds)
+            squashCommits(squashDialog.repoId, squashDialog.commitIds, squashDialog.worktreePath)
           );
         }}
       />

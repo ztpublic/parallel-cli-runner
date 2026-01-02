@@ -38,6 +38,11 @@ export type WorktreeItem = {
   path: string;
 };
 
+export type WorktreeCommits = {
+  worktree: WorktreeItem;
+  commits: CommitItem[];
+};
+
 export type SubmoduleItem = {
   name: string;
   path: string;

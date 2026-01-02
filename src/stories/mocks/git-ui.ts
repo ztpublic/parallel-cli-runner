@@ -10,6 +10,7 @@ import {
   RepoBranchGroup,
   RepoGroup,
   RepoHeader,
+  WorktreeCommits,
 } from "../../types/git-ui";
 
 const repoAlpha: RepoHeader = {
@@ -44,7 +45,10 @@ const alphaCommits: CommitItem[] = [
   { id: "d4f7e8a", message: "Initial commit", author: "John Doe", date: "3 days ago" },
 ];
 
+const alphaMainWorktree: WorktreeItem = { branch: "main", path: repoAlpha.path };
+
 const alphaWorktrees: WorktreeItem[] = [
+  alphaMainWorktree,
   { branch: "feature/new-ui", path: "/home/user/projects/repo-new-ui" },
   { branch: "bugfix/terminal-crash", path: "/home/user/projects/repo-bugfix" },
   { branch: "feature/api-integration", path: "/home/user/worktrees/api-work" },
@@ -62,7 +66,10 @@ const betaCommits: CommitItem[] = [
   { id: "i4j5k6l", message: "Add deploy script", author: "Lee Wong", date: "1 day ago" },
 ];
 
+const betaMainWorktree: WorktreeItem = { branch: "main", path: repoBeta.path };
+
 const betaWorktrees: WorktreeItem[] = [
+  betaMainWorktree,
   { branch: "feature/ops", path: "/home/user/projects/beta-worktrees/ops" },
 ];
 
@@ -105,9 +112,21 @@ export const initialBranchGroups: RepoBranchGroup[] = [
   },
 ];
 
-export const initialCommitGroups: RepoGroup<CommitItem>[] = [
-  { repo: repoAlpha, items: alphaCommits },
-  { repo: repoBeta, items: betaCommits },
+const alphaWorktreeCommits: WorktreeCommits[] = [
+  { worktree: alphaMainWorktree, commits: alphaCommits },
+  { worktree: alphaWorktrees[1], commits: alphaCommits.slice(0, 2) },
+  { worktree: alphaWorktrees[2], commits: alphaCommits.slice(0, 3) },
+  { worktree: alphaWorktrees[3], commits: alphaCommits.slice(1, 4) },
+];
+
+const betaWorktreeCommits: WorktreeCommits[] = [
+  { worktree: betaMainWorktree, commits: betaCommits },
+  { worktree: betaWorktrees[1], commits: betaCommits.slice(0, 1) },
+];
+
+export const initialCommitGroups: RepoGroup<WorktreeCommits>[] = [
+  { repo: repoAlpha, items: alphaWorktreeCommits },
+  { repo: repoBeta, items: betaWorktreeCommits },
 ];
 
 export const initialWorktreeGroups: RepoGroup<WorktreeItem>[] = [
