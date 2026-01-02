@@ -61,6 +61,11 @@ export function GitWorktrees({
           icon: "folder",
           contextMenu: [
             {
+              id: "update-from-active",
+              label: activeBranch ? `Update from ${activeBranch}` : "Update from active branch",
+              disabled: !activeBranch || worktree.branch === activeBranch,
+            },
+            {
               id: "merge-to-active",
               label: activeBranch ? `Merge to ${activeBranch}` : "Merge to active branch",
               disabled: !activeBranch || worktree.branch === activeBranch,
@@ -133,15 +138,19 @@ export function GitWorktrees({
   };
 
   const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
-    if (itemId !== "merge-to-active") return;
     const lastColonIndex = node.id.lastIndexOf(":");
     if (lastColonIndex === -1) return;
     const repoId = node.id.substring(0, lastColonIndex);
     const branchName = node.id.substring(lastColonIndex + 1);
     const group = worktreeGroups.find((g) => g.repo.repoId === repoId);
     const targetBranch = group?.repo.activeBranch;
-    if (targetBranch && targetBranch !== branchName) {
+    if (!targetBranch || targetBranch === branchName) return;
+    if (itemId === "merge-to-active") {
       onMergeBranch?.(repoId, targetBranch, branchName);
+      return;
+    }
+    if (itemId === "update-from-active") {
+      onMergeBranch?.(repoId, branchName, targetBranch);
     }
   };
 
