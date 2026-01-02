@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Icon } from "./Icons";
 import { useGitTabs } from "../hooks/git/useGitTabs";
 import { GitTabBar } from "./git/GitTabBar";
@@ -154,6 +155,14 @@ export function GitPanel({
     handlePointerDown,
   } = useGitTabs(initialTabs ?? defaultTabs);
   const hasRepos = repos.length > 0;
+
+  useEffect(() => {
+    if (activeTab !== "commit" || !onRefresh || !hasRepos) return;
+    const intervalId = window.setInterval(() => {
+      onRefresh();
+    }, 10000);
+    return () => window.clearInterval(intervalId);
+  }, [activeTab, hasRepos, onRefresh]);
 
   const handleCommit = (repoId: string, message: string) => {
     onCommit?.(repoId, message);
