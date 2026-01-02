@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   gitAddWorktree,
   gitApplyStash,
@@ -35,57 +35,26 @@ import {
 import { formatInvokeError } from "../../services/errors";
 import type {
   BranchInfoDto,
-  CommitInfoDto,
-  FileStatusDto,
   RemoteInfoDto,
   RepoInfoDto,
-  RepoStatusDto,
   StashInfoDto,
   SubmoduleInfoDto,
   WorktreeInfoDto,
 } from "../../types/git";
 import type {
   BranchItem,
-  ChangedFile,
-  CommitItem,
   RemoteItem,
   StashItem,
   SubmoduleItem,
   WorktreeItem,
 } from "../../types/git-ui";
 import { parseWorktreeTargetId } from "./gitTargets";
-
-
-function mapFileStatus(file: FileStatusDto): ChangedFile[] {
-  const entries: ChangedFile[] = [];
-  if (file.staged) {
-    entries.push({
-      path: file.path,
-      status: mapChangeType(file.staged),
-      staged: true,
-      insertions: file.staged_stats?.insertions,
-      deletions: file.staged_stats?.deletions,
-    });
-  }
-  if (file.unstaged) {
-    entries.push({
-      path: file.path,
-      status: mapChangeType(file.unstaged),
-      staged: false,
-      insertions: file.unstaged_stats?.insertions,
-      deletions: file.unstaged_stats?.deletions,
-    });
-  }
-  return entries;
-}
-
-function mapChangeType(
-  status: "added" | "modified" | "deleted" | "renamed" | "unmerged"
-): ChangedFile["status"] {
-  if (status === "added") return "added";
-  if (status === "deleted") return "deleted";
-  return "modified";
-}
+import { useGitBranches } from "./useGitBranches";
+import { mapCommits, useGitCommits } from "./useGitCommits";
+import { useGitDiff } from "./useGitDiff";
+import { useGitRepoMetadata } from "./useGitRepoMetadata";
+import { useGitStatus } from "./useGitStatus";
+import { useGitWorktrees } from "./useGitWorktrees";
 
 function mapBranches(branches: BranchInfoDto[]): BranchItem[] {
   return branches.map((branch) => ({
@@ -94,15 +63,6 @@ function mapBranches(branches: BranchInfoDto[]): BranchItem[] {
     lastCommit: branch.last_commit || "",
     ahead: branch.ahead,
     behind: branch.behind,
-  }));
-}
-
-function mapCommits(commits: CommitInfoDto[]): CommitItem[] {
-  return commits.map((commit) => ({
-    id: commit.id.slice(0, 7),
-    message: commit.summary,
-    author: commit.author,
-    date: commit.relative_time,
   }));
 }
 
@@ -148,40 +108,54 @@ type WithRepoOptions = {
 
 export function useGitRepos() {
   const refreshSeqRef = useRef(0);
-  const loadMoreSeqRef = useRef<Record<RepoId, Record<string, number>>>({});
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
-  const [statusByRepo, setStatusByRepo] = useState<Record<RepoId, RepoStatusDto | null>>({});
-  const [statusByWorktreeByRepo, setStatusByWorktreeByRepo] = useState<
-    Record<RepoId, Record<string, RepoStatusDto | null>>
-  >({});
-  
-  // Store ALL fetched data
-  const [allLocalBranchesByRepo, setAllLocalBranchesByRepo] = useState<Record<RepoId, BranchItem[]>>({});
-  const [allRemoteBranchesByRepo, setAllRemoteBranchesByRepo] = useState<Record<RepoId, BranchItem[]>>({});
-  
-  const [worktreeCommitsByRepo, setWorktreeCommitsByRepo] = useState<
-    Record<RepoId, Record<string, CommitItem[]>>
-  >({});
-  const [worktreesByRepo, setWorktreesByRepo] = useState<Record<RepoId, WorktreeItem[]>>({});
-  const [remotesByRepo, setRemotesByRepo] = useState<Record<RepoId, RemoteItem[]>>({});
-  const [submodulesByRepo, setSubmodulesByRepo] = useState<Record<RepoId, SubmoduleItem[]>>({});
-  const [stashesByRepo, setStashesByRepo] = useState<Record<RepoId, StashItem[]>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Pagination state
-  const [commitsSkipByWorktreeByRepo, setCommitsSkipByWorktreeByRepo] = useState<
-    Record<RepoId, Record<string, number>>
-  >({});
-  const [hasMoreCommitsByWorktreeByRepo, setHasMoreCommitsByWorktreeByRepo] = useState<
-    Record<RepoId, Record<string, boolean>>
-  >({});
-  const [loadingMoreCommitsByWorktreeByRepo, setLoadingMoreCommitsByWorktreeByRepo] = useState<
-    Record<RepoId, Record<string, boolean>>
-  >({});
-  
-  const [localBranchLimitByRepo, setLocalBranchLimitByRepo] = useState<Record<RepoId, number>>({});
-  const [remoteBranchLimitByRepo, setRemoteBranchLimitByRepo] = useState<Record<RepoId, number>>({});
+  const { statusByRepo, setStatusByRepo, statusByWorktreeByRepo, setStatusByWorktreeByRepo } =
+    useGitStatus();
+  const { changedFilesByRepo, changedFilesByWorktreeByRepo } = useGitDiff({
+    statusByRepo,
+    statusByWorktreeByRepo,
+  });
+  const {
+    allLocalBranchesByRepo,
+    setAllLocalBranchesByRepo,
+    allRemoteBranchesByRepo,
+    setAllRemoteBranchesByRepo,
+    localBranchLimitByRepo,
+    setLocalBranchLimitByRepo,
+    remoteBranchLimitByRepo,
+    setRemoteBranchLimitByRepo,
+    localBranchesByRepo,
+    remoteBranchesByRepo,
+    loadMoreLocalBranches,
+    loadMoreRemoteBranches,
+    canLoadMoreLocalBranches,
+    canLoadMoreRemoteBranches,
+  } = useGitBranches();
+  const { worktreesByRepo, setWorktreesByRepo } = useGitWorktrees();
+  const {
+    remotesByRepo,
+    setRemotesByRepo,
+    submodulesByRepo,
+    setSubmodulesByRepo,
+    stashesByRepo,
+    setStashesByRepo,
+  } = useGitRepoMetadata();
+  const {
+    worktreeCommitsByRepo,
+    setWorktreeCommitsByRepo,
+    commitsSkipByWorktreeByRepo,
+    setCommitsSkipByWorktreeByRepo,
+    hasMoreCommitsByWorktreeByRepo,
+    setHasMoreCommitsByWorktreeByRepo,
+    loadingMoreCommitsByWorktreeByRepo,
+    setLoadingMoreCommitsByWorktreeByRepo,
+    loadMoreCommits,
+    canLoadMoreCommits,
+    isLoadingMoreCommits,
+  } = useGitCommits(worktreesByRepo);
 
   const setRepos = useCallback((nextRepos: RepoInfoDto[]) => {
     setReposState(nextRepos);
@@ -386,114 +360,6 @@ export function useGitRepos() {
     },
     [repos]
   );
-
-  const loadMoreCommits = useCallback(async (repoId: RepoId, worktreePath: string) => {
-    const worktrees = worktreesByRepo[repoId] ?? [];
-    const hasMore = hasMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath];
-    const isLoading = loadingMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath];
-    if (!worktrees.some((worktree) => worktree.path === worktreePath) || !hasMore || isLoading) {
-      return;
-    }
-
-    const repoRequests = loadMoreSeqRef.current[repoId] ?? {};
-    const requestId = (repoRequests[worktreePath] ?? 0) + 1;
-    loadMoreSeqRef.current[repoId] = { ...repoRequests, [worktreePath]: requestId };
-    setLoadingMoreCommitsByWorktreeByRepo((prev) => ({
-      ...prev,
-      [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: true },
-    }));
-    try {
-      const skip = commitsSkipByWorktreeByRepo[repoId]?.[worktreePath] ?? 0;
-      const nextSkip = skip + 10;
-      const moreCommits = await gitListCommits({
-        cwd: worktreePath,
-        limit: 10,
-        skip: nextSkip,
-      });
-
-      if ((loadMoreSeqRef.current[repoId]?.[worktreePath] ?? 0) !== requestId) {
-        return;
-      }
-
-      setWorktreeCommitsByRepo((prev) => ({
-        ...prev,
-        [repoId]: {
-          ...(prev[repoId] ?? {}),
-          [worktreePath]: [
-            ...(prev[repoId]?.[worktreePath] ?? []),
-            ...mapCommits(moreCommits),
-          ],
-        },
-      }));
-      setCommitsSkipByWorktreeByRepo((prev) => ({
-        ...prev,
-        [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: nextSkip },
-      }));
-      if (moreCommits.length < 10) {
-        setHasMoreCommitsByWorktreeByRepo((prev) => ({
-          ...prev,
-          [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: false },
-        }));
-      }
-    } finally {
-      if ((loadMoreSeqRef.current[repoId]?.[worktreePath] ?? 0) === requestId) {
-        setLoadingMoreCommitsByWorktreeByRepo((prev) => ({
-          ...prev,
-          [repoId]: { ...(prev[repoId] ?? {}), [worktreePath]: false },
-        }));
-      }
-    }
-  }, [worktreesByRepo, hasMoreCommitsByWorktreeByRepo, loadingMoreCommitsByWorktreeByRepo, commitsSkipByWorktreeByRepo]);
-
-  const loadMoreLocalBranches = useCallback((repoId: RepoId) => {
-    setLocalBranchLimitByRepo((prev) => ({ ...prev, [repoId]: (prev[repoId] ?? 10) + 10 }));
-  }, []);
-
-  const loadMoreRemoteBranches = useCallback((repoId: RepoId) => {
-    setRemoteBranchLimitByRepo((prev) => ({ ...prev, [repoId]: (prev[repoId] ?? 10) + 10 }));
-  }, []);
-
-  const changedFilesByRepo = useMemo(() => {
-    return Object.fromEntries(
-      Object.entries(statusByRepo).map(([repoId, status]) => [
-        repoId,
-        status ? status.modified_files.flatMap(mapFileStatus) : [],
-      ])
-    );
-  }, [statusByRepo]);
-
-  const changedFilesByWorktreeByRepo = useMemo(() => {
-    return Object.fromEntries(
-      Object.entries(statusByWorktreeByRepo).map(([repoId, statusByPath]) => [
-        repoId,
-        Object.fromEntries(
-          Object.entries(statusByPath).map(([path, status]) => [
-            path,
-            status ? status.modified_files.flatMap(mapFileStatus) : [],
-          ])
-        ),
-      ])
-    );
-  }, [statusByWorktreeByRepo]);
-
-  // Derived sliced branches
-  const localBranchesByRepo = useMemo(() => {
-    return Object.fromEntries(
-      Object.entries(allLocalBranchesByRepo).map(([repoId, branches]) => [
-        repoId,
-        branches.slice(0, localBranchLimitByRepo[repoId] ?? 10),
-      ])
-    );
-  }, [allLocalBranchesByRepo, localBranchLimitByRepo]);
-
-  const remoteBranchesByRepo = useMemo(() => {
-    return Object.fromEntries(
-      Object.entries(allRemoteBranchesByRepo).map(([repoId, branches]) => [
-        repoId,
-        branches.slice(0, remoteBranchLimitByRepo[repoId] ?? 10),
-      ])
-    );
-  }, [allRemoteBranchesByRepo, remoteBranchLimitByRepo]);
 
   const resolveRepo = useCallback(
     (repoId: RepoId) => {
@@ -921,17 +787,9 @@ export function useGitRepos() {
     loadMoreCommits,
     loadMoreLocalBranches,
     loadMoreRemoteBranches,
-    canLoadMoreCommits: useCallback(
-      (repoId: string, worktreePath: string) =>
-        hasMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath] ?? false,
-      [hasMoreCommitsByWorktreeByRepo]
-    ),
-    canLoadMoreLocalBranches: useCallback((repoId: string) => (allLocalBranchesByRepo[repoId]?.length ?? 0) > (localBranchLimitByRepo[repoId] ?? 10), [allLocalBranchesByRepo, localBranchLimitByRepo]),
-    canLoadMoreRemoteBranches: useCallback((repoId: string) => (allRemoteBranchesByRepo[repoId]?.length ?? 0) > (remoteBranchLimitByRepo[repoId] ?? 10), [allRemoteBranchesByRepo, remoteBranchLimitByRepo]),
-    isLoadingMoreCommits: useCallback(
-      (repoId: string, worktreePath: string) =>
-        loadingMoreCommitsByWorktreeByRepo[repoId]?.[worktreePath] ?? false,
-      [loadingMoreCommitsByWorktreeByRepo]
-    ),
+    canLoadMoreCommits,
+    canLoadMoreLocalBranches,
+    canLoadMoreRemoteBranches,
+    isLoadingMoreCommits,
   };
 }
