@@ -51,6 +51,7 @@ import type {
   SubmoduleItem,
   WorktreeItem,
 } from "../../types/git-ui";
+import { parseWorktreeTargetId } from "./gitTargets";
 
 
 function mapFileStatus(file: FileStatusDto): ChangedFile[] {
@@ -146,6 +147,9 @@ export function useGitRepos() {
   const loadMoreSeqRef = useRef<Record<RepoId, Record<string, number>>>({});
   const [repos, setReposState] = useState<RepoInfoDto[]>([]);
   const [statusByRepo, setStatusByRepo] = useState<Record<RepoId, RepoStatusDto | null>>({});
+  const [statusByWorktreeByRepo, setStatusByWorktreeByRepo] = useState<
+    Record<RepoId, Record<string, RepoStatusDto | null>>
+  >({});
   
   // Store ALL fetched data
   const [allLocalBranchesByRepo, setAllLocalBranchesByRepo] = useState<Record<RepoId, BranchItem[]>>({});
@@ -184,6 +188,7 @@ export function useGitRepos() {
       Object.fromEntries(Object.entries(prev).filter(([key]) => allowed.has(key)));
 
     setStatusByRepo(filterState);
+    setStatusByWorktreeByRepo(filterState);
     setAllLocalBranchesByRepo(filterState);
     setAllRemoteBranchesByRepo(filterState);
     setWorktreeCommitsByRepo(filterState);
@@ -245,6 +250,19 @@ export function useGitRepos() {
               worktrees.length > 0
                 ? worktrees
                 : [{ branch: statusDto.branch || "HEAD", path: repo.root_path }];
+            const worktreeStatusDtos = await Promise.all(
+              resolvedWorktrees.map((worktree) =>
+                worktree.path === repo.root_path
+                  ? Promise.resolve(statusDto)
+                  : gitStatus({ cwd: worktree.path })
+              )
+            );
+            const worktreeStatuses = Object.fromEntries(
+              resolvedWorktrees.map((worktree, index) => [
+                worktree.path,
+                worktreeStatusDtos[index] ?? null,
+              ])
+            );
             const worktreeCommitDtos = await Promise.all(
               resolvedWorktrees.map((worktree) =>
                 gitListCommits({ cwd: worktree.path, limit: 10, skip: 0 })
@@ -274,6 +292,7 @@ export function useGitRepos() {
               localBranches: mapBranches(local),
               remoteBranches: mapBranches(remote),
               worktrees: resolvedWorktrees,
+              worktreeStatuses,
               worktreeCommits,
               worktreeSkips,
               hasMoreCommitsByWorktree,
@@ -292,6 +311,11 @@ export function useGitRepos() {
         setStatusByRepo((prev) => {
           const next = { ...prev };
           for (const result of results) next[result.repoId] = result.status;
+          return next;
+        });
+        setStatusByWorktreeByRepo((prev) => {
+          const next = { ...prev };
+          for (const result of results) next[result.repoId] = result.worktreeStatuses;
           return next;
         });
         setAllLocalBranchesByRepo((prev) => {
@@ -434,6 +458,20 @@ export function useGitRepos() {
     );
   }, [statusByRepo]);
 
+  const changedFilesByWorktreeByRepo = useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(statusByWorktreeByRepo).map(([repoId, statusByPath]) => [
+        repoId,
+        Object.fromEntries(
+          Object.entries(statusByPath).map(([path, status]) => [
+            path,
+            status ? status.modified_files.flatMap(mapFileStatus) : [],
+          ])
+        ),
+      ])
+    );
+  }, [statusByWorktreeByRepo]);
+
   // Derived sliced branches
   const localBranchesByRepo = useMemo(() => {
     return Object.fromEntries(
@@ -459,6 +497,21 @@ export function useGitRepos() {
       return repo;
     },
     [repos]
+  );
+
+  const resolveTarget = useCallback(
+    (targetId: RepoId) => {
+      const worktreeTarget = parseWorktreeTargetId(targetId);
+      if (worktreeTarget) {
+        const repo = resolveRepo(worktreeTarget.repoId);
+        if (!repo) return null;
+        return { repo, cwd: worktreeTarget.worktreePath };
+      }
+      const repo = resolveRepo(targetId);
+      if (!repo) return null;
+      return { repo, cwd: repo.root_path };
+    },
+    [resolveRepo]
   );
 
   const withRepo = useCallback(
@@ -491,48 +544,68 @@ export function useGitRepos() {
   const stageFiles = useCallback(
     async (repoId: RepoId, paths: string[]) => {
       if (!paths.length) return;
-      await withRepo(repoId, (repo) => gitStageFiles({ cwd: repo.root_path, paths }));
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () =>
+        gitStageFiles({ cwd: target.cwd, paths })
+      );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const unstageFiles = useCallback(
     async (repoId: RepoId, paths: string[]) => {
       if (!paths.length) return;
-      await withRepo(repoId, (repo) => gitUnstageFiles({ cwd: repo.root_path, paths }));
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () =>
+        gitUnstageFiles({ cwd: target.cwd, paths })
+      );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const discardFiles = useCallback(
     async (repoId: RepoId, paths: string[]) => {
       if (!paths.length) return;
-      await withRepo(repoId, (repo) => gitDiscardFiles({ cwd: repo.root_path, paths }));
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () =>
+        gitDiscardFiles({ cwd: target.cwd, paths })
+      );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const stageAll = useCallback(
     async (repoId: RepoId) => {
-      await withRepo(repoId, (repo) => gitStageAll({ cwd: repo.root_path }));
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () => gitStageAll({ cwd: target.cwd }));
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const unstageAll = useCallback(
     async (repoId: RepoId) => {
-      await withRepo(repoId, (repo) => gitUnstageAll({ cwd: repo.root_path }));
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () =>
+        gitUnstageAll({ cwd: target.cwd })
+      );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const commit = useCallback(
     async (repoId: RepoId, message: string) => {
-      await withRepo(repoId, (repo) =>
-        gitCommit({ cwd: repo.root_path, message, stageAll: false, amend: false })
+      const target = resolveTarget(repoId);
+      if (!target) return;
+      await withRepo(target.repo.repo_id, () =>
+        gitCommit({ cwd: target.cwd, message, stageAll: false, amend: false })
       );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const pull = useCallback(
@@ -770,6 +843,7 @@ export function useGitRepos() {
     submodulesByRepo,
     stashesByRepo,
     changedFilesByRepo,
+    changedFilesByWorktreeByRepo,
     loading,
     error,
     refreshRepos,

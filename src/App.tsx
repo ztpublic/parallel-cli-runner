@@ -7,6 +7,7 @@ import { collectPanes } from "./types/layout";
 import { GitPanel } from "./components/GitPanel";
 import { TerminalPanel } from "./components/TerminalPanel";
 import { useGitRepos } from "./hooks/git/useGitRepos";
+import { makeWorktreeTargetId } from "./hooks/git/gitTargets";
 import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 import { gitScanRepos } from "./services/tauri";
 import { formatInvokeError } from "./services/errors";
@@ -62,6 +63,7 @@ function App() {
     submodulesByRepo,
     stashesByRepo,
     changedFilesByRepo,
+    changedFilesByWorktreeByRepo,
     loading: gitLoading,
     error: gitError,
     refreshRepos,
@@ -310,14 +312,27 @@ function App() {
     [enabledRepoHeaders, stashesByRepo]
   );
 
-  const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(
-    () =>
-      enabledRepoHeaders.map((repo) => ({
-        repo,
-        items: changedFilesByRepo[repo.repoId] ?? [],
-      })),
-    [enabledRepoHeaders, changedFilesByRepo]
-  );
+  const changedFileGroups = useMemo<RepoGroup<ChangedFile>[]>(() => {
+    const repoGroups = enabledRepoHeaders.map((repo) => ({
+      repo,
+      items: changedFilesByRepo[repo.repoId] ?? [],
+    }));
+    const worktreeGroups = enabledRepoHeaders.flatMap((repo) => {
+      const worktrees = worktreesByRepo[repo.repoId] ?? [];
+      return worktrees
+        .filter((worktree) => worktree.path !== repo.path)
+        .map((worktree) => ({
+          repo: {
+            repoId: makeWorktreeTargetId(repo.repoId, worktree.path),
+            name: `${repo.name}:${worktree.branch}`,
+            path: worktree.path,
+            activeBranch: worktree.branch,
+          },
+          items: changedFilesByWorktreeByRepo[repo.repoId]?.[worktree.path] ?? [],
+        }));
+    });
+    return [...repoGroups, ...worktreeGroups];
+  }, [enabledRepoHeaders, changedFilesByRepo, worktreesByRepo, changedFilesByWorktreeByRepo]);
 
   const openTerminalAt = useCallback(
     async ({ cwd, title, subtitle }: { cwd: string; title: string; subtitle?: string }) => {

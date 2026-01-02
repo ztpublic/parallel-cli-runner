@@ -12,6 +12,7 @@ import {
   RepoHeader,
   WorktreeCommits,
 } from "../../types/git-ui";
+import { makeWorktreeTargetId } from "../../hooks/git/gitTargets";
 
 const repoAlpha: RepoHeader = {
   repoId: "/home/user/projects/alpha",
@@ -53,6 +54,13 @@ const alphaWorktrees: WorktreeItem[] = [
   { branch: "bugfix/terminal-crash", path: "/home/user/projects/repo-bugfix" },
   { branch: "feature/api-integration", path: "/home/user/worktrees/api-work" },
 ];
+
+const alphaFeatureWorktreeHeader: RepoHeader = {
+  repoId: makeWorktreeTargetId(repoAlpha.repoId, alphaWorktrees[1].path),
+  name: `${repoAlpha.name}:${alphaWorktrees[1].branch}`,
+  path: alphaWorktrees[1].path,
+  activeBranch: alphaWorktrees[1].branch,
+};
 
 const betaLocalBranches: BranchItem[] = [
   { name: "main", current: true, lastCommit: "Update deps" },
@@ -188,7 +196,13 @@ export const initialChangedFiles: ChangedFile[] = [
   { path: "README.md", status: "deleted", staged: false },
 ];
 
+const alphaWorktreeChangedFiles: ChangedFile[] = [
+  { path: "src/features/new-ui/panel.tsx", status: "modified", staged: false },
+  { path: "src/features/new-ui/theme.css", status: "added", staged: false },
+];
+
 export const initialChangedFileGroups: RepoGroup<ChangedFile>[] = [
   { repo: repoAlpha, items: initialChangedFiles },
+  { repo: alphaFeatureWorktreeHeader, items: alphaWorktreeChangedFiles },
   { repo: repoBeta, items: [] },
 ];
