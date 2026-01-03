@@ -162,3 +162,61 @@ fn push_test() {
     let local_head = local_repo.head().unwrap().target().unwrap();
     assert_eq!(head, local_head);
 }
+
+#[test]
+fn worktree_initializes_submodules() {
+    let (temp, _repo) = init_repo();
+    write_file(temp.path(), "README.md", "main repo\n");
+    commit_all(temp.path(), "Initial commit");
+
+    // Create a submodule repository
+    let sub_temp = TempDir::new().expect("sub temp");
+    let sub_repo = Repository::init(sub_temp.path()).expect("init sub");
+    let mut config = sub_repo.config().expect("sub config");
+    config.set_str("user.name", "Test User").unwrap();
+    config.set_str("user.email", "test@example.com").unwrap();
+    write_file(sub_temp.path(), "lib.rs", "pub fn hello() {}\n");
+    {
+        let mut index = sub_repo.index().unwrap();
+        index.add_path(Path::new("lib.rs")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = sub_repo.find_tree(tree_id).unwrap();
+        let sig = sub_repo.signature().unwrap();
+        sub_repo.commit(Some("HEAD"), &sig, &sig, "Submodule commit", &tree, &[]).unwrap();
+    }
+
+    let url = sub_temp.path().to_str().unwrap();
+
+    // Add submodule to main repo using git CLI
+    let output = std::process::Command::new("git")
+        .args(&["-c", "protocol.file.allow=always", "submodule", "add", url, "libs/mylib"])
+        .current_dir(temp.path())
+        .output()
+        .expect("git submodule add");
+
+    if !output.status.success() {
+        panic!("git submodule add failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    commit_all(temp.path(), "Add submodule");
+
+    // Create worktree
+    let worktree_path = temp.path().join("worktrees/feature-one");
+    fs::create_dir_all(worktree_path.parent().unwrap()).expect("create worktree dir");
+    git::add_worktree(
+        temp.path(),
+        &worktree_path,
+        "feature/one",
+        "HEAD",
+    )
+    .expect("add worktree");
+
+    // Verify submodule directory exists in worktree and contains the expected file
+    let worktree_submodule_path = worktree_path.join("libs/mylib/lib.rs");
+    assert!(worktree_submodule_path.exists(), "submodule should be checked out in worktree");
+
+    // Verify the submodule content is correct
+    let content = fs::read_to_string(&worktree_submodule_path).expect("read submodule file");
+    assert_eq!(content, "pub fn hello() {}\n");
+}

@@ -110,6 +110,10 @@ pub fn add_worktree(
     let reference = branch_ref.into_reference();
     opts.reference(Some(&reference));
     repo.worktree(worktree_name, &full_path, Some(&opts))?;
+
+    // Initialize and checkout submodules in the new worktree
+    let _ = run_git_command(&full_path, ["-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive"]);
+
     Ok(())
 }
 
