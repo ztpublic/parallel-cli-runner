@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { GitPanel } from "../components/GitPanel";
 import { useGitRepos } from "../hooks/git/useGitRepos";
 import { useGitCommandErrorDialog } from "../hooks/git/useGitCommandErrorDialog";
@@ -67,6 +67,7 @@ export function GitPanelContainer({
     changedFilesByWorktreeByRepo,
     loading: gitLoading,
     error: gitError,
+    setRepos,
     refreshRepos,
     stageFiles,
     unstageFiles,
@@ -81,6 +82,7 @@ export function GitPanelContainer({
     createBranch,
     deleteBranch,
     switchBranch,
+    smartUpdateWorktrees,
     reset,
     revert,
     squashCommits,
@@ -103,6 +105,15 @@ export function GitPanelContainer({
   } = useGitRepos();
 
   const { runGitCommand, showGitCommandError } = useGitCommandErrorDialog();
+
+  useEffect(() => {
+    setRepos(repos);
+  }, [repos, setRepos]);
+
+  useEffect(() => {
+    if (!repos.length) return;
+    void refreshRepos();
+  }, [repos, refreshRepos]);
 
   const repoHeaders = useMemo<RepoHeader[]>(
     () =>
@@ -312,6 +323,17 @@ export function GitPanelContainer({
     [runGitCommand, commitsInRemote, onSquashCommitsWithCheck, squashCommits]
   );
 
+  const handleSmartUpdateWorktrees = useCallback(
+    (repoId: string) => {
+      void runGitCommand(
+        "Smart update failed",
+        "Failed to smart update worktrees.",
+        () => smartUpdateWorktrees(repoId)
+      );
+    },
+    [runGitCommand, smartUpdateWorktrees]
+  );
+
   return (
     <GitPanel
       width={width}
@@ -430,6 +452,7 @@ export function GitPanelContainer({
       onOpenRepoFolder={handleOpenRepoFolder}
       onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
       onOpenWorktreeFolder={handleOpenWorktreeFolder}
+      onSmartUpdateWorktrees={handleSmartUpdateWorktrees}
       onOpenFolder={onTriggerOpenFolder}
       onLoadMoreCommits={(repoId, worktreePath) => {
         void runGitCommand("Load commits failed", "Failed to load more commits.", () =>

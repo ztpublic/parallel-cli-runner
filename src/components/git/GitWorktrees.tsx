@@ -14,6 +14,7 @@ type GitWorktreesProps = {
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
   onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
+  onSmartUpdateWorktrees?: (repoId: string) => void;
 };
 
 export function GitWorktrees({
@@ -24,6 +25,7 @@ export function GitWorktrees({
   onOpenWorktreeFolder,
   onMergeBranch,
   onRebaseBranch,
+  onSmartUpdateWorktrees,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -54,6 +56,15 @@ export function GitWorktrees({
           id: "create-worktree",
           icon: "plus",
           label: "Create Worktree",
+        },
+      ],
+      contextMenu: [
+        {
+          id: "smart-update-worktrees",
+          label: activeBranch
+            ? `Smart update worktrees to ${activeBranch}`
+            : "Smart update worktrees",
+          disabled: !activeBranch || !worktrees.length || !onSmartUpdateWorktrees,
         },
       ],
       children: worktrees.map((worktree) => {
@@ -177,6 +188,13 @@ export function GitWorktrees({
   };
 
   const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+    const repoGroup = worktreeGroups.find((group) => group.repo.repoId === node.id);
+    if (repoGroup) {
+      if (itemId === "smart-update-worktrees") {
+        onSmartUpdateWorktrees?.(repoGroup.repo.repoId);
+      }
+      return;
+    }
     const lastColonIndex = node.id.lastIndexOf(":");
     if (lastColonIndex === -1) return;
     const repoId = node.id.substring(0, lastColonIndex);

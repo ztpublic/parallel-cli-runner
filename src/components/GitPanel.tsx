@@ -91,6 +91,7 @@ type GitPanelProps = {
   onOpenRepoFolder?: (repo: RepoHeader) => void;
   onOpenWorktreeTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
+  onSmartUpdateWorktrees?: (repoId: string) => void;
 };
 
 const defaultTabs: GitTab[] = [
@@ -161,6 +162,7 @@ export function GitPanel({
   onOpenRepoFolder,
   onOpenWorktreeTerminal,
   onOpenWorktreeFolder,
+  onSmartUpdateWorktrees,
 }: GitPanelProps) {
   const {
     tabs,
@@ -436,6 +438,7 @@ export function GitPanel({
               onOpenWorktreeFolder={onOpenWorktreeFolder}
               onMergeBranch={onMergeBranch}
               onRebaseBranch={onRebaseBranch}
+              onSmartUpdateWorktrees={onSmartUpdateWorktrees}
             />
           ) : null}
 

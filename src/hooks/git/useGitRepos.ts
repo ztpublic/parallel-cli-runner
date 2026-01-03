@@ -579,6 +579,64 @@ export function useGitRepos() {
     [withRepo]
   );
 
+  const smartUpdateWorktrees = useCallback(
+    async (repoId: RepoId) => {
+      const repo = resolveRepo(repoId);
+      if (!repo) return;
+      const activeBranch = statusByRepo[repoId]?.branch;
+      if (!activeBranch) {
+        throw new Error("Active branch not found for repository.");
+      }
+
+      const worktreeDtos = await gitListWorktrees({ cwd: repo.root_path });
+      const worktrees = mapWorktrees(worktreeDtos).filter(
+        (worktree) => worktree.path !== repo.root_path
+      );
+      if (!worktrees.length) return;
+
+      const detachedWorktree = worktrees.find((worktree) => worktree.branch === "HEAD");
+      if (detachedWorktree) {
+        throw new Error(
+          `Worktree at ${detachedWorktree.path} is detached (HEAD).`
+        );
+      }
+
+      const behindWorktree = worktrees.find((worktree) => (worktree.behind ?? 0) > 0);
+      if (behindWorktree) {
+        throw new Error(
+          `Worktree ${behindWorktree.branch} is behind ${activeBranch}.`
+        );
+      }
+
+      for (const worktree of worktrees) {
+        if (worktree.branch === activeBranch) continue;
+        await gitRebaseBranch({
+          repoRoot: repo.root_path,
+          targetBranch: worktree.branch,
+          ontoBranch: activeBranch,
+        });
+        // Fast-forward the active branch to the rebased worktree branch.
+        await gitRebaseBranch({
+          repoRoot: repo.root_path,
+          targetBranch: activeBranch,
+          ontoBranch: worktree.branch,
+        });
+      }
+
+      for (const worktree of worktrees) {
+        if (worktree.branch === activeBranch) continue;
+        await gitRebaseBranch({
+          repoRoot: repo.root_path,
+          targetBranch: worktree.branch,
+          ontoBranch: activeBranch,
+        });
+      }
+
+      await refreshRepos(repoId);
+    },
+    [refreshRepos, resolveRepo, statusByRepo]
+  );
+
   const createBranch = useCallback(
     async (repoId: RepoId, name: string, sourceBranch?: string) => {
       await withRepo(
@@ -894,6 +952,7 @@ export function useGitRepos() {
     push,
     mergeIntoBranch,
     rebaseBranch,
+    smartUpdateWorktrees,
     createBranch,
     deleteBranch,
     switchBranch,
