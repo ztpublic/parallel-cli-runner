@@ -4,7 +4,9 @@ import { useGitRepos } from "../hooks/git/useGitRepos";
 import { useGitCommandErrorDialog } from "../hooks/git/useGitCommandErrorDialog";
 import { makeWorktreeTargetId } from "../hooks/git/gitTargets";
 import { openPath } from "../platform/actions";
+import { createPaneNode } from "../services/sessions";
 import type { RepoInfoDto } from "../types/git";
+import type { PaneNode } from "../types/layout";
 import type {
   ChangedFile,
   RemoteItem,
@@ -39,6 +41,7 @@ interface GitPanelContainerProps {
     worktreePath: string,
     commitIds: string[]
   ) => void;
+  appendPane: (pane: PaneNode, title?: string) => void;
 }
 
 export function GitPanelContainer({
@@ -51,6 +54,7 @@ export function GitPanelContainer({
   onRebaseBranch,
   onSwitchBranchWithCheck,
   onSquashCommitsWithCheck,
+  appendPane,
 }: GitPanelContainerProps) {
   const {
     statusByRepo,
@@ -235,13 +239,30 @@ export function GitPanelContainer({
     changedFilesByWorktreeByRepo,
   ]);
 
-  const handleOpenRepoTerminal = useCallback(
-    async (repo: RepoHeader) => {
-      // This will be handled by TerminalPanelContainer
-      // For now, just log or trigger an event
-      console.log("Open terminal for repo:", repo.path);
+  const openTerminalAtPath = useCallback(
+    async (title: string, path: string) => {
+      try {
+        const next = await createPaneNode({
+          cwd: path,
+          meta: {
+            title,
+            subtitle: path,
+            cwd: path,
+          },
+        });
+        appendPane(next, title);
+      } catch (error) {
+        console.warn("Failed to open terminal pane", error);
+      }
     },
-    []
+    [appendPane]
+  );
+
+  const handleOpenRepoTerminal = useCallback(
+    (repo: RepoHeader) => {
+      void openTerminalAtPath(repo.name, repo.path);
+    },
+    [openTerminalAtPath]
   );
 
   const handleOpenRepoFolder = useCallback(
@@ -256,10 +277,11 @@ export function GitPanelContainer({
   );
 
   const handleOpenWorktreeTerminal = useCallback(
-    async (_repo: RepoHeader, worktree: WorktreeItem) => {
-      console.log("Open terminal for worktree:", worktree.path);
+    (repo: RepoHeader, worktree: WorktreeItem) => {
+      const title = `${repo.name}:${worktree.branch}`;
+      void openTerminalAtPath(title, worktree.path);
     },
-    []
+    [openTerminalAtPath]
   );
 
   const handleOpenWorktreeFolder = useCallback(

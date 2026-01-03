@@ -110,6 +110,7 @@ export function AppLayout({
           onRebaseBranch={onRebaseBranch}
           onSwitchBranchWithCheck={onSwitchBranchWithCheck}
           onSquashCommitsWithCheck={onSquashCommitsWithCheck}
+          appendPane={appendPane}
         />
         <div
           className={`resize-handle ${isResizing ? "is-resizing" : ""}`}
