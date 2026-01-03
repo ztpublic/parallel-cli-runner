@@ -301,7 +301,7 @@ export function TreeView({
                 toggleExpanded(node);
               }}
             >
-              <Icon name={isExpanded ? "chevronDown" : "chevronRight"} size={14} />
+              <Icon name={isExpanded ? "chevronDown" : "chevronRight"} size={24} />
             </button>
           ) : (
             <span className="tree-toggle-placeholder" aria-hidden />
