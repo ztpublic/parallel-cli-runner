@@ -69,7 +69,7 @@ class WsTransport implements Transport {
     const payload = JSON.stringify(message);
 
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
       try {
         this.ws?.send(payload);
       } catch (error) {
@@ -176,7 +176,7 @@ class WsTransport implements Transport {
 class TauriTransport implements Transport {
   async request<T>(method: string, params?: unknown): Promise<T> {
     const { invoke } = await import("@tauri-apps/api/core");
-    return invoke<T>(method, params);
+    return invoke<T>(method, params as Record<string, unknown> | undefined);
   }
 
   subscribe<T>(event: string, handler: (payload: T) => void): () => void {

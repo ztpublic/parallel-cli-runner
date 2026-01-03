@@ -61,7 +61,7 @@ class VscodeBridge {
     const id = createRequestId();
     const message: VscodeRequest = { type: "vscode-request", id, method, params };
     return new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
       try {
         this.api.postMessage(message);
       } catch (error) {

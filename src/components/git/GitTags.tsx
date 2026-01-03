@@ -1,4 +1,4 @@
-import { Icon } from "../Icons";
+import { Icon, type IconName } from "../Icons";
 import { TreeView } from "../TreeView";
 import type { RepoGroup, TagItem } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
@@ -26,7 +26,7 @@ export function GitTags({
     id: group.repo.repoId,
     label: group.repo.name,
     description: group.repo.path,
-    icon: "folder",
+    icon: "folder" as IconName,
     defaultExpanded: true,
     selectable: false,
     rightSlot: <span className="git-pill">{group.items.length}</span>,
@@ -34,14 +34,14 @@ export function GitTags({
       ...group.items.map((tag) => ({
         id: `${group.repo.repoId}:tag:${tag.name}`,
         label: tag.name,
-        icon: "tag",
+        icon: "tag" as IconName,
       })),
       ...(canLoadMore?.(group.repo.repoId)
         ? [
             {
               id: makeLoadMoreNodeId(group.repo.repoId),
               label: "Load More...",
-              variant: "load-more",
+              variant: "load-more" as const,
               isLoading: isLoadingMore?.(group.repo.repoId),
               selectable: false,
             },
