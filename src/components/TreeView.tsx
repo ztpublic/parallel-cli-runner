@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Icon } from "./Icons";
 import { ContextMenu } from "./ContextMenu";
+import { Tooltip } from "./Tooltip";
 import type {
   TreeNode,
   TreeNodeContextMenuItem,
@@ -336,21 +337,21 @@ export function TreeView({
             {node.actions?.length ? (
               <div className="tree-actions">
                 {node.actions.map((action) => (
-                  <button
-                    key={action.id}
-                    type="button"
-                    className={`icon-button icon-button--tiny ${
-                      action.intent === "danger" ? "icon-button--danger" : ""
-                    }`}
-                    title={action.label}
-                    disabled={action.disabled}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAction?.(node, action.id);
-                    }}
-                  >
-                    <Icon name={action.icon} size={12} />
-                  </button>
+                  <Tooltip key={action.id} content={action.label}>
+                    <button
+                      type="button"
+                      className={`icon-button icon-button--tiny ${
+                        action.intent === "danger" ? "icon-button--danger" : ""
+                      }`}
+                      disabled={action.disabled}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onAction?.(node, action.id);
+                      }}
+                    >
+                      <Icon name={action.icon} size={12} />
+                    </button>
+                  </Tooltip>
                 ))}
               </div>
             ) : null}
