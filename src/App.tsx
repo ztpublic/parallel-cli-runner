@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./App.css";
 import { AppLayout } from "./app/AppLayout";
 import { RepoManager } from "./app/RepoManager";
@@ -11,8 +11,23 @@ import { useGitRepos } from "./hooks/git/useGitRepos";
 import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 
 function App() {
-  const { repos, setRepos, refreshRepos, rebaseBranch, checkoutBranchAtPath, detachWorktreeHead, switchBranch, smartSwitchBranch, squashCommits } = useGitRepos();
+  const {
+    repos,
+    setRepos,
+    refreshRepos,
+    rebaseBranch,
+    checkoutBranchAtPath,
+    detachWorktreeHead,
+    switchBranch,
+    smartSwitchBranch,
+    squashCommits,
+    worktreesByRepo,
+  } = useGitRepos();
   const { gitCommandError, clearGitCommandError, runGitCommand } = useGitCommandErrorDialog();
+  const [gitRefreshRequest, setGitRefreshRequest] = useState<{
+    seq: number;
+    repoId: string | null;
+  }>({ seq: 0, repoId: null });
   const [dialogs, dialogHandlers, dialogActions] = useDialogManager();
 
   // Refresh repos when repos change
@@ -25,11 +40,45 @@ function App() {
   // Handle rebase with worktree guard
   const handleRebaseBranch = useCallback(
     (repoId: string, targetBranch: string, ontoBranch: string) => {
-      void runGitCommand("Rebase failed", "Failed to rebase branch.", () =>
-        rebaseBranch(repoId, targetBranch, ontoBranch)
+      const triggerRefresh = () => {
+        setGitRefreshRequest((prev) => ({
+          seq: prev.seq + 1,
+          repoId,
+        }));
+      };
+      const repo = repos.find((entry) => entry.repo_id === repoId);
+      const worktrees = worktreesByRepo[repoId] ?? [];
+      const linkedWorktree = repo
+        ? worktrees.find(
+            (worktree) =>
+              worktree.branch === targetBranch && worktree.path !== repo.root_path
+          )
+        : undefined;
+
+      if (linkedWorktree) {
+        void runGitCommand(
+          "Rebase failed",
+          "Failed to detach the other worktree and rebase the branch.",
+          async () => {
+            await detachWorktreeHead(repoId, linkedWorktree.path);
+            await rebaseBranch(repoId, targetBranch, ontoBranch);
+            await checkoutBranchAtPath(repoId, linkedWorktree.path, targetBranch);
+            triggerRefresh();
+          }
+        );
+        return;
+      }
+
+      void runGitCommand(
+        "Rebase failed",
+        "Failed to rebase branch.",
+        async () => {
+          await rebaseBranch(repoId, targetBranch, ontoBranch);
+          triggerRefresh();
+        }
       );
     },
-    [rebaseBranch, runGitCommand]
+    [checkoutBranchAtPath, detachWorktreeHead, rebaseBranch, repos, runGitCommand, worktreesByRepo]
   );
 
   // Handle switch branch with smart switch dialog
@@ -94,6 +143,7 @@ function App() {
           onRebaseBranch={handleRebaseBranch}
           onSwitchBranchWithCheck={handleSwitchBranchWithCheck}
           onSquashCommitsWithCheck={handleSquashCommitsWithCheck}
+          gitRefreshRequest={gitRefreshRequest}
         >
           {/* Dialogs */}
           <GitErrorDialog

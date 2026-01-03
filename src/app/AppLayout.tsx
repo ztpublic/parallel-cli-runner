@@ -13,6 +13,7 @@ interface AppLayoutProps {
   setRepos: (repos: RepoInfoDto[]) => void;
   onRemoveRepo: (repoId: string) => void;
   onTriggerOpenFolder: () => void;
+  gitRefreshRequest: { seq: number; repoId: string | null };
   onRebaseBranch?: (
     repoId: string,
     targetBranch: string,
@@ -36,6 +37,7 @@ export function AppLayout({
   setEnabledRepoIds,
   onRemoveRepo,
   onTriggerOpenFolder,
+  gitRefreshRequest,
   onRebaseBranch,
   onSwitchBranchWithCheck,
   onSquashCommitsWithCheck,
@@ -110,6 +112,7 @@ export function AppLayout({
           onRebaseBranch={onRebaseBranch}
           onSwitchBranchWithCheck={onSwitchBranchWithCheck}
           onSquashCommitsWithCheck={onSquashCommitsWithCheck}
+          gitRefreshRequest={gitRefreshRequest}
           appendPane={appendPane}
         />
         <div

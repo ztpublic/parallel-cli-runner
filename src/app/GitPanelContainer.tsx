@@ -27,6 +27,7 @@ interface GitPanelContainerProps {
   onRemoveRepo: (repoId: string) => void;
   onTriggerOpenFolder: () => void;
   width: number;
+  gitRefreshRequest: { seq: number; repoId: string | null };
   onRebaseBranch?: (
     repoId: string,
     targetBranch: string,
@@ -51,6 +52,7 @@ export function GitPanelContainer({
   onRemoveRepo,
   onTriggerOpenFolder,
   width,
+  gitRefreshRequest,
   onRebaseBranch,
   onSwitchBranchWithCheck,
   onSquashCommitsWithCheck,
@@ -118,6 +120,12 @@ export function GitPanelContainer({
     if (!repos.length) return;
     void refreshRepos();
   }, [repos, refreshRepos]);
+
+  useEffect(() => {
+    if (!repos.length) return;
+    if (gitRefreshRequest.seq === 0) return;
+    void refreshRepos(gitRefreshRequest.repoId ?? undefined);
+  }, [gitRefreshRequest.repoId, gitRefreshRequest.seq, refreshRepos, repos.length]);
 
   const repoHeaders = useMemo<RepoHeader[]>(
     () =>
