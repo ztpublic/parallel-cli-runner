@@ -1,307 +1,166 @@
-Below is a backend implementation plan that treats your Rust service as an **ACP Client** (your service connects to many different ACP Agents) and exposes an internal API to your frontend “chatbot” UI. It is structured to get you to a minimal vertical slice quickly, then expand to full ACP coverage.
+This plan updates the ACP client integration to match how this repo actually works: a Rust backend that runs either as a Tauri app (with an embedded WS server) or as a standalone WS server for the VS Code extension. The frontend always talks over the shared WS request/response/event contract defined in `docs/vscode-integration/ws-transport-contract.md`.
 
-Key protocol constraints to design around:
+Key repo realities to align with:
 
-* ACP messaging is **JSON-RPC 2.0**; the standard transport today is **stdio** with **newline-delimited JSON messages** (no embedded newlines). ([agentclientprotocol.com][1])
-* A connection MUST begin with `initialize` to negotiate **protocol version + capabilities (+ auth methods)**. ([agentclientprotocol.com][2])
-* Conversations are modeled as **sessions** created via `session/new` (and optionally resumed via `session/load` if the agent advertises `loadSession`). ([agentclientprotocol.com][3])
-* In the Rust crate, implementing the ACP **Client** requires (at minimum) `request_permission` and `session_notification`; file/terminal methods are available to implement as well. ([docs.rs][4])
-* Extensibility exists via `_meta` and underscore-prefixed method names. ([agentclientprotocol.com][5])
-
----
-
-## Phase 0 — Lock down scope and architecture boundaries
-
-1. **Decide the “shape” of your product**
-
-   * Your backend is an ACP client that can concurrently connect to many ACP agents (local subprocesses first; remote later). ([agentclientprotocol.com][1])
-   * Your frontend talks only to *your backend* (not to agents directly).
-
-2. **Define core internal abstractions (Rust modules)**
-
-   * `agent_registry`: discovery, install metadata, launch configuration.
-   * `acp_transport`: stdio now; extensible to custom transports later. ([agentclientprotocol.com][1])
-   * `acp_runtime`: wraps the `agent-client-protocol` crate connection + routing.
-   * `session_service`: create/load sessions, prompt turns, cancel, persistence.
-   * `tooling`: filesystem, terminal, permission broker, and extension handling.
-   * `api`: your HTTP/WebSocket interface to the frontend (streaming).
-
-Deliverable: a short internal “ACP Integration RFC” describing these modules and the session lifecycle.
+- Backend lives in `src-tauri/` and already exposes a WS request/response API plus events (`session-data`, `scan-progress`).
+- Both the Tauri app and VS Code webview use the same WS contract via `src/platform/transport.ts`.
+- UI config is injected through `window.__APP_CONFIG__` (wsUrl, authToken, settings, workspacePath).
+- There is already PTY session infrastructure in `src-tauri/src/pty.rs` and a WS server in `src-tauri/src/ws_server.rs`.
 
 ---
 
-## Phase 1 — Build the ACP transport and connection runtime (stdio-first)
+## Phase 0 - Define ACP integration boundaries in this repo
 
-3. **Implement stdio subprocess transport**
+1) Decide where ACP lives and how it is exposed
 
-   * Spawn agent as a subprocess.
-   * Wire stdin/stdout as framed lines: each line is one JSON-RPC message. Enforce “no embedded newlines” in outbound messages. ([agentclientprotocol.com][1])
-   * Capture agent stderr as logs (never forward stderr into ACP stdout). ([agentclientprotocol.com][1])
+- ACP client code should live in `src-tauri/src/acp/` so both Tauri and WS server modes can use it.
+- Expose ACP operations through the existing WS contract (same request/response/event envelope used for git + PTY).
+- Keep any new request/response methods in `ws_server.rs` and mirror them in the contract docs.
 
-4. **Create an ACP connection wrapper**
+2) Add a minimal ACP module layout (Rust)
 
-   * Use the `agent-client-protocol` crate as the protocol layer (it provides both sides; you’re implementing the Client side). ([agentclientprotocol.com][6])
-   * Structure the runtime with:
+- `src-tauri/src/acp/mod.rs` - public API (manager + request helpers).
+- `src-tauri/src/acp/runtime.rs` - stdio transport + ACP connection lifecycle.
+- `src-tauri/src/acp/agent_catalog.rs` - optional: loading agent configs.
+- `src-tauri/src/acp/types.rs` - DTOs and ts-rs exports for UI.
 
-     * a reader task (stdout → JSON-RPC decode → crate router),
-     * a writer task (crate outbound → stdin),
-     * a shutdown supervisor (process exit, cancellation, cleanup).
-
-5. **Add connection lifecycle state machine**
-
-   * `Created → Initialized → (Authenticated) → Ready → Closed`
-   * Prevent session creation until `initialize` succeeds. ([agentclientprotocol.com][2])
-
-Deliverable: `acp_runtime` can spawn one agent process and maintain a healthy initialized connection.
+Deliverable: a short ACP architecture note describing how ACP runtime connects to the WS contract.
 
 ---
 
-## Phase 2 — Implement Initialization + Authentication
+## Phase 1 - ACP runtime in the Rust backend (stdio-first)
 
-6. **Implement `initialize` handshake**
+3) Implement stdio transport consistent with ACP
 
-   * On connect, send `initialize` with:
+- Spawn agent subprocesses (command/args/env/cwd from config).
+- Encode/decode JSON-RPC 2.0 with newline-delimited frames (no embedded newlines).
+- Route agent stderr to logs only (never to ACP stdout).
 
-     * latest supported protocol version (major integer),
-     * your `clientCapabilities` (filesystem/terminal booleans),
-     * your `clientInfo` (name/title/version). ([agentclientprotocol.com][2])
-   * Validate the agent’s response:
+4) Build the ACP connection manager
 
-     * if agent responds with a protocol version you don’t support, fail fast and close the connection. ([agentclientprotocol.com][2])
+- Use the existing `agent-client-protocol` crate already in `src-tauri/Cargo.toml`.
+- Add an `AcpManager` similar to `PtyManager`: tracks agent processes + sessions.
+- Maintain a per-connection lifecycle state: Created -> Initialized -> Ready -> Closed.
+- Fail fast if protocol version negotiation fails during `initialize`.
 
-7. **Capability-driven feature gates**
-
-   * Treat omitted capabilities as unsupported; your runtime must degrade gracefully. ([agentclientprotocol.com][2])
-   * Example: only allow “send image/audio content” if `promptCapabilities.image/audio` is true. ([agentclientprotocol.com][2])
-
-8. **Authentication flow**
-
-   * Read `authMethods` from `initialize` response. ([agentclientprotocol.com][2])
-   * If an agent requires auth, call `authenticate` with `methodId` from the advertised list, and surface any required user steps in your UI. ([agentclientprotocol.com][7])
-
-Deliverable: your backend can connect+initialize+authenticate (when needed) and report negotiated capabilities to the frontend.
+Deliverable: `AcpManager` can connect to one agent and report initialization success/failure.
 
 ---
 
-## Phase 3 — Session management (the backbone of your chatbot)
+## Phase 2 - Expose ACP through the WS transport contract
 
-9. **Implement `session/new`**
+5) Add WS methods in `src-tauri/src/ws_server.rs`
 
-   * API: `POST /agents/{agentId}/sessions` → creates session.
-   * Send `session/new` with:
+Suggested method names (match existing `git_*` + `create_session` naming style):
 
-     * `cwd` (project/workspace directory),
-     * `mcpServers` list (agent will connect to these MCP servers). ([agentclientprotocol.com][3])
-   * Store returned `sessionId` and map it to (agent connection, user, workspace). ([agentclientprotocol.com][3])
+- `acp_connect` (params: agent config) -> connection id
+- `acp_disconnect` (params: connection id) -> void
+- `acp_session_new` (params: connection id + cwd + optional mcpServers) -> session id
+- `acp_session_load` (optional, if agent supports it)
+- `acp_session_prompt` (params: session id + content blocks) -> void
+- `acp_session_cancel` -> void
+- `acp_permission_reply` (params: request id + decision) -> void
 
-10. **Implement optional `session/load`**
+6) Add WS events for ACP streaming
 
-* Only enable if agent capability `loadSession` is true. ([agentclientprotocol.com][3])
-* When loading, stream the replayed conversation (agent sends `session/update` notifications) into your chat timeline. ([agentclientprotocol.com][3])
+Suggested event names (consistent with existing `session-data` and `scan-progress`):
 
-11. **Implement cancellation**
+- `acp-session-update` (streaming response chunks + status)
+- `acp-session-state` (ready/closed/error)
+- `acp-permission-request` (request id + description + options)
+- `acp-terminal-output` (if ACP terminal hooks are enabled)
 
-* Provide `POST /sessions/{sessionId}/cancel` → send `session/cancel` notification. ([agentclientprotocol.com][7])
+7) Update WS transport documentation
 
-12. **Persistence strategy**
+- Add the new methods + events to `docs/vscode-integration/ws-transport-contract.md`.
+- Keep method signatures and payload shapes in sync with `src/platform` service code.
 
-* Start simple:
-
-  * persist your own “chat transcript” and session metadata (agent id, cwd, timestamps).
-  * treat agent-side `loadSession` as optional enhancement (not universal).
-* Later:
-
-  * if agent supports `loadSession`, store the agent’s session IDs and offer “resume”.
-
-Deliverable: a user can create a session, see streaming updates, cancel a run, and (optionally) resume.
+Deliverable: ACP operations are reachable from the frontend via the same WS contract used elsewhere.
 
 ---
 
-## Phase 4 — Prompt turns and streaming UX
+## Phase 3 - Frontend service + UI integration
 
-13. **Implement `session/prompt` request pipeline**
+8) Add a frontend ACP service layer
 
-* API: `POST /sessions/{sessionId}/messages` with content blocks (text first).
-* Convert your UI message into ACP “prompt content blocks” and send `session/prompt`.
-* Stream all `session/update` notifications back to the frontend as incremental chat events (tokens/chunks). (Session history replay uses the same update mechanism.) ([agentclientprotocol.com][3])
+- Create `src/services/acp.ts` or `src/services/agents.ts` to wrap `getTransport().request()`.
+- Subscribe to ACP events using `getTransport().subscribe()` for streaming output and permission prompts.
+- Export typed DTOs in `src/types/acp.ts` using `ts-rs` (mirror `src-tauri/src/export_types.rs`).
 
-14. **Content normalization**
+9) Add ACP session UI wiring
 
-* Support at minimum:
+- Use the existing ACP placeholder in `src/components/TerminalPanel.tsx` as the entry point.
+- Introduce an ACP session view component and state hook (e.g., `src/hooks/useAcpSessions.ts`).
+- Optionally pull reference UI pieces from `ai-elements-fork/` for the chat layout and tool approval flows.
 
-  * `text`
-  * `resourceLink`
-* Only enable richer blocks (image/audio/embedded resource) when the agent advertises support. ([agentclientprotocol.com][2])
+10) Keep browser dev mode working
 
-15. **Unified event model for your frontend**
+- Extend `src/mocks/tauri.ts` to mock ACP methods/events used in UI (for `npm run dev:browser`).
 
-* Define a stable internal event schema (WebSocket/SSE), e.g.:
-
-  * `chat.message.delta`
-  * `chat.message.final`
-  * `tool.permission.requested`
-  * `tool.terminal.started/output/exited`
-  * `session.mode.changed`
-* This isolates your UI from ACP churn and agent variability.
-
-Deliverable: a “chatbot session” feels like a modern streaming assistant regardless of the underlying ACP agent.
+Deliverable: ACP sessions can be created from the UI and stream updates in the chat view.
 
 ---
 
-## Phase 5 — Tooling: permissions, filesystem, terminal (agent autonomy)
+## Phase 4 - Permissions + tools (aligned to existing backend capabilities)
 
-Your backend becomes valuable when agents can act. ACP formalizes this via client capabilities and methods; in the Rust crate the Client trait includes permission + session notifications and provides hooks for filesystem/terminal operations. ([docs.rs][4])
+11) Permission broker implementation
 
-16. **Permission broker (`session/request_permission`)**
+- Implement `Client::request_permission` in the ACP client (required by the crate).
+- Forward permission requests to the UI via `acp-permission-request` and resolve via `acp_permission_reply`.
+- Enforce workspace boundaries using `window.__APP_CONFIG__.workspacePath` (when present).
 
-* Implement `Client::request_permission` (required). ([docs.rs][4])
-* UX requirements:
+12) Filesystem + terminal hooks
 
-  * show the agent’s rationale + list of options
-  * allow “deny”, “allow once”, “always allow for this session”, etc. (your policy)
-* Policy requirements:
+- If you advertise filesystem capabilities, wire them to new safe wrappers in `src-tauri/src/acp/`.
+- For terminal capabilities, reuse `PtyManager` where possible to avoid duplicate PTY handling.
+- Gate high-risk operations through the permission broker by default.
 
-  * workspace boundary checks
-  * command allow/deny lists
-  * rate limiting / “dangerous operation” prompts
-
-17. **Filesystem provider**
-
-* Implement `fs/read_text_file` and `fs/write_text_file` if you advertise them as capabilities. ([agentclientprotocol.com][2])
-* Enforce:
-
-  * **absolute path** requirement at the ACP boundary (convert safely from workspace-relative). ([agentclientprotocol.com][7])
-  * workspace sandbox: deny reads/writes outside allowed roots
-  * size limits, line limits, and encoding handling
-
-18. **Terminal provider**
-
-* If you advertise `terminal: true`, implement terminal methods end-to-end. ([agentclientprotocol.com][2])
-* Maintain a `TerminalId → process` registry supporting:
-
-  * create/start command
-  * fetch output
-  * wait for exit
-  * kill command
-  * release terminal resources ([docs.rs][4])
-* Treat terminal execution as high-risk → route through permission broker by default.
-
-19. **Extension handling**
-
-* Implement `ext_method` / `ext_notification` to future-proof agent-specific features. ([docs.rs][4])
-* Follow ACP rules:
-
-  * extension method names start with `_`
-  * custom data must go in `_meta`, not new top-level fields. ([agentclientprotocol.com][5])
-
-Deliverable: agents can safely read/write files and run commands, subject to user/policy approval.
+Deliverable: ACP agents can request file/terminal actions with explicit user approval.
 
 ---
 
-## Phase 6 — Agent discovery, install, and configuration (support “all kinds of agents”)
+## Phase 5 - Agent catalog + configuration
 
-20. **Implement an Agent Catalog**
+13) Start with a simple config-driven catalog
 
-* Start with:
+- Add agent definitions to settings (e.g., `settings.acpAgents`) that are already injected into `window.__APP_CONFIG__`.
+- For VS Code, reuse `.vscode/parallel-cli-runner.json` or VS Code settings to define agent configs.
 
-  * user-supplied agent configs (command, args, env, working dir)
-* Then integrate the ACP Agent Registry concept:
+14) Optional: support `agent.json` manifests later
 
-  * parse `agent.json` manifests (id, version, capabilities, distribution per platform). ([agentclientprotocol.com][8])
-  * keep a local cache and surface agents in your UI.
+- Parse manifests if present, but keep the MVP catalog in settings first.
 
-21. **Normalize “launch configurations”**
-
-* Represent every agent as:
-
-  * `transport = stdio` (initially)
-  * `command`, `args`, `env`
-  * optional “capability expectations” (for UI gating)
-* Seed your UI with known ACP agents for testing and demos (Gemini CLI, Goose, etc.). ([agentclientprotocol.com][9])
-
-Deliverable: adding a new agent becomes “drop in a manifest/config”, not “write integration code”.
+Deliverable: users can add ACP agents without new backend code.
 
 ---
 
-## Phase 7 — Production hardening: concurrency, observability, and safety
+## Phase 6 - Testing + stability
 
-22. **Concurrency model**
+15) Backend tests
 
-* Many sessions per agent process vs one process per session:
+- Add an in-process fake ACP agent in `src-tauri/tests` to cover initialize + session prompt + updates.
+- Add a smoke test for WS methods to ensure request/response shapes stay valid.
 
-  * default: **one agent process per active user session** (strong isolation, simpler)
-  * optimize later: pooled processes for agents that support multi-session well
-* Ensure per-session cancellation, timeouts, and cleanup.
+16) Frontend smoke coverage
 
-23. **Tracing and correlation**
+- Add Storybook stories for ACP chat + permission flows using `ai-elements-fork` components.
+- Keep `dev:browser` mocks in sync to avoid UI regressions.
 
-* Propagate OpenTelemetry/W3C trace context via `_meta` (traceparent/tracestate/baggage) so you can correlate frontend events ↔ ACP requests ↔ tool executions. ([agentclientprotocol.com][5])
-
-24. **Security controls**
-
-* Hard workspace sandboxing for FS and terminal.
-* Secret handling for auth methods:
-
-  * never log credentials
-  * encrypt at rest if persisted
-* Audit log: permission prompts and outcomes.
-
-25. **Reliability**
-
-* Detect agent crashes and surface as session failure with actionable diagnostics.
-* Backpressure: bounded channels for stdout parsing and UI streaming.
-* Version negotiation errors: clear “agent requires protocol vX, client supports vY” messaging. ([agentclientprotocol.com][2])
-
-Deliverable: multi-user stability and debuggability.
+Deliverable: ACP flows are covered by basic automated tests and stories.
 
 ---
 
-## Phase 8 — Test strategy (interoperability is the product)
+## Practical vertical slice (fastest route)
 
-26. **Golden-path integration tests**
-
-* Spin up at least one real ACP agent in CI (stdio) and run:
-
-  * initialize
-  * session/new
-  * prompt (streaming)
-  * permission request
-  * filesystem read/write
-  * terminal run/cancel
-
-27. **Mock agent tests**
-
-* Implement a minimal in-process “fake ACP agent” using the crate’s Agent-side types to deterministically simulate:
-
-  * chunked streaming updates
-  * tool call permission sequences
-  * malformed messages / protocol errors
-
-28. **Schema drift monitoring**
-
-* Track the crate version and ACP spec version as explicit dependencies.
-* Add CI checks that parse/validate ACP messages against expected shapes (especially for `_meta` and extension methods). ([agentclientprotocol.com][7])
-
-Deliverable: you can confidently claim “supports ACP agents” without regressions.
+1) ACP stdio runtime + `acp_connect`
+2) `acp_session_new` + `acp_session_prompt` + `acp-session-update` event
+3) Basic ACP chat view in the ACP tab
+4) Permission flow wiring (`request_permission` + UI prompt + `acp_permission_reply`)
 
 ---
 
-## A practical “vertical slice” order (if you want the fastest path to a working chatbot)
-
-1. stdio transport + initialize ([agentclientprotocol.com][1])
-2. session/new + session/update streaming to UI ([agentclientprotocol.com][3])
-3. session/prompt (text-only) + cancel ([agentclientprotocol.com][7])
-4. request_permission + terminal (basic) ([docs.rs][4])
-5. filesystem read/write with sandboxing ([agentclientprotocol.com][7])
-6. agent registry / manifests ([agentclientprotocol.com][8])
-
----
-[1]: https://agentclientprotocol.com/protocol/transports "Transports - Agent Client Protocol"
-[2]: https://agentclientprotocol.com/protocol/initialization?utm_source=chatgpt.com "Initialization"
-[3]: https://agentclientprotocol.com/protocol/session-setup "Session Setup - Agent Client Protocol"
-[4]: https://docs.rs/agent-client-protocol/latest/agent_client_protocol/trait.Client.html "Client in agent_client_protocol - Rust"
-[5]: https://agentclientprotocol.com/protocol/extensibility "Extensibility - Agent Client Protocol"
-[6]: https://agentclientprotocol.com/libraries/rust "Rust - Agent Client Protocol"
-[7]: https://agentclientprotocol.com/protocol/schema?utm_source=chatgpt.com "Schema"
-[8]: https://agentclientprotocol.com/rfds/acp-agent-registry "ACP Agent Registry - Agent Client Protocol"
-[9]: https://agentclientprotocol.com/overview/agents?utm_source=chatgpt.com "Agents"
+Reference material:
+- `docs/vscode-integration/ws-transport-contract.md`
+- `src-tauri/src/ws_server.rs`
+- `src/platform/transport.ts`
+- ACP protocol docs: https://agentclientprotocol.com/
