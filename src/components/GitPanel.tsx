@@ -439,6 +439,7 @@ export function GitPanel({
               onMergeBranch={onMergeBranch}
               onRebaseBranch={onRebaseBranch}
               onSmartUpdateWorktrees={onSmartUpdateWorktrees}
+              onRefresh={onRefresh}
             />
           ) : null}
 
