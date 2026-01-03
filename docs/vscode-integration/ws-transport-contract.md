@@ -65,14 +65,14 @@ Platform-routing methods (handled by extension host or backend as needed):
 - `dialog.open`
 - `shell.openPath`
 
-ACP methods (backend; some are stubs in phase 2):
+ACP methods (backend):
 - `acp_connect` (params: { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }) -> AcpConnectionInfo
 - `acp_disconnect` (params: { id: string }) -> void
-- `acp_session_new` (params: { connectionId: string; cwd?: string; mcpServers?: unknown[] }) -> session id (not implemented yet)
-- `acp_session_load` (not implemented yet)
-- `acp_session_prompt` (not implemented yet)
-- `acp_session_cancel` (not implemented yet)
-- `acp_permission_reply` (not implemented yet)
+- `acp_session_new` (params: { connectionId: string; cwd: string; mcpServers?: McpServer[] }) -> session id
+- `acp_session_load` (params: { connectionId: string; sessionId: string; cwd: string; mcpServers?: McpServer[] }) -> LoadSessionResponse
+- `acp_session_prompt` (params: { sessionId: string; prompt: ContentBlock[] }) -> void
+- `acp_session_cancel` (params: { sessionId: string }) -> void
+- `acp_permission_reply` (params: { requestId: string; outcome: { outcome: "cancelled" | "selected"; optionId?: string } }) -> void
 
 `AcpConnectionInfo` shape:
 ```
@@ -88,9 +88,9 @@ ACP methods (backend; some are stubs in phase 2):
 
 - `session-data`
 - `scan-progress`
-- `acp-session-update` (reserved)
-- `acp-session-state` (reserved)
-- `acp-permission-request` (reserved)
+- `acp-session-update` payload: { connectionId: string; notification: SessionNotification }
+- `acp-session-state` payload: { connectionId: string; status: "ready" | "closed" | "initialized" | "created" }
+- `acp-permission-request` payload: { connectionId: string; requestId: string; request: RequestPermissionRequest }
 - `acp-terminal-output` (reserved)
 
 ## Runtime config injection

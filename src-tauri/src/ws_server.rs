@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use agent_client_protocol::{
+    ContentBlock, McpServer, PermissionOptionId, RequestPermissionOutcome,
+    SelectedPermissionOutcome,
+};
 use futures_util::{SinkExt, StreamExt};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -13,7 +17,7 @@ use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
 use crate::command_error::CommandError;
-use crate::acp::{self, types::AcpAgentConfig};
+use crate::acp::{self, types::{AcpAgentConfig, AcpEvent}};
 use crate::git::{self, DiffRequestDto};
 use crate::pty::{
     broadcast_line_with_manager, create_session_with_emitter, kill_session_with_manager,
@@ -84,6 +88,50 @@ struct SessionIdParams {
 #[derive(Deserialize)]
 struct AcpConnectionIdParams {
     id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionNewParams {
+    connection_id: String,
+    cwd: String,
+    mcp_servers: Option<Vec<McpServer>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionLoadParams {
+    connection_id: String,
+    session_id: String,
+    cwd: String,
+    mcp_servers: Option<Vec<McpServer>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionPromptParams {
+    session_id: String,
+    prompt: Vec<ContentBlock>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionCancelParams {
+    session_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpPermissionReplyParams {
+    request_id: String,
+    outcome: AcpPermissionOutcomeDto,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+enum AcpPermissionOutcomeDto {
+    Cancelled,
+    Selected { option_id: String },
 }
 
 #[derive(Deserialize)]
@@ -294,10 +342,11 @@ async fn run_ws_server_on_tokio_listener(
     listener: TokioTcpListener,
     auth_token: String,
 ) -> anyhow::Result<()> {
+    let events = broadcast::channel(256).0;
     let state = WsState {
         manager: PtyManager::default(),
-        acp: acp::AcpManager::default(),
-        events: broadcast::channel(256).0,
+        acp: acp::AcpManager::new(acp_event_sink(events.clone())),
+        events,
     };
 
     loop {
@@ -501,11 +550,62 @@ async fn handle_request(
                 .map_err(CommandError::internal)?;
             Ok(Value::Null)
         }
-        "acp_session_new" => Err(not_implemented("acp_session_new")),
-        "acp_session_load" => Err(not_implemented("acp_session_load")),
-        "acp_session_prompt" => Err(not_implemented("acp_session_prompt")),
-        "acp_session_cancel" => Err(not_implemented("acp_session_cancel")),
-        "acp_permission_reply" => Err(not_implemented("acp_permission_reply")),
+        "acp_session_new" => {
+            let params: AcpSessionNewParams = parse_params(params)?;
+            let connection_id = parse_uuid(&params.connection_id)?;
+            let mcp_servers = params.mcp_servers.unwrap_or_default();
+            let manager = state.acp.clone();
+            let response = manager
+                .new_session(connection_id, params.cwd, mcp_servers)
+                .await
+                .map_err(CommandError::internal)?;
+            to_value(response.session_id.to_string())
+        }
+        "acp_session_load" => {
+            let params: AcpSessionLoadParams = parse_params(params)?;
+            let connection_id = parse_uuid(&params.connection_id)?;
+            let mcp_servers = params.mcp_servers.unwrap_or_default();
+            let manager = state.acp.clone();
+            let response = manager
+                .load_session(connection_id, params.session_id, params.cwd, mcp_servers)
+                .await
+                .map_err(CommandError::internal)?;
+            to_value(response)
+        }
+        "acp_session_prompt" => {
+            let params: AcpSessionPromptParams = parse_params(params)?;
+            let manager = state.acp.clone();
+            manager
+                .prompt(params.session_id, params.prompt)
+                .await
+                .map_err(CommandError::internal)?;
+            Ok(Value::Null)
+        }
+        "acp_session_cancel" => {
+            let params: AcpSessionCancelParams = parse_params(params)?;
+            let manager = state.acp.clone();
+            manager
+                .cancel(params.session_id)
+                .await
+                .map_err(CommandError::internal)?;
+            Ok(Value::Null)
+        }
+        "acp_permission_reply" => {
+            let params: AcpPermissionReplyParams = parse_params(params)?;
+            let outcome = match params.outcome {
+                AcpPermissionOutcomeDto::Cancelled => RequestPermissionOutcome::Cancelled,
+                AcpPermissionOutcomeDto::Selected { option_id } => {
+                    RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                        PermissionOptionId::new(option_id),
+                    ))
+                }
+            };
+            state
+                .acp
+                .reply_permission(params.request_id, outcome)
+                .map_err(CommandError::internal)?;
+            Ok(Value::Null)
+        }
         "git_detect_repo" => {
             let params: CwdParams = parse_params(params)?;
             let result = run_blocking(move || {
@@ -813,10 +913,6 @@ fn parse_uuid(id: &str) -> Result<Uuid, CommandError> {
     Uuid::parse_str(id).map_err(|_| CommandError::new("invalid_argument", "invalid id"))
 }
 
-fn not_implemented(method: &str) -> CommandError {
-    CommandError::new("not_implemented", format!("{method} not implemented yet"))
-}
-
 async fn run_blocking<T, F>(task: F) -> Result<T, CommandError>
 where
     T: Send + 'static,
@@ -841,6 +937,16 @@ fn emit_event<T: Serialize>(events: &broadcast::Sender<EventMessage>, event: &st
         event: event.to_string(),
         payload: value,
     });
+}
+
+fn acp_event_sink(events: broadcast::Sender<EventMessage>) -> acp::types::AcpEventSink {
+    Arc::new(move |event| match event {
+        AcpEvent::SessionUpdate(payload) => emit_event(&events, "acp-session-update", payload),
+        AcpEvent::ConnectionState(payload) => emit_event(&events, "acp-session-state", payload),
+        AcpEvent::PermissionRequest(payload) => {
+            emit_event(&events, "acp-permission-request", payload)
+        }
+    })
 }
 
 fn with_cwd<T>(cwd: String, f: impl FnOnce(&std::path::Path) -> Result<T, git::GitError>) -> Result<T, CommandError> {

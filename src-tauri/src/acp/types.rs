@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use agent_client_protocol::Implementation;
+use agent_client_protocol::{Implementation, RequestPermissionRequest, SessionNotification};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,3 +34,34 @@ pub struct AcpConnectionInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_info: Option<Implementation>,
 }
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpConnectionStateEvent {
+    pub connection_id: String,
+    pub status: AcpConnectionStatus,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpSessionUpdateEvent {
+    pub connection_id: String,
+    pub notification: SessionNotification,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AcpPermissionRequestEvent {
+    pub connection_id: String,
+    pub request_id: String,
+    pub request: RequestPermissionRequest,
+}
+
+#[derive(Clone)]
+pub enum AcpEvent {
+    ConnectionState(AcpConnectionStateEvent),
+    SessionUpdate(AcpSessionUpdateEvent),
+    PermissionRequest(AcpPermissionRequestEvent),
+}
+
+pub type AcpEventSink = Arc<dyn Fn(AcpEvent) + Send + Sync>;

@@ -12,26 +12,51 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 use uuid::Uuid;
 
 use agent_client_protocol::{
-    Agent, Client, ClientCapabilities, ClientSideConnection, Implementation, InitializeRequest,
-    InitializeResponse, ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SessionNotification,
+    Agent, CancelNotification, Client, ClientCapabilities, ClientSideConnection, ContentBlock,
+    Implementation, InitializeRequest, InitializeResponse, LoadSessionRequest, LoadSessionResponse,
+    McpServer, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
+    ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
+    SessionNotification,
 };
 
-use super::types::{AcpAgentConfig, AcpConnectionInfo, AcpConnectionStatus};
+use super::types::{
+    AcpAgentConfig, AcpConnectionInfo, AcpConnectionStateEvent, AcpConnectionStatus, AcpEvent,
+    AcpEventSink, AcpPermissionRequestEvent, AcpSessionUpdateEvent,
+};
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct AcpManager {
     connections: Arc<Mutex<HashMap<Uuid, AcpConnectionHandle>>>,
+    sessions: Arc<Mutex<HashMap<String, Uuid>>>,
+    pending_permissions: Arc<Mutex<HashMap<String, oneshot::Sender<RequestPermissionOutcome>>>>,
+    event_sink: AcpEventSink,
+}
+
+impl Default for AcpManager {
+    fn default() -> Self {
+        Self::new(Arc::new(|_| {}))
+    }
 }
 
 impl AcpManager {
+    pub fn new(event_sink: AcpEventSink) -> Self {
+        Self {
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            pending_permissions: Arc::new(Mutex::new(HashMap::new())),
+            event_sink,
+        }
+    }
+
     pub async fn connect(&self, config: AcpAgentConfig) -> Result<AcpConnectionInfo> {
         let id = Uuid::new_v4();
         let state = Arc::new(Mutex::new(AcpConnectionState::new()));
-        let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (ready_tx, ready_rx) = oneshot::channel::<Result<InitializeResponse>>();
 
         let task_state = state.clone();
+        let event_sink = self.event_sink.clone();
+        let pending_permissions = self.pending_permissions.clone();
         let join = thread::spawn(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -46,7 +71,15 @@ impl AcpManager {
 
             let local = LocalSet::new();
             let result =
-                local.block_on(&runtime, run_connection(id, config, task_state, shutdown_rx, ready_tx));
+                local.block_on(&runtime, run_connection(
+                    id,
+                    config,
+                    task_state,
+                    command_rx,
+                    ready_tx,
+                    event_sink,
+                    pending_permissions,
+                ));
             if let Err(err) = result {
                 eprintln!("acp connection {id} failed: {err}");
             }
@@ -65,7 +98,7 @@ impl AcpManager {
             id,
             AcpConnectionHandle {
                 state,
-                shutdown_tx,
+                command_tx,
                 join,
             },
         );
@@ -90,18 +123,130 @@ impl AcpManager {
             .remove(&id)
             .ok_or_else(|| anyhow!("acp connection {id} not found"))?;
 
-        let _ = handle.shutdown_tx.send(AcpCommand::Shutdown);
+        let _ = handle.command_tx.send(AcpCommand::Shutdown);
         let _ = tokio::task::spawn_blocking(move || {
             let _ = handle.join.join();
         })
         .await;
         Ok(())
     }
+
+    pub async fn new_session(
+        &self,
+        connection_id: Uuid,
+        cwd: String,
+        mcp_servers: Vec<McpServer>,
+    ) -> Result<NewSessionResponse> {
+        let command_tx = self.get_command_tx(connection_id)?;
+        let request = NewSessionRequest::new(cwd).mcp_servers(mcp_servers);
+        let response = send_request(&command_tx, |respond_to| AcpCommand::NewSession {
+            request,
+            respond_to,
+        })
+        .await?;
+
+        if let Ok(mut guard) = self.sessions.lock() {
+            guard.insert(response.session_id.to_string(), connection_id);
+        }
+
+        Ok(response)
+    }
+
+    pub async fn load_session(
+        &self,
+        connection_id: Uuid,
+        session_id: String,
+        cwd: String,
+        mcp_servers: Vec<McpServer>,
+    ) -> Result<LoadSessionResponse> {
+        let command_tx = self.get_command_tx(connection_id)?;
+        let request = LoadSessionRequest::new(session_id.clone(), cwd).mcp_servers(mcp_servers);
+        let response = send_request(&command_tx, |respond_to| AcpCommand::LoadSession {
+            request,
+            respond_to,
+        })
+        .await?;
+
+        if let Ok(mut guard) = self.sessions.lock() {
+            guard.insert(session_id, connection_id);
+        }
+
+        Ok(response)
+    }
+
+    pub async fn prompt(
+        &self,
+        session_id: String,
+        prompt: Vec<ContentBlock>,
+    ) -> Result<PromptResponse> {
+        let connection_id = self.connection_for_session(&session_id)?;
+        let command_tx = self.get_command_tx(connection_id)?;
+        let request = PromptRequest::new(session_id, prompt);
+        send_request(&command_tx, |respond_to| AcpCommand::Prompt { request, respond_to }).await
+    }
+
+    pub async fn cancel(&self, session_id: String) -> Result<()> {
+        let connection_id = self.connection_for_session(&session_id)?;
+        let command_tx = self.get_command_tx(connection_id)?;
+        let request = CancelNotification::new(session_id);
+        send_request(&command_tx, |respond_to| AcpCommand::Cancel { request, respond_to }).await
+    }
+
+    pub fn reply_permission(
+        &self,
+        request_id: String,
+        outcome: RequestPermissionOutcome,
+    ) -> Result<()> {
+        let sender = {
+            let mut guard = self
+                .pending_permissions
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            guard.remove(&request_id)
+        };
+        if let Some(sender) = sender {
+            let _ = sender.send(outcome);
+            return Ok(());
+        }
+        Err(anyhow!("permission request {request_id} not found"))
+    }
+
+    fn get_command_tx(&self, id: Uuid) -> Result<mpsc::UnboundedSender<AcpCommand>> {
+        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .get(&id)
+            .map(|handle| handle.command_tx.clone())
+            .ok_or_else(|| anyhow!("acp connection {id} not found"))
+    }
+
+    fn connection_for_session(&self, session_id: &str) -> Result<Uuid> {
+        let guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .get(session_id)
+            .copied()
+            .ok_or_else(|| anyhow!("acp session {session_id} not found"))
+    }
+}
+
+async fn send_request<T>(
+    sender: &mpsc::UnboundedSender<AcpCommand>,
+    build: impl FnOnce(oneshot::Sender<Result<T>>) -> AcpCommand,
+) -> Result<T>
+where
+    T: Send + 'static,
+{
+    let (tx, rx) = oneshot::channel::<Result<T>>();
+    let command = build(tx);
+    sender
+        .send(command)
+        .map_err(|_| anyhow!("acp connection command channel closed"))?;
+    rx.await
+        .map_err(|_| anyhow!("acp connection command dropped"))?
 }
 
 struct AcpConnectionHandle {
     state: Arc<Mutex<AcpConnectionState>>,
-    shutdown_tx: mpsc::UnboundedSender<AcpCommand>,
+    command_tx: mpsc::UnboundedSender<AcpCommand>,
     join: thread::JoinHandle<()>,
 }
 
@@ -157,32 +302,69 @@ impl AcpConnectionState {
 #[derive(Debug)]
 enum AcpCommand {
     Shutdown,
+    NewSession {
+        request: NewSessionRequest,
+        respond_to: oneshot::Sender<Result<NewSessionResponse>>,
+    },
+    LoadSession {
+        request: LoadSessionRequest,
+        respond_to: oneshot::Sender<Result<LoadSessionResponse>>,
+    },
+    Prompt {
+        request: PromptRequest,
+        respond_to: oneshot::Sender<Result<PromptResponse>>,
+    },
+    Cancel {
+        request: CancelNotification,
+        respond_to: oneshot::Sender<Result<()>>,
+    },
 }
 
 #[derive(Clone)]
 struct AcpClient {
     connection_id: Uuid,
+    event_sink: AcpEventSink,
+    pending_permissions: Arc<Mutex<HashMap<String, oneshot::Sender<RequestPermissionOutcome>>>>,
 }
 
 #[async_trait::async_trait(?Send)]
 impl Client for AcpClient {
     async fn request_permission(
         &self,
-        _args: RequestPermissionRequest,
+        args: RequestPermissionRequest,
     ) -> agent_client_protocol::Result<RequestPermissionResponse> {
-        eprintln!(
-            "acp connection {} received permission request before UI wiring",
-            self.connection_id
-        );
-        Ok(RequestPermissionResponse::new(
-            RequestPermissionOutcome::Cancelled,
-        ))
+        let request_id = Uuid::new_v4().to_string();
+        let (tx, rx) = oneshot::channel::<RequestPermissionOutcome>();
+        if let Ok(mut guard) = self.pending_permissions.lock() {
+            guard.insert(request_id.clone(), tx);
+        }
+
+        (self.event_sink)(AcpEvent::PermissionRequest(AcpPermissionRequestEvent {
+            connection_id: self.connection_id.to_string(),
+            request_id: request_id.clone(),
+            request: args.clone(),
+        }));
+
+        let outcome = match rx.await {
+            Ok(outcome) => outcome,
+            Err(_) => RequestPermissionOutcome::Cancelled,
+        };
+
+        if let Ok(mut guard) = self.pending_permissions.lock() {
+            guard.remove(&request_id);
+        }
+
+        Ok(RequestPermissionResponse::new(outcome))
     }
 
     async fn session_notification(
         &self,
-        _args: SessionNotification,
+        args: SessionNotification,
     ) -> agent_client_protocol::Result<()> {
+        (self.event_sink)(AcpEvent::SessionUpdate(AcpSessionUpdateEvent {
+            connection_id: self.connection_id.to_string(),
+            notification: args,
+        }));
         Ok(())
     }
 }
@@ -191,8 +373,10 @@ async fn run_connection(
     id: Uuid,
     config: AcpAgentConfig,
     state: Arc<Mutex<AcpConnectionState>>,
-    mut shutdown_rx: mpsc::UnboundedReceiver<AcpCommand>,
+    mut command_rx: mpsc::UnboundedReceiver<AcpCommand>,
     ready_tx: oneshot::Sender<Result<InitializeResponse>>,
+    event_sink: AcpEventSink,
+    pending_permissions: Arc<Mutex<HashMap<String, oneshot::Sender<RequestPermissionOutcome>>>>,
 ) -> Result<()> {
     let mut child = spawn_agent(&config)
         .with_context(|| format!("failed to spawn ACP agent {}", config.command))?;
@@ -213,7 +397,11 @@ async fn run_connection(
         });
     }
 
-    let client = AcpClient { connection_id: id };
+    let client = AcpClient {
+        connection_id: id,
+        event_sink: event_sink.clone(),
+        pending_permissions,
+    };
     let (connection, io_task) = ClientSideConnection::new(
         client,
         stdin.compat_write(),
@@ -264,14 +452,34 @@ async fn run_connection(
     }
 
     let _ = ready_tx.send(Ok(init_response));
+    (event_sink)(AcpEvent::ConnectionState(AcpConnectionStateEvent {
+        connection_id: id.to_string(),
+        status: AcpConnectionStatus::Ready,
+    }));
 
     loop {
         tokio::select! {
-            cmd = shutdown_rx.recv() => {
+            cmd = command_rx.recv() => {
                 match cmd {
                     Some(AcpCommand::Shutdown) => {
                         let _ = child.kill().await;
                         break;
+                    }
+                    Some(AcpCommand::NewSession { request, respond_to }) => {
+                        let result = connection.new_session(request).await;
+                        let _ = respond_to.send(result.map_err(|err| anyhow!("session/new failed: {err:?}")));
+                    }
+                    Some(AcpCommand::LoadSession { request, respond_to }) => {
+                        let result = connection.load_session(request).await;
+                        let _ = respond_to.send(result.map_err(|err| anyhow!("session/load failed: {err:?}")));
+                    }
+                    Some(AcpCommand::Prompt { request, respond_to }) => {
+                        let result = connection.prompt(request).await;
+                        let _ = respond_to.send(result.map_err(|err| anyhow!("session/prompt failed: {err:?}")));
+                    }
+                    Some(AcpCommand::Cancel { request, respond_to }) => {
+                        let result = connection.cancel(request).await;
+                        let _ = respond_to.send(result.map_err(|err| anyhow!("session/cancel failed: {err:?}")));
                     }
                     None => break,
                 }
@@ -308,6 +516,10 @@ async fn run_connection(
             guard.set_closed(None);
         }
     }
+    (event_sink)(AcpEvent::ConnectionState(AcpConnectionStateEvent {
+        connection_id: id.to_string(),
+        status: AcpConnectionStatus::Closed,
+    }));
 
     Ok(())
 }
