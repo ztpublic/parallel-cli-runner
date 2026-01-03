@@ -496,7 +496,7 @@ button {
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
-  cursor: grab;
+  cursor: default;
   user-select: none;
   white-space: nowrap;
 }
