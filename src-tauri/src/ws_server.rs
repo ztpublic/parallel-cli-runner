@@ -10,8 +10,10 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::accept_hdr_async;
 use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
 use tokio_tungstenite::tungstenite::Message;
+use uuid::Uuid;
 
 use crate::command_error::CommandError;
+use crate::acp::{self, types::AcpAgentConfig};
 use crate::git::{self, DiffRequestDto};
 use crate::pty::{
     broadcast_line_with_manager, create_session_with_emitter, kill_session_with_manager,
@@ -28,6 +30,7 @@ struct EventMessage {
 #[derive(Clone)]
 struct WsState {
     manager: PtyManager,
+    acp: acp::AcpManager,
     events: broadcast::Sender<EventMessage>,
 }
 
@@ -75,6 +78,11 @@ struct CreateSessionParams {
 
 #[derive(Deserialize)]
 struct SessionIdParams {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct AcpConnectionIdParams {
     id: String,
 }
 
@@ -288,6 +296,7 @@ async fn run_ws_server_on_tokio_listener(
 ) -> anyhow::Result<()> {
     let state = WsState {
         manager: PtyManager::default(),
+        acp: acp::AcpManager::default(),
         events: broadcast::channel(256).0,
     };
 
@@ -473,6 +482,30 @@ async fn handle_request(
             .await?;
             Ok(Value::Null)
         }
+        "acp_connect" => {
+            let params: AcpAgentConfig = parse_params(params)?;
+            let manager = state.acp.clone();
+            let info = manager.connect(params).await.map_err(CommandError::internal)?;
+            to_value(info)
+        }
+        "acp_disconnect" => {
+            let params: AcpConnectionIdParams = parse_params(params)?;
+            let connection_id = parse_uuid(&params.id)?;
+            let manager = state.acp.clone();
+            if manager.get_info(connection_id).is_none() {
+                return Err(CommandError::new("not_found", "acp connection not found"));
+            }
+            manager
+                .disconnect(connection_id)
+                .await
+                .map_err(CommandError::internal)?;
+            Ok(Value::Null)
+        }
+        "acp_session_new" => Err(not_implemented("acp_session_new")),
+        "acp_session_load" => Err(not_implemented("acp_session_load")),
+        "acp_session_prompt" => Err(not_implemented("acp_session_prompt")),
+        "acp_session_cancel" => Err(not_implemented("acp_session_cancel")),
+        "acp_permission_reply" => Err(not_implemented("acp_permission_reply")),
         "git_detect_repo" => {
             let params: CwdParams = parse_params(params)?;
             let result = run_blocking(move || {
@@ -774,6 +807,14 @@ where
 
 fn to_value<T: Serialize>(value: T) -> Result<Value, CommandError> {
     serde_json::to_value(value).map_err(CommandError::internal)
+}
+
+fn parse_uuid(id: &str) -> Result<Uuid, CommandError> {
+    Uuid::parse_str(id).map_err(|_| CommandError::new("invalid_argument", "invalid id"))
+}
+
+fn not_implemented(method: &str) -> CommandError {
+    CommandError::new("not_implemented", format!("{method} not implemented yet"))
 }
 
 async fn run_blocking<T, F>(task: F) -> Result<T, CommandError>

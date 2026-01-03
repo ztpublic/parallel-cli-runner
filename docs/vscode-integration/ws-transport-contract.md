@@ -65,10 +65,33 @@ Platform-routing methods (handled by extension host or backend as needed):
 - `dialog.open`
 - `shell.openPath`
 
+ACP methods (backend; some are stubs in phase 2):
+- `acp_connect` (params: { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }) -> AcpConnectionInfo
+- `acp_disconnect` (params: { id: string }) -> void
+- `acp_session_new` (params: { connectionId: string; cwd?: string; mcpServers?: unknown[] }) -> session id (not implemented yet)
+- `acp_session_load` (not implemented yet)
+- `acp_session_prompt` (not implemented yet)
+- `acp_session_cancel` (not implemented yet)
+- `acp_permission_reply` (not implemented yet)
+
+`AcpConnectionInfo` shape:
+```
+{
+  "id": "uuid",
+  "status": "created" | "initialized" | "ready" | "closed",
+  "protocolVersion": "1",
+  "agentInfo": { "name": "string", "title": "string?", "version": "string" }
+}
+```
+
 ## Event names
 
 - `session-data`
 - `scan-progress`
+- `acp-session-update` (reserved)
+- `acp-session-state` (reserved)
+- `acp-permission-request` (reserved)
+- `acp-terminal-output` (reserved)
 
 ## Runtime config injection
 

@@ -7,6 +7,7 @@ use uuid::Uuid;
 mod command_error;
 use crate::command_error::CommandError;
 
+pub mod acp;
 pub mod git;
 use crate::git::{DiffRequestDto, DiffResponseDto, RepoInfoDto, RepoStatusDto};
 mod pty;
