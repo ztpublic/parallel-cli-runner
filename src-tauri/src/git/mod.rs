@@ -67,6 +67,6 @@ pub use diff::{get_unified_diff};
 
 // Re-export operation functions
 pub use operations::{
-    list_commits, commit, merge_into_branch, rebase_branch, reset, revert,
+    list_commits, list_commits_range, commit, merge_into_branch, rebase_branch, reset, revert,
     squash_commits, commits_in_remote,
 };

@@ -14,6 +14,7 @@ import { GitSubmodules } from "./git/GitSubmodules";
 import { GitTags } from "./git/GitTags";
 import {
   ChangedFile,
+  CommitItem,
   GitTab,
   GitTabId,
   RemoteItem,
@@ -38,6 +39,8 @@ type GitPanelProps = {
   branchGroups?: RepoBranchGroup[];
   commitGroups?: RepoGroup<WorktreeCommits>[];
   worktreeGroups?: RepoGroup<WorktreeItem>[];
+  worktreeCommitsByRepo?: Record<string, Record<string, CommitItem[]>>;
+  isLoadingWorktreeCommits?: (repoId: string, worktreePath: string) => boolean;
   changedFileGroups?: RepoGroup<ChangedFile>[];
   remoteGroups?: RepoGroup<RemoteItem>[];
   submoduleGroups?: RepoGroup<SubmoduleItem>[];
@@ -114,6 +117,8 @@ export function GitPanel({
   branchGroups = [],
   commitGroups = [],
   worktreeGroups = [],
+  worktreeCommitsByRepo,
+  isLoadingWorktreeCommits,
   changedFileGroups = [],
   remoteGroups = [],
   submoduleGroups = [],
@@ -432,6 +437,8 @@ export function GitPanel({
           {tabId === "worktrees" ? (
             <GitWorktrees
               worktreeGroups={worktreeGroups}
+              commitsByRepo={worktreeCommitsByRepo}
+              isLoadingCommits={isLoadingWorktreeCommits}
               onCreateWorktree={onCreateWorktree}
               onDeleteWorktree={onDeleteWorktree}
               onOpenTerminal={onOpenWorktreeTerminal}

@@ -108,6 +108,15 @@ async fn git_list_commits(
     with_cwd(cwd, |path| git::list_commits(path, limit, skip))
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn git_list_commits_range(
+    cwd: String,
+    include_branch: String,
+    exclude_branch: String,
+) -> Result<Vec<git::CommitInfoDto>, CommandError> {
+    with_cwd(cwd, |path| git::list_commits_range(path, &include_branch, &exclude_branch))
+}
+
 #[tauri::command]
 async fn git_list_worktrees(
     cwd: String,
@@ -344,6 +353,7 @@ pub fn run() {
             git_list_branches,
             git_list_remote_branches,
             git_list_commits,
+            git_list_commits_range,
             git_list_worktrees,
             git_list_remotes,
             git_list_submodules,

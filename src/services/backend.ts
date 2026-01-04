@@ -78,6 +78,14 @@ export function gitListCommits(params: {
   return request<CommitInfoDto[]>("git_list_commits", params);
 }
 
+export function gitListCommitsRange(params: {
+  cwd: string;
+  includeBranch: string;
+  excludeBranch: string;
+}): Promise<CommitInfoDto[]> {
+  return request<CommitInfoDto[]>("git_list_commits_range", params);
+}
+
 export function gitListWorktrees(params: { cwd: string }): Promise<WorktreeInfoDto[]> {
   return request<WorktreeInfoDto[]>("git_list_worktrees", params);
 }

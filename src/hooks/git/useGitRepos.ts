@@ -147,7 +147,14 @@ export function useGitRepos() {
     canLoadMoreLocalBranches,
     canLoadMoreRemoteBranches,
   } = useGitBranches();
-  const { worktreesByRepo, setWorktreesByRepo } = useGitWorktrees();
+  const {
+    worktreesByRepo,
+    setWorktreesByRepo,
+    commitsByRepo: worktreeUniqueCommitsByRepo,
+    fetchWorktreeCommits,
+    isLoadingWorktreeCommits,
+    getWorktreeCommits,
+  } = useGitWorktrees();
   const {
     remotesByRepo,
     setRemotesByRepo,
@@ -930,6 +937,10 @@ export function useGitRepos() {
     remoteBranchesByRepo,
     worktreeCommitsByRepo,
     worktreesByRepo,
+    worktreeUniqueCommitsByRepo,
+    fetchWorktreeCommits,
+    isLoadingWorktreeCommits,
+    getWorktreeCommits,
     remotesByRepo,
     submodulesByRepo,
     stashesByRepo,

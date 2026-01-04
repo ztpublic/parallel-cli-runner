@@ -51,6 +51,49 @@ pub fn list_commits(
     Ok(commits)
 }
 
+pub fn list_commits_range(
+    cwd: &Path,
+    include_branch: &str,
+    exclude_branch: &str,
+) -> Result<Vec<CommitInfoDto>, GitError> {
+    let repo = open_repo(cwd)?;
+    let mut revwalk = repo.revwalk()?;
+
+    let include_ref = repo.revparse_single(include_branch)?;
+    let include_commit = include_ref.peel_to_commit()?;
+    revwalk.push(include_commit.id())?;
+
+    let exclude_ref = repo.revparse_single(exclude_branch)?;
+    let exclude_commit = exclude_ref.peel_to_commit()?;
+    revwalk.hide(exclude_commit.id())?;
+
+    revwalk.set_sorting(Sort::TOPOLOGICAL | Sort::TIME | Sort::REVERSE)?;
+
+    let mut commits = Vec::new();
+    for oid in revwalk {
+        let oid = match oid {
+            Ok(oid) => oid,
+            Err(err) if is_missing_ref_error(&err) => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
+        let commit = match repo.find_commit(oid) {
+            Ok(commit) => commit,
+            Err(err) if is_missing_ref_error(&err) => continue,
+            Err(err) => return Err(GitError::Git2(err)),
+        };
+        let summary = commit.summary().unwrap_or_default().to_string();
+        let author = commit.author().name().unwrap_or_default().to_string();
+        let relative_time = format_relative_time(commit.time());
+        commits.push(CommitInfoDto {
+            id: commit.id().to_string(),
+            summary,
+            author,
+            relative_time,
+        });
+    }
+    Ok(commits)
+}
+
 pub fn commit(cwd: &Path, message: &str, stage_all: bool, amend: bool) -> Result<(), GitError> {
     let repo = open_repo(cwd)?;
     let mut index = repo.index()?;

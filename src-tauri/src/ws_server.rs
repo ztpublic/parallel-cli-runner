@@ -173,6 +173,15 @@ struct GitListCommitsParams {
 }
 
 #[derive(Deserialize)]
+struct GitListCommitsRangeParams {
+    cwd: String,
+    #[serde(rename = "includeBranch")]
+    include_branch: String,
+    #[serde(rename = "excludeBranch")]
+    exclude_branch: String,
+}
+
+#[derive(Deserialize)]
 struct GitListTagsParams {
     cwd: String,
     limit: usize,
@@ -663,6 +672,16 @@ async fn handle_request(
             let params: GitListCommitsParams = parse_params(params)?;
             let result = run_blocking(move || {
                 with_cwd(params.cwd, |path| git::list_commits(path, params.limit, params.skip))
+            })
+            .await?;
+            to_value(result)
+        }
+        "git_list_commits_range" => {
+            let params: GitListCommitsRangeParams = parse_params(params)?;
+            let result = run_blocking(move || {
+                with_cwd(params.cwd, |path| {
+                    git::list_commits_range(path, &params.include_branch, &params.exclude_branch)
+                })
             })
             .await?;
             to_value(result)

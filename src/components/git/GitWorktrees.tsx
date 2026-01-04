@@ -3,11 +3,13 @@ import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateWorktreeDialog } from "../dialogs/CreateWorktreeDialog";
 import { DeleteWorktreeDialog } from "../dialogs/DeleteWorktreeDialog";
-import type { RepoGroup, RepoHeader, WorktreeItem } from "../../types/git-ui";
+import type { CommitItem, RepoGroup, RepoHeader, WorktreeItem } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
 type GitWorktreesProps = {
   worktreeGroups: RepoGroup<WorktreeItem>[];
+  commitsByRepo?: Record<string, Record<string, CommitItem[]>>;
+  isLoadingCommits?: (repoId: string, worktreePath: string) => boolean;
   onCreateWorktree?: (repoId: string, branchName: string, path: string) => void;
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
@@ -20,6 +22,8 @@ type GitWorktreesProps = {
 
 export function GitWorktrees({
   worktreeGroups,
+  commitsByRepo,
+  isLoadingCommits,
   onCreateWorktree,
   onDeleteWorktree,
   onOpenTerminal,
@@ -79,6 +83,17 @@ export function GitWorktrees({
               {isAhead ? `↑${worktree.ahead}` : ""}
             </span>
           ) : null;
+
+          const worktreeCommits = commitsByRepo?.[group.repo.repoId]?.[worktree.path] ?? [];
+          const isLoading = isLoadingCommits?.(group.repo.repoId, worktree.path) ?? false;
+
+          const commitNodes: TreeNode[] = worktreeCommits.map((commit) => ({
+            id: `${group.repo.repoId}:${worktree.path}:${commit.id}`,
+            label: commit.message,
+            description: `${commit.author} - ${commit.date}`,
+            icon: "commit",
+            selectable: false,
+          }));
 
           return {
             id: `${group.repo.repoId}:${worktree.branch}`,
@@ -141,6 +156,7 @@ export function GitWorktrees({
               intent: "danger",
             },
             ],
+            children: commitNodes.length > 0 || isLoading ? commitNodes : undefined,
           };
         }),
     };

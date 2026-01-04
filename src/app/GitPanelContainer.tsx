@@ -65,6 +65,9 @@ export function GitPanelContainer({
     remoteBranchesByRepo,
     worktreeCommitsByRepo,
     worktreesByRepo,
+    worktreeUniqueCommitsByRepo,
+    fetchWorktreeCommits,
+    isLoadingWorktreeCommits,
     remotesByRepo,
     submodulesByRepo,
     stashesByRepo,
@@ -126,6 +129,15 @@ export function GitPanelContainer({
     if (gitRefreshRequest.seq === 0) return;
     void refreshRepos(gitRefreshRequest.repoId ?? undefined);
   }, [gitRefreshRequest.repoId, gitRefreshRequest.seq, refreshRepos, repos.length]);
+
+  useEffect(() => {
+    for (const repo of repos) {
+      const activeBranch = statusByRepo[repo.repo_id]?.branch;
+      if (activeBranch && worktreesByRepo[repo.repo_id]?.length > 0) {
+        void fetchWorktreeCommits(repo.repo_id, repo.root_path, activeBranch);
+      }
+    }
+  }, [statusByRepo, worktreesByRepo, fetchWorktreeCommits, repos]);
 
   const repoHeaders = useMemo<RepoHeader[]>(
     () =>
@@ -375,6 +387,8 @@ export function GitPanelContainer({
       branchGroups={branchGroups}
       commitGroups={commitGroups}
       worktreeGroups={worktreeGroups}
+      worktreeCommitsByRepo={worktreeUniqueCommitsByRepo}
+      isLoadingWorktreeCommits={isLoadingWorktreeCommits}
       remoteGroups={remoteGroups}
       submoduleGroups={submoduleGroups}
       stashGroups={stashGroups}
