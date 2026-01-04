@@ -1,0 +1,16 @@
+# Docker Compose configuration for Parallel CLI Runner Windows extension build
+version: "3.9"
+
+services:
+  # Build Windows x64 extension (cross-compile from Linux)
+  build:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: artifacts
+    image: parallel-cli-runner:win-x64
+    container_name: parallel-cli-runner-build
+    volumes:
+      - ../artifacts:/artifacts
+    command: |
+      bash -c "cp -r /artifacts/* /tmp/ 2>/dev/null || true && ls -la /artifacts/"

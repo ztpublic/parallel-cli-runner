@@ -17,7 +17,10 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "docker:build": "./docker/build.sh",
+    "docker:compose:up": "cd docker && docker compose up",
+    "docker:compose:build": "cd docker && docker compose build"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.1",

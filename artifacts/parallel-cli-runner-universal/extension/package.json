@@ -1,0 +1,68 @@
+{
+  "name": "parallel-cli-runner-vscode",
+  "displayName": "Parallel CLI Runner",
+  "description": "VSCode extension for Parallel CLI Runner",
+  "version": "0.1.0",
+  "publisher": "zt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://example.com/parallel-cli-runner.git"
+  },
+
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:parallelCliRunner.open"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "parallelCliRunner.open",
+        "title": "Parallel CLI Runner: Open"
+      }
+    ],
+    "configuration": {
+      "title": "Parallel CLI Runner",
+      "properties": {
+        "parallelCliRunner.backendPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the backend binary. If empty, use the bundled binary."
+        },
+        "parallelCliRunner.backendArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra arguments passed to the backend binary."
+        },
+        "parallelCliRunner.backendEnv": {
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Environment variables passed to the backend binary."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "prepackage:mac-arm64": "cargo build --release --manifest-path ../src-tauri/Cargo.toml && mkdir -p bin/darwin-arm64 && cp ../src-tauri/target/release/parallel-cli-runner bin/darwin-arm64/parallel-cli-runner",
+    "package:win-x64": "vsce package --target win32-x64 --out parallel-cli-runner-win32-x64.vsix",
+    "package:mac-arm64": "vsce package --target darwin-arm64 --out parallel-cli-runner-darwin-arm64.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "~5.8.3"
+  }
+}
