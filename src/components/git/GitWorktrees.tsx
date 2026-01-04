@@ -72,6 +72,13 @@ export function GitWorktrees({
             : "Smart update worktrees",
           disabled: !activeBranch || !worktrees.length || !onSmartUpdateWorktrees,
         },
+        {
+          id: "rebase-all-on-active",
+          label: activeBranch
+            ? `Rebase all on ${activeBranch}`
+            : "Rebase all on active branch",
+          disabled: !activeBranch || !worktrees.length || !onRebaseBranch,
+        },
       ],
       children: worktrees.map((worktree) => {
           const isAhead = (worktree.ahead ?? 0) > 0;
@@ -208,8 +215,17 @@ export function GitWorktrees({
   const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
     const repoGroup = worktreeGroups.find((group) => group.repo.repoId === node.id);
     if (repoGroup) {
+      const activeBranch = repoGroup.repo.activeBranch;
       if (itemId === "smart-update-worktrees") {
         onSmartUpdateWorktrees?.(repoGroup.repo.repoId);
+      } else if (itemId === "rebase-all-on-active" && activeBranch) {
+        // Rebase all worktree branches on the active branch
+        const worktrees = repoGroup.items.filter((worktree) => worktree.path !== repoGroup.repo.path);
+        for (const worktree of worktrees) {
+          if (worktree.branch !== activeBranch) {
+            onRebaseBranch?.(repoGroup.repo.repoId, worktree.branch, activeBranch);
+          }
+        }
       }
       return;
     }
