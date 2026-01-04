@@ -1,0 +1,5 @@
+# Ignore all test repositories
+*
+
+# But keep this .gitignore file
+!.gitignore

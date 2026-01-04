@@ -25,7 +25,9 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "test:repos:cleanup": "npx tsx e2e/git-repo-factory/cleanup.ts",
+    "test:repos:cleanup:all": "npx tsx e2e/git-repo-factory/cleanup.ts --all"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.1",
