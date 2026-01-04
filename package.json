@@ -21,13 +21,11 @@
         "docker:build": "./docker/build.sh",
     "docker:compose:up": "cd docker && docker compose up",
     "docker:compose:build": "cd docker && docker compose build",
-       "test:e2e": "playwright test",
+    "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:report": "playwright show-report",
-    "test:repos:cleanup": "npx tsx e2e/git-repo-factory/cleanup.ts",
-    "test:repos:cleanup:all": "npx tsx e2e/git-repo-factory/cleanup.ts --all"
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.1",
