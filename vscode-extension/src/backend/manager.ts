@@ -1,10 +1,13 @@
 import * as crypto from "crypto";
 import * as net from "net";
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
 import * as vscode from "vscode";
 import type { BackendState, ExtensionSettings } from "../types";
 import { resolveBackendPath } from "./finder";
 import { getExternalBackend } from "./external";
+
+// Task source and type for the backend server
+const BACKEND_TASK_SOURCE = "parallel-cli-runner";
+const BACKEND_TASK_TYPE = "backend";
 
 /**
  * Ensure the backend is running and return its state
@@ -34,12 +37,12 @@ export async function ensureBackend(
     if (!ready) {
       throw new Error("External backend did not respond to WebSocket handshake.");
     }
-    backendState = { ...externalBackend, process: null, settings };
+    backendState = { ...externalBackend, taskExecution: null, settings };
     setBackendState(backendState);
     return backendState;
   }
 
-  // Spawn a new backend process
+  // Spawn a new backend process using Task API
   const port = await findAvailablePort();
   const authToken = crypto.randomBytes(16).toString("hex");
   const wsUrl = `ws://127.0.0.1:${port}`;
@@ -49,7 +52,7 @@ export async function ensureBackend(
     vscode.window.showErrorMessage(
       "Backend binary not found. Run `cargo build --manifest-path src-tauri/Cargo.toml` or set parallelCliRunner.backendPath."
     );
-    backendState = { wsUrl, authToken, port, process: null, settings };
+    backendState = { wsUrl, authToken, port, taskExecution: null, settings };
     setBackendState(backendState);
     return backendState;
   }
@@ -57,21 +60,64 @@ export async function ensureBackend(
   const args = ["--port", String(port), "--auth-token", authToken, ...settings.backendArgs];
   output.appendLine(`Starting backend: ${backendPath} ${args.join(" ")}`);
 
-  const child = spawn(backendPath, args, {
-    env: { ...process.env, ...settings.backendEnv },
-  });
+  // Create a task definition for the backend server
+  const taskDefinition: vscode.TaskDefinition = {
+    type: BACKEND_TASK_TYPE,
+    command: backendPath,
+    args: args,
+  };
 
-  child.stdout.on("data", (data) => output.appendLine(data.toString()));
-  child.stderr.on("data", (data) => output.appendLine(data.toString()));
-  child.on("exit", (code) => output.appendLine(`Backend exited (${code ?? "unknown"})`));
+  // Create the task with shell execution for proper environment variable handling
+  // Filter out undefined values from process.env
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries({ ...process.env, ...settings.backendEnv })) {
+    if (value !== undefined) {
+      env[key] = value;
+    }
+  }
+
+  const task = new vscode.Task(
+    taskDefinition,
+    vscode.TaskScope.Global,
+    "Backend Server",
+    BACKEND_TASK_SOURCE,
+    new vscode.ShellExecution(backendPath, args, {
+      env,
+    })
+  );
+
+  // Set the presentation options to show output in the terminal
+  task.presentationOptions = {
+    reveal: vscode.TaskRevealKind.Always,
+    echo: true,
+    focus: false,
+    panel: vscode.TaskPanelKind.Shared,
+    showReuseMessage: false,
+    clear: true,
+  };
+
+  // Execute the task
+  const execution = await vscode.tasks.executeTask(task);
+
+  // Wait for the task to start
+  await new Promise((resolve) => setTimeout(resolve, 500));
 
   const ready = await waitForBackendReady(wsUrl, authToken, output);
   if (!ready) {
-    child.kill();
+    execution.terminate();
     throw new Error("Backend did not respond to WebSocket handshake.");
   }
 
-  backendState = { wsUrl, authToken, port, process: child, settings };
+  // Set up task exit handler
+  const disposable = vscode.tasks.onDidEndTask((e: vscode.TaskEndEvent) => {
+    if (e.execution === execution) {
+      output.appendLine("Backend task ended.");
+      setBackendState(null);
+      disposable.dispose();
+    }
+  });
+
+  backendState = { wsUrl, authToken, port, taskExecution: execution, settings };
   setBackendState(backendState);
   return backendState;
 }
@@ -81,8 +127,8 @@ export async function ensureBackend(
  */
 export function killBackend(): void {
   const backendState = getBackendState();
-  if (backendState?.process) {
-    backendState.process.kill();
+  if (backendState?.taskExecution) {
+    backendState.taskExecution.terminate();
   }
   setBackendState(null);
 }
