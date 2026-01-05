@@ -350,21 +350,6 @@ fn diff_stats_from_diff(diff: &Diff<'_>) -> Result<crate::git::types::DiffStatDt
     })
 }
 
-fn is_repo_dirty(repo: &Repository) -> Result<bool, GitError> {
-    let mut opts = StatusOptions::new();
-    opts.show(StatusShow::IndexAndWorkdir)
-        .include_untracked(true)
-        .recurse_untracked_dirs(true);
-    let statuses = repo.statuses(Some(&mut opts))?;
-    for entry in statuses.iter() {
-        let status = entry.status();
-        if status != Status::CURRENT && !status.contains(Status::IGNORED) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 fn latest_commit_for_repo(repo: &Repository) -> Result<Option<CommitInfoDto>, GitError> {
     let head = match repo.head() {
         Ok(head) => head,
