@@ -1,0 +1,6 @@
+[alias]
+# Generate TypeScript types from Rust DTOs
+export-types = "run --bin export_types --manifest-path src-tauri/Cargo.toml"
+
+# Run type sync test to verify types are up to date
+check-types = "test --manifest-path src-tauri/Cargo.toml types_are_synced"
