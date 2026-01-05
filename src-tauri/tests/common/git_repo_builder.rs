@@ -186,18 +186,11 @@ impl GitRepoBuilder {
                 .initial_commit_message
                 .unwrap_or_else(|| "Initial commit".to_string());
 
+            // Set HEAD to the desired branch name first (this creates the branch on first commit)
+            let _ = repo.set_head(&format!("refs/heads/{}", initial_branch));
+
             // Create an empty initial commit (allow empty)
             Self::do_commit_allow_empty(&repo, &message);
-
-            // Now rename the default branch ("master") to the desired name
-            if let Ok(head) = repo.head() {
-                if let Some(target) = head.target() {
-                    if let Ok(commit) = repo.find_commit(target) {
-                        let _ = repo.branch(&initial_branch, &commit, true);
-                        let _ = repo.set_head(&format!("refs/heads/{}", initial_branch));
-                    }
-                }
-            }
         }
 
         // Execute operations
@@ -348,13 +341,16 @@ mod tests {
             .with_initial_commit("Start")
             .build();
 
-        // Should have one commit
-        let commits = repo
-            .repo
-            .revwalk()
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        assert_eq!(commits.len(), 1);
+        // Verify HEAD exists and points to a commit
+        let head = repo.repo.head().expect("HEAD should exist");
+        assert!(head.is_branch(), "HEAD should be a branch");
+
+        // Check that HEAD points to a commit
+        let target = head.target().expect("HEAD should point to a commit");
+        let commit = repo.repo.find_commit(target).expect("commit should exist");
+
+        // Verify the commit message matches
+        let commit_msg = commit.message().unwrap();
+        assert!(commit_msg.contains("Start"), "commit message should match");
     }
 }
