@@ -1,11 +1,10 @@
 //! A simple ACP agent server for educational purposes.
 //!
-//! The agent communicates with clients over stdio. To run it with logging:
+//! The agent communicates with clients over stdio.
 
 use std::cell::Cell;
 
 use agent_client_protocol::{self as acp, Client as _};
-use serde_json::json;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::compat::{TokioAsyncReadCompatExt as _, TokioAsyncWriteCompatExt as _};
 
@@ -29,142 +28,109 @@ impl ExampleAgent {
 impl acp::Agent for ExampleAgent {
     async fn initialize(
         &self,
-        arguments: acp::InitializeRequest,
+        _arguments: acp::InitializeRequest,
     ) -> Result<acp::InitializeResponse, acp::Error> {
-        log::info!("Received initialize request {arguments:?}");
-        Ok(acp::InitializeResponse {
-            protocol_version: acp::V1,
-            agent_capabilities: acp::AgentCapabilities::default(),
-            auth_methods: Vec::new(),
-            agent_info: Some(acp::Implementation {
-                name: "example-agent".to_string(),
-                title: Some("Example Agent".to_string()),
-                version: "0.1.0".to_string(),
-            }),
-            meta: None,
-        })
+        eprintln!("Example agent: Received initialize request");
+        // Create InitializeResponse with agent_info using JSON deserialization
+        use serde_json::json;
+        let impl_json = json!({
+            "name": "example-agent",
+            "title": "Example Agent",
+            "version": "0.1.0"
+        });
+        let agent_info: acp::Implementation = serde_json::from_value(impl_json)
+            .map_err(|_| acp::Error::internal_error())?;
+
+        let mut response = acp::InitializeResponse::new(acp::ProtocolVersion::V1);
+        response.agent_info = Some(agent_info);
+        Ok(response)
     }
 
     async fn authenticate(
         &self,
-        arguments: acp::AuthenticateRequest,
+        _arguments: acp::AuthenticateRequest,
     ) -> Result<acp::AuthenticateResponse, acp::Error> {
-        log::info!("Received authenticate request {arguments:?}");
-        Ok(acp::AuthenticateResponse::default())
+        eprintln!("Example agent: Received authenticate request");
+        Ok(acp::AuthenticateResponse::new())
     }
 
     async fn new_session(
         &self,
-        arguments: acp::NewSessionRequest,
+        _arguments: acp::NewSessionRequest,
     ) -> Result<acp::NewSessionResponse, acp::Error> {
-        log::info!("Received new session request {arguments:?}");
+        eprintln!("Example agent: Received new session request");
         let session_id = self.next_session_id.get();
         self.next_session_id.set(session_id + 1);
-        Ok(acp::NewSessionResponse {
-            session_id: acp::SessionId(session_id.to_string().into()),
-            modes: None,
-            #[cfg(feature = "unstable_session_model")]
-            models: None,
-            meta: None,
-        })
+        Ok(acp::NewSessionResponse::new(session_id.to_string()))
     }
 
     async fn load_session(
         &self,
-        arguments: acp::LoadSessionRequest,
+        _arguments: acp::LoadSessionRequest,
     ) -> Result<acp::LoadSessionResponse, acp::Error> {
-        log::info!("Received load session request {arguments:?}");
-        Ok(acp::LoadSessionResponse {
-            modes: None,
-            #[cfg(feature = "unstable_session_model")]
-            models: None,
-            meta: None,
-        })
+        eprintln!("Example agent: Received load session request");
+        Ok(acp::LoadSessionResponse::new())
     }
 
     async fn prompt(
         &self,
         arguments: acp::PromptRequest,
     ) -> Result<acp::PromptResponse, acp::Error> {
-        log::info!("Received prompt request {arguments:?}");
-        for content in ["Client sent: ".into()].into_iter().chain(arguments.prompt) {
-            let (tx, rx) = oneshot::channel();
-            self.session_update_tx
-                .send((
-                    acp::SessionNotification {
-                        session_id: arguments.session_id.clone(),
-                        update: acp::SessionUpdate::AgentMessageChunk(acp::ContentChunk {
-                            content,
-                            meta: None,
-                        }),
-                        meta: None,
-                    },
-                    tx,
-                ))
-                .map_err(|_| acp::Error::internal_error())?;
-            rx.await.map_err(|_| acp::Error::internal_error())?;
-        }
-        Ok(acp::PromptResponse {
-            stop_reason: acp::StopReason::EndTurn,
-            meta: None,
-        })
+        eprintln!("Example agent: Received prompt request with {} content blocks", arguments.prompt.len());
+
+        // For this simple example, we'll just acknowledge the prompt
+        // In a real agent, you would process the prompt and send back responses
+
+        // Return EndTurn response immediately
+        Ok(acp::PromptResponse::new(acp::StopReason::EndTurn))
     }
 
-    async fn cancel(&self, args: acp::CancelNotification) -> Result<(), acp::Error> {
-        log::info!("Received cancel request {args:?}");
+    async fn cancel(&self, _args: acp::CancelNotification) -> Result<(), acp::Error> {
+        eprintln!("Example agent: Received cancel request");
         Ok(())
     }
 
     async fn set_session_mode(
         &self,
-        args: acp::SetSessionModeRequest,
+        _args: acp::SetSessionModeRequest,
     ) -> Result<acp::SetSessionModeResponse, acp::Error> {
-        log::info!("Received set session mode request {args:?}");
-        Ok(acp::SetSessionModeResponse::default())
+        eprintln!("Example agent: Received set session mode request");
+        Ok(acp::SetSessionModeResponse::new())
     }
 
     #[cfg(feature = "unstable_session_model")]
     async fn set_session_model(
         &self,
-        args: acp::SetSessionModelRequest,
+        _args: acp::SetSessionModelRequest,
     ) -> Result<acp::SetSessionModelResponse, acp::Error> {
-        log::info!("Received select model request {args:?}");
-        Ok(acp::SetSessionModelResponse::default())
+        eprintln!("Example agent: Received set session model request");
+        Ok(acp::SetSessionModelResponse::new())
     }
 
     #[cfg(feature = "unstable_session_config_options")]
     async fn set_session_config_option(
         &self,
-        args: acp::SetSessionConfigOptionRequest,
+        _args: acp::SetSessionConfigOptionRequest,
     ) -> Result<acp::SetSessionConfigOptionResponse, acp::Error> {
-        log::info!("Received set session config option request {args:?}");
-        Ok(acp::SetSessionConfigOptionResponse::new(vec![
-            acp::SessionConfigOption::select(
-                args.config_id,
-                "Example Option",
-                args.value,
-                vec![
-                    acp::SessionConfigSelectOption::new("option1", "Option 1"),
-                    acp::SessionConfigSelectOption::new("option2", "Option 2"),
-                ]),
-            ),
-        ]))
+        eprintln!("Example agent: Received set session config option request");
+        Ok(acp::SetSessionConfigOptionResponse::new(vec![]))
     }
 
     async fn ext_method(&self, args: acp::ExtRequest) -> Result<acp::ExtResponse, acp::Error> {
-        log::info!(
-            "Received extension method call: method={}, params={:?}",
-            args.method,
-            args.params
+        eprintln!(
+            "Example agent: Received extension method call: method={}",
+            args.method
         );
-        Ok(serde_json::value::to_raw_value(&json!({"example": "response"}))?.into())
+        // Return an empty JSON object as the response - needs Arc<RawValue>
+        use serde_json::value::to_raw_value;
+        let empty = to_raw_value(&serde_json::json!({}))?;
+        Ok(acp::ExtResponse::new(empty.into()))
     }
 
     async fn ext_notification(&self, args: acp::ExtNotification) -> Result<(), acp::Error> {
-        log::info!(
-            "Received extension notification: method={}, params={:?}",
-            args.method,
-            args.params
+        eprintln!(
+            "Example agent: Received extension notification: method={}",
+            args.method
         );
         Ok(())
     }
@@ -172,7 +138,7 @@ impl acp::Agent for ExampleAgent {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> acp::Result<()> {
-    env_logger::init();
+    eprintln!("Example ACP Agent starting...");
 
     let outgoing = tokio::io::stdout().compat_write();
     let incoming = tokio::io::stdin().compat();
@@ -194,7 +160,7 @@ async fn main() -> acp::Result<()> {
                 while let Some((session_notification, tx)) = rx.recv().await {
                     let result = conn.session_notification(session_notification).await;
                     if let Err(e) = result {
-                        log::error!("{e}");
+                        eprintln!("Example agent error sending notification: {e}");
                         break;
                     }
                     tx.send(()).ok();

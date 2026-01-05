@@ -5,3 +5,6 @@ pub mod types;
 
 pub use agent_catalog::AcpAgentCatalog;
 pub use runtime::AcpManager;
+
+#[cfg(test)]
+mod tests;
