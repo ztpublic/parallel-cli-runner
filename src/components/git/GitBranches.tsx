@@ -4,6 +4,7 @@ import { TreeView } from "../TreeView";
 import { CreateBranchDialog } from "../dialogs/CreateBranchDialog";
 import { DeleteBranchDialog } from "../dialogs/DeleteBranchDialog";
 import { ForcePushDialog } from "../dialogs/ForcePushDialog";
+import { CreateWorktreeFromBranchDialog } from "../dialogs/CreateWorktreeFromBranchDialog";
 import type { RepoBranchGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -20,6 +21,7 @@ type GitBranchesProps = {
   onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
   onPull?: (repoId: string) => void;
   onPush?: (repoId: string, force: boolean) => void;
+  onCreateWorktreeForBranch?: (repoId: string, branchName: string, path: string) => void;
 };
 
 export function GitBranches({
@@ -35,6 +37,7 @@ export function GitBranches({
   onRebaseBranch,
   onPull,
   onPush,
+  onCreateWorktreeForBranch,
 }: GitBranchesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -53,6 +56,13 @@ export function GitBranches({
     repoId: string;
     branchName: string;
   }>({ open: false, repoId: "", branchName: "" });
+
+  const [createWorktreeDialog, setCreateWorktreeDialog] = useState<{
+    open: boolean;
+    repoId: string;
+    repoName: string;
+    branchName: string;
+  }>({ open: false, repoId: "", repoName: "", branchName: "" });
 
   const nodes: TreeNode[] = branchGroups.map((group) => {
     const activeBranch = group.repo.activeBranch;
@@ -111,6 +121,10 @@ export function GitBranches({
             id: "force-push",
             label: "Force Push",
             disabled: !branch.current,
+          },
+          {
+            id: "create-worktree",
+            label: "Create worktree",
           },
         ],
         actions: [
@@ -287,6 +301,15 @@ export function GitBranches({
         const branchName = parts[1];
         setForcePushDialog({ open: true, repoId, branchName });
       }
+    } else if (itemId === "create-worktree") {
+      const parts = node.id.split(":local:");
+      if (parts.length === 2) {
+        const repoId = parts[0];
+        const branchName = parts[1];
+        const group = branchGroups.find((g) => g.repo.repoId === repoId);
+        const repoName = group?.repo.name ?? repoId;
+        setCreateWorktreeDialog({ open: true, repoId, repoName, branchName });
+      }
     }
   };
 
@@ -330,6 +353,16 @@ export function GitBranches({
         onClose={() => setForcePushDialog((prev) => ({ ...prev, open: false }))}
         onConfirm={() => {
           onPush?.(forcePushDialog.repoId, true);
+        }}
+      />
+
+      <CreateWorktreeFromBranchDialog
+        open={createWorktreeDialog.open}
+        repoName={createWorktreeDialog.repoName}
+        branchName={createWorktreeDialog.branchName}
+        onClose={() => setCreateWorktreeDialog((prev) => ({ ...prev, open: false }))}
+        onConfirm={(branchName, path) => {
+          onCreateWorktreeForBranch?.(createWorktreeDialog.repoId, branchName, path);
         }}
       />
     </div>

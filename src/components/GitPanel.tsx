@@ -389,6 +389,7 @@ export function GitPanel({
               onRebaseBranch={onRebaseBranch}
               onPull={onPull}
               onPush={onPush}
+              onCreateWorktreeForBranch={onCreateWorktree}
             />
           ) : null}
 

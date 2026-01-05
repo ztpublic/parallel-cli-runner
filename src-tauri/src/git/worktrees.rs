@@ -92,9 +92,17 @@ pub fn add_worktree(
     start_point: &str,
 ) -> Result<(), GitError> {
     let repo = open_repo(repo_root)?;
-    let start_obj = repo.revparse_single(start_point)?;
-    let start_commit = start_obj.peel_to_commit()?;
-    let branch_ref = repo.branch(branch, &start_commit, false)?;
+
+    // Try to find the existing branch first, or create it from start_point
+    let branch_ref = if let Ok(existing) = repo.find_branch(branch, git2::BranchType::Local) {
+        // Branch already exists, use it
+        existing.into_reference()
+    } else {
+        // Branch doesn't exist, create it from start_point
+        let start_obj = repo.revparse_single(start_point)?;
+        let start_commit = start_obj.peel_to_commit()?;
+        repo.branch(branch, &start_commit, false)?.into_reference()
+    };
 
     let full_path = if worktree_path.is_absolute() {
         worktree_path.to_path_buf()
@@ -107,8 +115,7 @@ pub fn add_worktree(
         .and_then(|name| name.to_str())
         .unwrap_or(branch);
     let mut opts = git2::WorktreeAddOptions::new();
-    let reference = branch_ref.into_reference();
-    opts.reference(Some(&reference));
+    opts.reference(Some(&branch_ref));
     repo.worktree(worktree_name, &full_path, Some(&opts))?;
 
     // Initialize and checkout submodules in the new worktree
