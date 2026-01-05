@@ -68,22 +68,24 @@ fn smart_update_worktrees_simple_case() {
     assert_eq!(worktree_b.ahead, 0);
     assert_eq!(worktree_b.behind, 0);
 
-    // Perform smart update (this is what should fail in the current implementation)
-    // The bug is that rebase_branch tries to checkout the branch first, which fails
-    // because the branch is already checked out in a worktree
-
-    // First pass: rebase each worktree onto master, then fast-forward master to worktree
+    // Simulate smart update by detaching HEAD first
+    // This is what the fixed implementation does
     for worktree in &worktrees {
         if worktree.branch == "master" {
             continue;
         }
 
-        // This should fail because feature-a is checked out in worktree-a
+        // Detach the worktree HEAD
+        git::detach_worktree_head(&std::path::PathBuf::from(&worktree.path))
+            .expect("detach worktree head");
+
+        // Now rebase should succeed
         let result = git::rebase_branch(temp.path(), &worktree.branch, "master");
-        if worktree.branch == "feature-a" {
-            // Expected to fail with current implementation
-            assert!(result.is_err(), "rebase should fail for branch checked out in worktree");
-        }
+        assert!(result.is_ok(), "rebase should succeed after detaching worktree head");
+
+        // Checkout the branch back in the worktree
+        git::checkout_local_branch(&std::path::PathBuf::from(&worktree.path), &worktree.branch)
+            .expect("checkout branch back in worktree");
     }
 }
 

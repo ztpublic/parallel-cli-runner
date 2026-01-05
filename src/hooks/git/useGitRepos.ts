@@ -615,27 +615,52 @@ export function useGitRepos() {
         );
       }
 
+      // First pass: rebase each worktree onto active branch, then fast-forward active branch to each worktree
       for (const worktree of worktrees) {
         if (worktree.branch === activeBranch) continue;
+
+        // Detach the worktree HEAD before rebasing
+        await gitDetachWorktreeHead({ cwd: worktree.path });
+
+        // Rebase the worktree branch onto active branch
         await gitRebaseBranch({
           repoRoot: repo.root_path,
           targetBranch: worktree.branch,
           ontoBranch: activeBranch,
         });
-        // Fast-forward the active branch to the rebased worktree branch.
+
+        // Fast-forward the active branch to the rebased worktree branch
         await gitRebaseBranch({
           repoRoot: repo.root_path,
           targetBranch: activeBranch,
           ontoBranch: worktree.branch,
         });
+
+        // Checkout the branch back in the worktree
+        await gitCheckoutBranch({
+          cwd: worktree.path,
+          branchName: worktree.branch,
+        });
       }
 
+      // Second pass: rebase each worktree onto the updated active branch
       for (const worktree of worktrees) {
         if (worktree.branch === activeBranch) continue;
+
+        // Detach the worktree HEAD before rebasing
+        await gitDetachWorktreeHead({ cwd: worktree.path });
+
+        // Rebase the worktree branch onto active branch again
         await gitRebaseBranch({
           repoRoot: repo.root_path,
           targetBranch: worktree.branch,
           ontoBranch: activeBranch,
+        });
+
+        // Checkout the branch back in the worktree
+        await gitCheckoutBranch({
+          cwd: worktree.path,
+          branchName: worktree.branch,
         });
       }
 
