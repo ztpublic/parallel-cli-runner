@@ -52,3 +52,5 @@ src-tauri/tauri-build
 
 # Storybook
 *storybook.log
+
+artifacts
