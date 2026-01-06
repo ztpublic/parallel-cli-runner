@@ -86,9 +86,9 @@ export async function ensureBackend(
     })
   );
 
-  // Set the presentation options to show output in the terminal
+  // Set the presentation options to run without showing the terminal
   task.presentationOptions = {
-    reveal: vscode.TaskRevealKind.Always,
+    reveal: vscode.TaskRevealKind.Silent,
     echo: true,
     focus: false,
     panel: vscode.TaskPanelKind.Shared,
