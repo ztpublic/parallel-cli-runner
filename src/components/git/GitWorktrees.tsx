@@ -1,10 +1,31 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateWorktreeDialog } from "../dialogs/CreateWorktreeDialog";
 import { DeleteWorktreeDialog } from "../dialogs/DeleteWorktreeDialog";
 import type { CommitItem, RepoGroup, RepoHeader, WorktreeItem } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
+
+const WorktreeStatusSlot = memo(function WorktreeStatusSlot({
+  isAhead,
+  isBehind,
+  ahead,
+  behind,
+}: {
+  isAhead: boolean;
+  isBehind: boolean;
+  ahead?: number;
+  behind?: number;
+}) {
+  return (isAhead || isBehind) ? (
+    <span className="git-branch-status text-xs text-muted">
+      {isBehind ? `↓${behind} ` : ""}
+      {isAhead ? `↑${ahead}` : ""}
+    </span>
+  ) : null;
+});
+
+WorktreeStatusSlot.displayName = 'WorktreeStatusSlot';
 
 type GitWorktreesProps = {
   worktreeGroups: RepoGroup<WorktreeItem>[];
@@ -20,7 +41,7 @@ type GitWorktreesProps = {
   onRefresh?: () => void;
 };
 
-export function GitWorktrees({
+export const GitWorktrees = memo(function GitWorktrees({
   worktreeGroups,
   commitsByRepo,
   isLoadingCommits,
@@ -298,4 +319,6 @@ export function GitWorktrees({
       />
     </div>
   );
-}
+});
+
+GitWorktrees.displayName = 'GitWorktrees';
