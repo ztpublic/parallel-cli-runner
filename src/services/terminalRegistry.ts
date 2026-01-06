@@ -2,6 +2,7 @@ import { Terminal } from "xterm";
 import type { IDisposable } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { subscribeSessionData, writeToSession } from "./backend";
+import { TerminalBatchManager } from "./terminalBatchManager";
 
 type TerminalEntry = {
   term: Terminal;
@@ -11,6 +12,14 @@ type TerminalEntry = {
   unlisten?: () => void;
   disposed: boolean;
 };
+
+// Batch manager for all terminal sessions
+const batchManager = new TerminalBatchManager((sessionId, data, _metrics) => {
+  const entry = registry.get(sessionId);
+  if (entry && !entry.disposed) {
+    entry.term.write(data);
+  }
+});
 
 export type TerminalHandle = {
   term: Terminal;
@@ -26,6 +35,7 @@ function createEntry(sessionId: string, onInput?: (data: string) => void): Termi
     fontSize: 14,
     fontFamily: "IBM Plex Mono, JetBrains Mono, Menlo, monospace",
     disableStdin: false,
+    scrollback: 1000, // Limit scrollback buffer to 1000 lines for performance
     theme: {
       background: "#1e1e1e",
     },
@@ -48,6 +58,8 @@ function createEntry(sessionId: string, onInput?: (data: string) => void): Termi
   const dataListener = term.onData((data) => {
     void writeToSession({ id: sessionId, data });
     onInputRef.current?.(data);
+    // Flush pending batches immediately on user input for responsiveness
+    batchManager.flush(sessionId);
   });
 
   const entry: TerminalEntry = {
@@ -60,7 +72,8 @@ function createEntry(sessionId: string, onInput?: (data: string) => void): Termi
 
   entry.unlisten = subscribeSessionData((payload) => {
     if (payload.id === sessionId) {
-      term.write(payload.data);
+      // Use batch manager instead of direct write
+      batchManager.queueWrite(sessionId, payload.data);
     }
   });
 
@@ -105,5 +118,35 @@ export function disposeTerminal(sessionId: string): void {
     entry.unlisten();
   }
   entry.term.dispose();
+  // Clean up batch manager for this session
+  batchManager.dispose(sessionId);
   registry.delete(sessionId);
+}
+
+/**
+ * Flush pending batch for a session (call when terminal receives focus).
+ */
+export function flushTerminalBatch(sessionId: string): void {
+  batchManager.flush(sessionId);
+}
+
+/**
+ * Get buffer info for a terminal session.
+ */
+export function getTerminalBufferInfo(sessionId: string): { size: number; chunkCount: number } | null {
+  const entry = registry.get(sessionId);
+  if (!entry) return null;
+  return {
+    size: entry.term.buffer.active.length,
+    chunkCount: 0,
+  };
+}
+
+/**
+ * Clear the terminal buffer for a session.
+ */
+export function clearTerminalBuffer(sessionId: string): void {
+  const entry = registry.get(sessionId);
+  if (!entry) return;
+  entry.term.clear();
 }

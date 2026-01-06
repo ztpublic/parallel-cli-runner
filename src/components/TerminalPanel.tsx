@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { countPanes, LayoutNode } from "../types/layout";
+import { countPanes, type LayoutNode } from "../types/layout";
+import { clearTerminalBuffer } from "../services/terminalRegistry";
 import { ContextMenu } from "./ContextMenu";
 import { Icon } from "./Icons";
 import { LayoutRenderer } from "./LayoutRenderer";
@@ -28,6 +29,19 @@ type TerminalPanelProps = {
 };
 
 type TerminalView = "terminals" | "acp";
+
+// Helper to extract session IDs from a layout node
+function getSessionIdsFromLayout(node: LayoutNode): string[] {
+  if (node.type === "pane") {
+    return node.sessionId ? [node.sessionId] : [];
+  } else if (node.type === "split") {
+    return [
+      ...getSessionIdsFromLayout(node.children[0]),
+      ...getSessionIdsFromLayout(node.children[1]),
+    ];
+  }
+  return [];
+}
 
 export function TerminalPanel({
   tabs,
@@ -74,6 +88,8 @@ export function TerminalPanel({
         type: "radio" as const,
         selected: view === "quad" && hasSplitPanes,
       },
+      { id: "actions", label: "Actions", type: "separator" as const },
+      { id: "clear-buffer", label: "Clear buffer" },
     ];
   }, [menuState, tabs, terminalSplitPaneIds, terminalSplitViews]);
 
@@ -193,6 +209,15 @@ export function TerminalPanel({
             }
             if (itemId === "quad") {
               onSetTerminalView(menuState.tabId, "quad");
+            }
+            if (itemId === "clear-buffer") {
+              const tab = tabs.find((item) => item.id === menuState.tabId);
+              if (tab) {
+                const sessionIds = getSessionIdsFromLayout(tab.layout);
+                for (const sessionId of sessionIds) {
+                  clearTerminalBuffer(sessionId);
+                }
+              }
             }
           }}
         />
