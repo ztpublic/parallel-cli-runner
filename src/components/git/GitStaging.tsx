@@ -3,7 +3,6 @@ import { openFileInEditor } from "../../platform/actions";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
 import { TreeView } from "../TreeView";
-import { StageAllAndCommitDialog } from "../dialogs/StageAllAndCommitDialog";
 import { StashChangesDialog } from "../dialogs/StashChangesDialog";
 import type { TreeNode } from "../../types/tree";
 
@@ -63,10 +62,6 @@ export const GitStaging = memo(function GitStaging({
 }: GitStagingProps) {
   const [commitMessage, setCommitMessage] = useState("");
   const [checkedRepoIds, setCheckedRepoIds] = useState<string[]>([]);
-  const [stageAllDialog, setStageAllDialog] = useState<{
-    open: boolean;
-    repoIds: string[];
-  }>({ open: false, repoIds: [] });
   const [stashDialog, setStashDialog] = useState<{
     open: boolean;
     repoId: string | null;
@@ -284,26 +279,13 @@ export const GitStaging = memo(function GitStaging({
       }
     });
 
-    if (reposToStage.length > 0) {
-      setStageAllDialog({ open: true, repoIds: reposToStage });
-      return;
-    }
+    // Auto-stage all for repos that need it
+    await Promise.all(reposToStage.map(id => onStageAll(id)));
 
     // Commit to all checked repos
     await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
     setCommitMessage("");
-  }, [checkedRepoIds, groups, commitMessage, onStageAll, onCommit, setStageAllDialog, setCommitMessage]);
-
-  const handleConfirmStageAllAndCommit = useCallback(async () => {
-    const { repoIds } = stageAllDialog;
-
-    // Stage all for identified repos
-    await Promise.all(repoIds.map(id => onStageAll(id)));
-
-    // Commit all checked repos
-    await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
-    setCommitMessage("");
-  }, [stageAllDialog, onStageAll, checkedRepoIds, onCommit, commitMessage, setCommitMessage]);
+  }, [checkedRepoIds, groups, commitMessage, onStageAll, onCommit]);
 
   const commitButtonText = useMemo(() => {
     if (checkedRepoIds.length === 1) {
@@ -365,13 +347,6 @@ export const GitStaging = memo(function GitStaging({
             toggleOnRowClick={true}
         />
       </div>
-
-      <StageAllAndCommitDialog
-        open={stageAllDialog.open}
-        repoCount={stageAllDialog.repoIds.length}
-        onClose={() => setStageAllDialog((prev) => ({ ...prev, open: false }))}
-        onConfirm={handleConfirmStageAllAndCommit}
-      />
 
       <StashChangesDialog
         open={stashDialog.open}
