@@ -13,3 +13,7 @@
 - ci
 
 - utilities
+
+- bugfix
+  - smart update should keep un-committed changes
+  - terminal still show
