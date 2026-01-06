@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import "xterm/css/xterm.css";
 import { PaneNode } from "../types/layout";
-import { attachTerminal, detachTerminal, type TerminalHandle } from "../services/terminalRegistry";
+import { attachTerminal, detachTerminal, flushTerminalBatch, type TerminalHandle } from "../services/terminalRegistry";
 import { resizeSession } from "../services/backend";
+import { createDebounce } from "../utils/debounce";
 
 type TerminalPaneProps = {
   pane: PaneNode;
@@ -22,7 +23,8 @@ export function TerminalPane({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<TerminalHandle | null>(null);
   const onInputRef = useRef(onInput);
-  const resizeTimeoutRef = useRef<number | null>(null);
+  const debouncedSyncSizeRef = useRef<ReturnType<typeof createDebounce<typeof syncSize>> | null>(null);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   useEffect(() => {
     onInputRef.current = onInput;
@@ -42,12 +44,8 @@ export function TerminalPane({
   }, [pane.sessionId]);
 
   const scheduleSyncSize = useCallback(() => {
-    if (resizeTimeoutRef.current !== null) return;
-    resizeTimeoutRef.current = window.setTimeout(() => {
-      resizeTimeoutRef.current = null;
-      void syncSize();
-    }, 100);
-  }, [syncSize]);
+    debouncedSyncSizeRef.current?.();
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -60,29 +58,36 @@ export function TerminalPane({
     terminalRef.current = handle;
     void syncSize();
 
-    const resizeObserver = new ResizeObserver(() => {
-      scheduleSyncSize();
+    // Create enhanced debounced resize function with RAF alignment
+    const debouncedSyncSize = createDebounce(syncSize, 100, {
+      trailing: true,
+      useRaf: true,
     });
+    debouncedSyncSizeRef.current = debouncedSyncSize;
+
+    const resizeObserver = new ResizeObserver(() => {
+      debouncedSyncSize();
+    });
+    resizeObserverRef.current = resizeObserver;
     resizeObserver.observe(container);
-    window.addEventListener("resize", scheduleSyncSize);
+    window.addEventListener("resize", debouncedSyncSize);
 
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener("resize", scheduleSyncSize);
-      if (resizeTimeoutRef.current !== null) {
-        window.clearTimeout(resizeTimeoutRef.current);
-        resizeTimeoutRef.current = null;
-      }
+      window.removeEventListener("resize", debouncedSyncSize);
+      debouncedSyncSize.cancel();
       detachTerminal(pane.sessionId, container);
     };
-  }, [pane, pane.sessionId, scheduleSyncSize, syncSize]);
+  }, [pane, pane.sessionId, syncSize]);
 
   useEffect(() => {
     const term = terminalRef.current?.term;
     if (isActive && term) {
       term.focus();
+      // Flush pending batch immediately when terminal becomes active
+      flushTerminalBatch(pane.sessionId);
     }
-  }, [isActive]);
+  }, [isActive, pane.sessionId]);
 
   useEffect(() => {
     if (layoutTick === undefined) return;
