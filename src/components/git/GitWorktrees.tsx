@@ -233,18 +233,18 @@ export const GitWorktrees = memo(function GitWorktrees({
     }
   };
 
-  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+  const handleContextMenuSelect = async (node: TreeNode, itemId: string) => {
     const repoGroup = worktreeGroups.find((group) => group.repo.repoId === node.id);
     if (repoGroup) {
       const activeBranch = repoGroup.repo.activeBranch;
       if (itemId === "smart-update-worktrees") {
         onSmartUpdateWorktrees?.(repoGroup.repo.repoId);
       } else if (itemId === "rebase-all-on-active" && activeBranch) {
-        // Rebase all worktree branches on the active branch
+        // Rebase all worktree branches on the active branch sequentially
         const worktrees = repoGroup.items.filter((worktree) => worktree.path !== repoGroup.repo.path);
         for (const worktree of worktrees) {
           if (worktree.branch !== activeBranch) {
-            onRebaseBranch?.(repoGroup.repo.repoId, worktree.branch, activeBranch);
+            await onRebaseBranch?.(repoGroup.repo.repoId, worktree.branch, activeBranch);
           }
         }
       }
