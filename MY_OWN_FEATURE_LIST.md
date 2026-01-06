@@ -4,7 +4,6 @@
     - show conflicts between worktree and main, worktrees
 
 - tests
-  - rust integration test coverage
 
 - ui
   - ACP based components
