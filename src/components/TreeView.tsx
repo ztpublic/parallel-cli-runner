@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState, useCallback } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { Icon } from "./Icons";
 import { ContextMenu } from "./ContextMenu";
@@ -30,7 +30,7 @@ type TreeViewProps = {
   renderActions?: (node: TreeNode) => ReactNode;
 };
 
-export function TreeView({
+export const TreeView = memo(function TreeView({
   nodes,
   selectionMode = "none",
   selectedIds,
@@ -77,16 +77,16 @@ export function TreeView({
   const resolvedCheckedIds = isCheckedControlled ? checkedIds ?? [] : internalCheckedIds;
 
   // Only nodes with checkable === true render a checkbox and participate in auto-check.
-  const isNodeCheckable = (node: TreeNode) => node.checkable === true;
+  const isNodeCheckable = useCallback((node: TreeNode) => node.checkable === true, []);
 
-  const setChecked = (nextChecked: string[]) => {
+  const setChecked = useCallback((nextChecked: string[]) => {
     if (!isCheckedControlled) {
       setInternalCheckedIds(nextChecked);
     }
     onCheckChange?.(nextChecked);
-  };
+  }, [isCheckedControlled, onCheckChange]);
 
-  const getCheckableDescendantIds = (node: TreeNode): string[] => {
+  const getCheckableDescendantIds = useCallback((node: TreeNode): string[] => {
     const ids: string[] = [];
     if (!node.children?.length) {
       return ids;
@@ -98,11 +98,11 @@ export function TreeView({
       ids.push(...getCheckableDescendantIds(child));
     });
     return ids;
-  };
+  }, [isNodeCheckable]);
 
-  const handleCheck = (node: TreeNode, checked: boolean) => {
+  const handleCheck = useCallback((node: TreeNode, checked: boolean) => {
     const nextChecked = new Set(resolvedCheckedIds);
-    
+
     const updateSet = (id: string, isChecked: boolean) => {
       if (isChecked) nextChecked.add(id);
       else nextChecked.delete(id);
@@ -116,7 +116,7 @@ export function TreeView({
     }
 
     setChecked(Array.from(nextChecked));
-  };
+  }, [resolvedCheckedIds, autoCheckChildren, getCheckableDescendantIds, setChecked]);
 
   const selectableNodeIds = useMemo(() => {
     const result: string[] = [];
@@ -135,14 +135,14 @@ export function TreeView({
     return result;
   }, [expandedNodes, nodes, selectionMode]);
 
-  const setSelection = (nextSelected: string[]) => {
+  const setSelection = useCallback((nextSelected: string[]) => {
     if (!isControlled) {
       setInternalSelectedIds(nextSelected);
     }
     onSelectionChange?.(nextSelected);
-  };
+  }, [isControlled, onSelectionChange]);
 
-  const toggleExpanded = (node: TreeNode) => {
+  const toggleExpanded = useCallback((node: TreeNode) => {
     const nextExpanded = new Set(expandedNodes);
     const isExpanded = nextExpanded.has(node.id);
     if (isExpanded) {
@@ -152,9 +152,9 @@ export function TreeView({
     }
     setExpandedNodes(nextExpanded);
     onNodeToggle?.(node.id, !isExpanded);
-  };
+  }, [expandedNodes, onNodeToggle]);
 
-  const getRangeSelection = (fromId: string, toId: string) => {
+  const getRangeSelection = useCallback((fromId: string, toId: string) => {
     const fromIndex = selectableNodeIds.indexOf(fromId);
     const toIndex = selectableNodeIds.indexOf(toId);
     if (fromIndex === -1 || toIndex === -1) {
@@ -163,9 +163,9 @@ export function TreeView({
     const start = Math.min(fromIndex, toIndex);
     const end = Math.max(fromIndex, toIndex);
     return selectableNodeIds.slice(start, end + 1);
-  };
+  }, [selectableNodeIds]);
 
-  const handleSelect = (node: TreeNode, event: ReactMouseEvent) => {
+  const handleSelect = useCallback((node: TreeNode, event: ReactMouseEvent) => {
     const selectable = selectionMode !== "none" && node.selectable !== false;
     if (!selectable) return;
 
@@ -205,9 +205,9 @@ export function TreeView({
 
     setSelection([node.id]);
     setLastSelectedId(node.id);
-  };
+  }, [selectionMode, setSelection, getRangeSelection, resolvedSelectedIds, lastSelectedId]);
 
-  const handleContextMenu = (node: TreeNode, event: ReactMouseEvent) => {
+  const handleContextMenu = useCallback((node: TreeNode, event: ReactMouseEvent) => {
     const selectable = selectionMode !== "none" && node.selectable !== false;
     const isSelected = resolvedSelectedIds.includes(node.id);
     const nextSelectedIds =
@@ -231,9 +231,9 @@ export function TreeView({
       position: { x: event.clientX, y: event.clientY },
       node,
     });
-  };
+  }, [selectionMode, resolvedSelectedIds, getContextMenuItems, setSelection]);
 
-    const renderNode = (node: TreeNode, depth = 0) => {
+    const renderNode = useCallback((node: TreeNode, depth = 0) => {
     if (node.variant === "load-more") {
       return (
         <div
@@ -369,11 +369,15 @@ export function TreeView({
         ) : null}
       </div>
     );
-  };
+  }, [expandedNodes, selectionMode, resolvedSelectedIds, resolvedCheckedIds, toggleOnRowClick, isNodeCheckable, handleCheck, handleSelect, handleContextMenu, toggleExpanded, onNodeActivate, onAction, renderActions, renderRightSlot]);
+
+  const memoizedNodes = useMemo(() => {
+    return nodes.map((node) => renderNode(node));
+  }, [nodes, renderNode]);
 
   return (
     <div className="tree-view" role="tree">
-      {nodes.map((node) => renderNode(node))}
+      {memoizedNodes}
       {contextMenu ? (
         <ContextMenu
           items={contextMenu.items}
@@ -384,4 +388,6 @@ export function TreeView({
       ) : null}
     </div>
   );
-}
+});
+
+TreeView.displayName = 'TreeView';

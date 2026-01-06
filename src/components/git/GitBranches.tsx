@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useCallback, useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateBranchDialog } from "../dialogs/CreateBranchDialog";
@@ -7,6 +7,34 @@ import { ForcePushDialog } from "../dialogs/ForcePushDialog";
 import { CreateWorktreeFromBranchDialog } from "../dialogs/CreateWorktreeFromBranchDialog";
 import type { RepoBranchGroup } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
+
+const BranchStatusSlot = memo(function BranchStatusSlot({
+  isCurrent,
+  isAhead,
+  isBehind,
+  ahead,
+  behind,
+}: {
+  isCurrent: boolean;
+  isAhead: boolean;
+  isBehind: boolean;
+  ahead?: number;
+  behind?: number;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {isCurrent && <span className="git-badge">current</span>}
+      {(isAhead || isBehind) ? (
+        <span className="git-branch-status text-xs text-muted">
+          {isBehind ? `↓${behind} ` : ""}
+          {isAhead ? `↑${ahead}` : ""}
+        </span>
+      ) : null}
+    </div>
+  );
+});
+
+BranchStatusSlot.displayName = 'BranchStatusSlot';
 
 type GitBranchesProps = {
   branchGroups: RepoBranchGroup[];
@@ -24,7 +52,7 @@ type GitBranchesProps = {
   onCreateWorktreeForBranch?: (repoId: string, branchName: string, path: string) => void;
 };
 
-export function GitBranches({
+export const GitBranches = memo(function GitBranches({
   branchGroups,
   onLoadMoreLocal,
   onLoadMoreRemote,
@@ -64,31 +92,26 @@ export function GitBranches({
     branchName: string;
   }>({ open: false, repoId: "", repoName: "", branchName: "" });
 
-  const nodes: TreeNode[] = branchGroups.map((group) => {
+  const createBranchNodes = useCallback((group: RepoBranchGroup): TreeNode[] => {
     const activeBranch = group.repo.activeBranch;
-    const localChildren: TreeNode[] = group.localBranches.map((branch) => {
+    return group.localBranches.map((branch) => {
       const isAhead = (branch.ahead ?? 0) > 0;
       const isBehind = (branch.behind ?? 0) > 0;
-      const hasStatus = isAhead || isBehind;
-
-      const rightSlot = (
-        <div className="flex items-center gap-2">
-          {branch.current && <span className="git-badge">current</span>}
-          {hasStatus ? (
-            <span className="git-branch-status text-xs text-muted">
-              {isBehind ? `↓${branch.behind} ` : ""}
-              {isAhead ? `↑${branch.ahead}` : ""}
-            </span>
-          ) : null}
-        </div>
-      );
 
       return {
         id: `${group.repo.repoId}:local:${branch.name}`,
         label: branch.name,
         description: branch.lastCommit,
         icon: "branch",
-        rightSlot,
+        rightSlot: (
+          <BranchStatusSlot
+            isCurrent={branch.current ?? false}
+            isAhead={isAhead}
+            isBehind={isBehind}
+            ahead={branch.ahead}
+            behind={branch.behind}
+          />
+        ),
         contextMenu: [
           {
             id: "switch-branch",
@@ -138,76 +161,82 @@ export function GitBranches({
         ],
       };
     });
+  }, []);
 
-    if (canLoadMoreLocal?.(group.repo.repoId)) {
-      localChildren.push({
-        id: `${group.repo.repoId}:local:load-more`,
-        label: "Load More...",
-        variant: "load-more",
-        selectable: false,
-      });
-    }
+  const nodes: TreeNode[] = useMemo(() => {
+    return branchGroups.map((group) => {
+      const localChildren = createBranchNodes(group);
 
-    const remoteChildren: TreeNode[] = group.remoteBranches.map((branch) => ({
-      id: `${group.repo.repoId}:remote:${branch.name}`,
-      label: branch.name,
-      description: branch.lastCommit,
-      icon: "cloud",
-      actions: [],
-    }));
-
-    if (canLoadMoreRemote?.(group.repo.repoId)) {
-      remoteChildren.push({
-        id: `${group.repo.repoId}:remote:load-more`,
-        label: "Load More...",
-        variant: "load-more",
-        selectable: false,
-      });
-    }
-
-    return {
-      id: group.repo.repoId,
-      label: group.repo.name,
-      description: group.repo.path,
-      icon: "folder",
-      defaultExpanded: true,
-      selectable: false,
-      rightSlot: (
-        <span className="git-pill">
-          {group.localBranches.length + group.remoteBranches.length}
-        </span>
-      ),
-      children: [
-        {
-          id: `${group.repo.repoId}:local`,
-          label: "Local Branches",
-          icon: "branch",
-          defaultExpanded: true,
+      if (canLoadMoreLocal?.(group.repo.repoId)) {
+        localChildren.push({
+          id: `${group.repo.repoId}:local:load-more`,
+          label: "Load More...",
+          variant: "load-more",
           selectable: false,
-          rightSlot: <span className="git-pill">{group.localBranches.length}</span>,
-          actions: [
-            {
-              id: "new-branch",
-              icon: "plus",
-              label: "New Branch",
-            },
-          ],
-          children: localChildren,
-        },
-        {
-          id: `${group.repo.repoId}:remote`,
-          label: "Remote Branches",
-          icon: "cloud",
-          defaultExpanded: false,
-          selectable: false,
-          rightSlot: <span className="git-pill">{group.remoteBranches.length}</span>,
-          children: remoteChildren,
-        },
-      ],
-    };
-  });
+        });
+      }
 
-  const handleNodeActivate = (node: TreeNode) => {
+      const remoteChildren: TreeNode[] = group.remoteBranches.map((branch) => ({
+        id: `${group.repo.repoId}:remote:${branch.name}`,
+        label: branch.name,
+        description: branch.lastCommit,
+        icon: "cloud",
+        actions: [],
+      }));
+
+      if (canLoadMoreRemote?.(group.repo.repoId)) {
+        remoteChildren.push({
+          id: `${group.repo.repoId}:remote:load-more`,
+          label: "Load More...",
+          variant: "load-more",
+          selectable: false,
+        });
+      }
+
+      return {
+        id: group.repo.repoId,
+        label: group.repo.name,
+        description: group.repo.path,
+        icon: "folder",
+        defaultExpanded: true,
+        selectable: false,
+        rightSlot: (
+          <span className="git-pill">
+            {group.localBranches.length + group.remoteBranches.length}
+          </span>
+        ),
+        children: [
+          {
+            id: `${group.repo.repoId}:local`,
+            label: "Local Branches",
+            icon: "branch",
+            defaultExpanded: true,
+            selectable: false,
+            rightSlot: <span className="git-pill">{group.localBranches.length}</span>,
+            actions: [
+              {
+                id: "new-branch",
+                icon: "plus",
+                label: "New Branch",
+              },
+            ],
+            children: localChildren,
+          },
+          {
+            id: `${group.repo.repoId}:remote`,
+            label: "Remote Branches",
+            icon: "cloud",
+            defaultExpanded: false,
+            selectable: false,
+            rightSlot: <span className="git-pill">{group.remoteBranches.length}</span>,
+            children: remoteChildren,
+          },
+        ],
+      };
+    });
+  }, [branchGroups, canLoadMoreLocal, canLoadMoreRemote, createBranchNodes]);
+
+  const handleNodeActivate = useCallback((node: TreeNode) => {
     if (node.id.endsWith(":local:load-more")) {
       const repoId = node.id.replace(":local:load-more", "");
       onLoadMoreLocal?.(repoId);
@@ -215,9 +244,9 @@ export function GitBranches({
       const repoId = node.id.replace(":remote:load-more", "");
       onLoadMoreRemote?.(repoId);
     }
-  };
+  }, [onLoadMoreLocal, onLoadMoreRemote]);
 
-  const handleAction = (node: TreeNode, actionId: string) => {
+  const handleAction = useCallback((node: TreeNode, actionId: string) => {
     if (actionId === "new-branch") {
       const repoId = node.id.replace(":local", "");
       // Find the current branch for this repo
@@ -241,9 +270,9 @@ export function GitBranches({
         });
       }
     }
-  };
+  }, [branchGroups]);
 
-  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+  const handleContextMenuSelect = useCallback((node: TreeNode, itemId: string) => {
     if (itemId === "switch-branch") {
       // id format: repoId:local:branchName
       // We need to parse it carefully because repoId can contain colons?
@@ -308,10 +337,10 @@ export function GitBranches({
         const branchName = parts[1];
         const group = branchGroups.find((g) => g.repo.repoId === repoId);
         const repoName = group?.repo.name ?? repoId;
-        setCreateWorktreeDialog({ open: true, repoId, repoName, branchName });
+          setCreateWorktreeDialog({ open: true, repoId, repoName, branchName });
       }
     }
-  };
+  }, [branchGroups, onSwitchBranch, onMergeBranch, onRebaseBranch, onPull, onPush]);
 
   return (
     <div className="git-tree">
@@ -367,4 +396,6 @@ export function GitBranches({
       />
     </div>
   );
-}
+});
+
+GitBranches.displayName = 'GitBranches';

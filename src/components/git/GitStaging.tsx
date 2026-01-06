@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { memo, useState, useMemo, useEffect, useCallback } from "react";
 import { openFileInEditor } from "../../platform/actions";
 import { Icon } from "../Icons";
 import { ChangeStatus, ChangedFile, RepoGroup } from "../../types/git-ui";
@@ -6,6 +6,39 @@ import { TreeView } from "../TreeView";
 import { StageAllAndCommitDialog } from "../dialogs/StageAllAndCommitDialog";
 import { StashChangesDialog } from "../dialogs/StashChangesDialog";
 import type { TreeNode } from "../../types/tree";
+
+const FileDescription = memo(function FileDescription({
+  insertions,
+  deletions,
+  status,
+}: {
+  insertions?: number;
+  deletions?: number;
+  status: ChangeStatus;
+}) {
+  if (insertions !== undefined && deletions !== undefined) {
+    const parts = [];
+    if (insertions > 0) {
+      parts.push(
+        <span key="ins" style={{ color: "#73c991", marginRight: deletions > 0 ? "4px" : "0" }}>
+          +{insertions}
+        </span>
+      );
+    }
+    if (deletions > 0) {
+      parts.push(
+        <span key="del" style={{ color: "#f48771" }}>
+          -{deletions}
+        </span>
+      );
+    }
+    if (parts.length === 0) return "No changes";
+    return <>{parts}</>;
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+});
+
+FileDescription.displayName = 'FileDescription';
 
 type GitStagingProps = {
   groups: RepoGroup<ChangedFile>[];
@@ -18,7 +51,7 @@ type GitStagingProps = {
   onStash: (repoId: string, message: string) => void;
 };
 
-export function GitStaging({
+export const GitStaging = memo(function GitStaging({
   groups,
   onCommit,
   onStageAll,
@@ -79,29 +112,6 @@ export function GitStaging({
 
       const children: TreeNode[] = [];
 
-      const formatDescription = (file: ChangedFile) => {
-        if (file.insertions !== undefined && file.deletions !== undefined) {
-          const parts = [];
-          if (file.insertions > 0) {
-            parts.push(
-              <span key="ins" style={{ color: "#73c991", marginRight: file.deletions > 0 ? "4px" : "0" }}>
-                +{file.insertions}
-              </span>
-            );
-          }
-          if (file.deletions > 0) {
-            parts.push(
-              <span key="del" style={{ color: "#f48771" }}>
-                -{file.deletions}
-              </span>
-            );
-          }
-          if (parts.length === 0) return "No changes"; // e.g. rename only?
-          return <>{parts}</>;
-        }
-        return file.status.charAt(0).toUpperCase() + file.status.slice(1);
-      };
-
       if (stagedFiles.length > 0) {
         children.push({
           id: `repo:${group.repo.repoId}:staged`,
@@ -119,7 +129,13 @@ export function GitStaging({
             label: file.path,
             icon: getStatusIcon(file.status),
             iconClassName: getIconClass(file.status),
-            description: formatDescription(file),
+            description: (
+              <FileDescription
+                insertions={file.insertions}
+                deletions={file.deletions}
+                status={file.status}
+              />
+            ),
             selectable: true,
             actions: [
               { id: "open-file", icon: "externalLink", label: "Open in VSCode" },
@@ -147,7 +163,13 @@ export function GitStaging({
             label: file.path,
             icon: getStatusIcon(file.status),
             iconClassName: getIconClass(file.status),
-            description: formatDescription(file),
+            description: (
+              <FileDescription
+                insertions={file.insertions}
+                deletions={file.deletions}
+                status={file.status}
+              />
+            ),
             selectable: true,
             actions: [
               { id: "open-file", icon: "externalLink", label: "Open in VSCode" },
@@ -177,7 +199,7 @@ export function GitStaging({
     });
   }, [dirtyGroups]);
 
-  const handleAction = (node: TreeNode, actionId: string) => {
+  const handleAction = useCallback((node: TreeNode, actionId: string) => {
     // Find repo group based on node ID structure
     for (const group of dirtyGroups) {
       if (node.id === `repo:${group.repo.repoId}:staged`) {
@@ -233,21 +255,21 @@ export function GitStaging({
         return;
       }
     }
-  };
+  }, [dirtyGroups, onUnstageAll, onRollbackFiles, onStageFile, onUnstageFile, openFileInEditor]);
 
-  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+  const handleContextMenuSelect = useCallback((node: TreeNode, itemId: string) => {
     if (itemId === "stash-all") {
       setStashDialog({ open: true, repoId: node.id });
     }
-  };
+  }, []);
 
-  const handleConfirmStash = (message: string) => {
+  const handleConfirmStash = useCallback((message: string) => {
     if (stashDialog.repoId) {
       onStash(stashDialog.repoId, message);
     }
-  };
+  }, [stashDialog, onStash]);
 
-  const handleCommit = async () => {
+  const handleCommit = useCallback(async () => {
     // Check for repos that are checked but have no staged files and have unstaged files
     const reposToStage: string[] = [];
 
@@ -270,18 +292,18 @@ export function GitStaging({
     // Commit to all checked repos
     await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
     setCommitMessage("");
-  };
+  }, [checkedRepoIds, groups, commitMessage, onStageAll, onCommit, setStageAllDialog, setCommitMessage]);
 
-  const handleConfirmStageAllAndCommit = async () => {
+  const handleConfirmStageAllAndCommit = useCallback(async () => {
     const { repoIds } = stageAllDialog;
-    
+
     // Stage all for identified repos
     await Promise.all(repoIds.map(id => onStageAll(id)));
 
     // Commit all checked repos
     await Promise.all(checkedRepoIds.map(repoId => onCommit(repoId, commitMessage)));
     setCommitMessage("");
-  };
+  }, [stageAllDialog, onStageAll, checkedRepoIds, onCommit, commitMessage, setCommitMessage]);
 
   const commitButtonText = useMemo(() => {
     if (checkedRepoIds.length === 1) {
@@ -358,5 +380,7 @@ export function GitStaging({
       />
     </div>
   );
-}
+});
+
+GitStaging.displayName = 'GitStaging';
 

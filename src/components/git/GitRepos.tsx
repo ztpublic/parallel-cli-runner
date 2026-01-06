@@ -1,7 +1,14 @@
+import { memo, useMemo, useCallback } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import type { RepoHeader } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
+
+const ActiveRepoBadge = memo(function ActiveRepoBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? <span className="git-badge">active</span> : null;
+});
+
+ActiveRepoBadge.displayName = 'ActiveRepoBadge';
 
 type GitReposProps = {
   repos: RepoHeader[];
@@ -14,7 +21,7 @@ type GitReposProps = {
   onOpenRepoFolder?: (repo: RepoHeader) => void;
 };
 
-export function GitRepos({
+export const GitRepos = memo(function GitRepos({
   repos,
   enabledRepoIds,
   onEnableRepos,
@@ -24,35 +31,37 @@ export function GitRepos({
   onOpenTerminal,
   onOpenRepoFolder,
 }: GitReposProps) {
-  const nodes: TreeNode[] = repos.map((repo) => ({
-    id: repo.repoId,
-    label: repo.name,
-    description: repo.path,
-    icon: "folder",
-    checkable: true,
-    rightSlot: repo.repoId === activeRepoId ? <span className="git-badge">active</span> : undefined,
-    actions: [
-      {
-        id: "open-folder",
-        icon: "folder",
-        label: "Open in File Explorer",
-        disabled: !onOpenRepoFolder,
-      },
-      {
-        id: "terminal",
-        icon: "terminal",
-        label: "Terminal",
-      },
-      {
-        id: "remove",
-        icon: "trash",
-        label: "Remove",
-        intent: "danger",
-      },
-    ],
-  }));
+  const nodes: TreeNode[] = useMemo(() => {
+    return repos.map((repo) => ({
+      id: repo.repoId,
+      label: repo.name,
+      description: repo.path,
+      icon: "folder",
+      checkable: true,
+      rightSlot: <ActiveRepoBadge isActive={repo.repoId === activeRepoId} />,
+      actions: [
+        {
+          id: "open-folder",
+          icon: "folder",
+          label: "Open in File Explorer",
+          disabled: !onOpenRepoFolder,
+        },
+        {
+          id: "terminal",
+          icon: "terminal",
+          label: "Terminal",
+        },
+        {
+          id: "remove",
+          icon: "trash",
+          label: "Remove",
+          intent: "danger",
+        },
+      ],
+    }));
+  }, [repos, activeRepoId, onOpenRepoFolder]);
 
-  const handleAction = (node: TreeNode, actionId: string) => {
+  const handleAction = useCallback((node: TreeNode, actionId: string) => {
     const repo = repos.find((item) => item.repoId === node.id);
     if (actionId === "terminal") {
       if (repo) {
@@ -69,11 +78,11 @@ export function GitRepos({
     if (actionId === "remove") {
       onRemoveRepo?.(node.id);
     }
-  };
+  }, [repos, onOpenTerminal, onOpenRepoFolder, onRemoveRepo]);
 
-  const handleNodeActivate = (node: TreeNode) => {
+  const handleNodeActivate = useCallback((node: TreeNode) => {
     onActivateRepo?.(node.id);
-  };
+  }, [onActivateRepo]);
 
   return (
     <div className="git-tree">
@@ -93,4 +102,6 @@ export function GitRepos({
       ) : null}
     </div>
   );
-}
+});
+
+GitRepos.displayName = 'GitRepos';

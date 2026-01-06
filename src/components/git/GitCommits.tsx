@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useCallback, useState } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { ResetDialog } from "../dialogs/ResetDialog";
@@ -21,7 +21,7 @@ type GitCommitsProps = {
   onSquashCommits?: (repoId: string, worktreePath: string, commitIds: string[]) => void;
 };
 
-export function GitCommits({
+export const GitCommits = memo(function GitCommits({
   commitGroups,
   onLoadMore,
   canLoadMore,
@@ -46,73 +46,14 @@ export function GitCommits({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const idSeparator = "::";
-  const encodeNodePart = (value: string) => encodeURIComponent(value);
-  const decodeNodePart = (value: string) => decodeURIComponent(value);
-  const makeWorktreeNodeId = (repoId: string, worktreePath: string) =>
-    `worktree${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}`;
-  const makeCommitNodeId = (repoId: string, worktreePath: string, commitId: string) =>
-    `commit${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}${idSeparator}${commitId}`;
-  const makeLoadMoreNodeId = (repoId: string, worktreePath: string) =>
-    `commit-load-more${idSeparator}${encodeNodePart(repoId)}${idSeparator}${encodeNodePart(worktreePath)}`;
-
-  const nodes: TreeNode[] = commitGroups.map((group) => {
-    const worktreeNodes: TreeNode[] = group.items.map((worktreeGroup) => {
-      const commitNodes: TreeNode[] = worktreeGroup.commits.map((commit) => ({
-        id: makeCommitNodeId(group.repo.repoId, worktreeGroup.worktree.path, commit.id),
-        label: commit.message,
-        description: `${commit.author} - ${commit.date}`,
-        icon: "commit",
-        contextMenu: [
-          {
-            id: "reset",
-            label: "Reset...",
-          },
-          {
-            id: "revert",
-            label: "Revert...",
-          },
-        ],
-      }));
-
-      if (canLoadMore?.(group.repo.repoId, worktreeGroup.worktree.path)) {
-        commitNodes.push({
-          id: makeLoadMoreNodeId(group.repo.repoId, worktreeGroup.worktree.path),
-          label: "Load More...",
-          variant: "load-more",
-          isLoading: isLoadingMore?.(group.repo.repoId, worktreeGroup.worktree.path),
-          selectable: false,
-        });
-      }
-
-      return {
-        id: makeWorktreeNodeId(group.repo.repoId, worktreeGroup.worktree.path),
-        label: worktreeGroup.worktree.branch,
-        description: worktreeGroup.worktree.path,
-        icon: "folder",
-        defaultExpanded: true,
-        selectable: false,
-        rightSlot: <span className="git-pill">{worktreeGroup.commits.length}</span>,
-        children: commitNodes,
-      };
-    });
-
-    const totalCommits = group.items.reduce((sum, item) => sum + item.commits.length, 0);
-
-    return {
-      id: group.repo.repoId,
-      label: group.repo.name,
-      description: group.repo.activeBranch
-        ? `${group.repo.activeBranch} • ${group.repo.path}`
-        : group.repo.path,
-      icon: "folder",
-      defaultExpanded: true,
-      selectable: false,
-      rightSlot: <span className="git-pill">{totalCommits}</span>,
-      children: worktreeNodes,
-    };
-  });
-
-  const parseCommitNodeId = (nodeId: string) => {
+  const makeCommitNodeId = useCallback((repoId: string, worktreePath: string, commitId: string) =>
+    `commit${idSeparator}${encodeURIComponent(repoId)}${idSeparator}${encodeURIComponent(worktreePath)}${idSeparator}${commitId}`, [idSeparator]);
+  const makeWorktreeNodeId = useCallback((repoId: string, worktreePath: string) =>
+    `worktree${idSeparator}${encodeURIComponent(repoId)}${idSeparator}${encodeURIComponent(worktreePath)}`, [idSeparator]);
+  const makeLoadMoreNodeId = useCallback((repoId: string, worktreePath: string) =>
+    `commit-load-more${idSeparator}${encodeURIComponent(repoId)}${idSeparator}${encodeURIComponent(worktreePath)}`, [idSeparator]);
+  const decodeNodePart = useCallback((value: string) => decodeURIComponent(value), []);
+  const parseCommitNodeId = useCallback((nodeId: string) => {
     const parts = nodeId.split(idSeparator);
     if (parts.length !== 4 || parts[0] !== "commit") return null;
     return {
@@ -120,18 +61,77 @@ export function GitCommits({
       worktreePath: decodeNodePart(parts[2]),
       commitId: parts[3],
     };
-  };
+  }, [idSeparator, decodeNodePart]);
 
-  const parseLoadMoreNodeId = (nodeId: string) => {
+  const parseLoadMoreNodeId = useCallback((nodeId: string) => {
     const parts = nodeId.split(idSeparator);
     if (parts.length !== 3 || parts[0] !== "commit-load-more") return null;
     return {
       repoId: decodeNodePart(parts[1]),
       worktreePath: decodeNodePart(parts[2]),
     };
-  };
+  }, [idSeparator, decodeNodePart]);
 
-  const getSelectedCommitIdsForWorktree = (
+  const nodes: TreeNode[] = useMemo(() => {
+    return commitGroups.map((group) => {
+      const worktreeNodes: TreeNode[] = group.items.map((worktreeGroup) => {
+        const commitNodes: TreeNode[] = worktreeGroup.commits.map((commit) => ({
+          id: makeCommitNodeId(group.repo.repoId, worktreeGroup.worktree.path, commit.id),
+          label: commit.message,
+          description: `${commit.author} - ${commit.date}`,
+          icon: "commit",
+          contextMenu: [
+            {
+              id: "reset",
+              label: "Reset...",
+            },
+            {
+              id: "revert",
+              label: "Revert...",
+            },
+          ],
+        }));
+
+        if (canLoadMore?.(group.repo.repoId, worktreeGroup.worktree.path)) {
+          commitNodes.push({
+            id: makeLoadMoreNodeId(group.repo.repoId, worktreeGroup.worktree.path),
+            label: "Load More...",
+            variant: "load-more",
+            isLoading: isLoadingMore?.(group.repo.repoId, worktreeGroup.worktree.path),
+            selectable: false,
+          });
+        }
+
+        return {
+          id: makeWorktreeNodeId(group.repo.repoId, worktreeGroup.worktree.path),
+          label: worktreeGroup.worktree.branch,
+          description: worktreeGroup.worktree.path,
+          icon: "folder",
+          defaultExpanded: true,
+          selectable: false,
+          rightSlot: <span className="git-pill">{worktreeGroup.commits.length}</span>,
+          children: commitNodes,
+        };
+      });
+
+      const totalCommits = group.items.reduce((sum, item) => sum + item.commits.length, 0);
+
+      return {
+        id: group.repo.repoId,
+        label: group.repo.name,
+        description: group.repo.activeBranch
+          ? `${group.repo.activeBranch} • ${group.repo.path}`
+          : group.repo.path,
+        icon: "folder",
+        defaultExpanded: true,
+        selectable: false,
+        rightSlot: <span className="git-pill">{totalCommits}</span>,
+        children: worktreeNodes,
+      };
+    });
+  }, [commitGroups, canLoadMore, isLoadingMore, makeCommitNodeId, makeWorktreeNodeId, makeLoadMoreNodeId]);
+
+  const getSelectedCommitIdsForWorktree = useCallback((
     repoId: string,
     worktreePath: string,
     ids: string[]
@@ -143,16 +143,17 @@ export function GitCommits({
           Boolean(parsed)
       )
       .filter((parsed) => parsed.repoId === repoId && parsed.worktreePath === worktreePath)
-      .map((parsed) => parsed.commitId);
+      .map((parsed) => parsed.commitId),
+  [parseCommitNodeId]);
 
-  const handleNodeActivate = (node: TreeNode) => {
+  const handleNodeActivate = useCallback((node: TreeNode) => {
     const parsed = parseLoadMoreNodeId(node.id);
     if (parsed) {
       onLoadMore?.(parsed.repoId, parsed.worktreePath);
     }
-  };
+  }, [onLoadMore, parseLoadMoreNodeId]);
 
-  const handleContextMenuSelect = (node: TreeNode, itemId: string) => {
+  const handleContextMenuSelect = useCallback((node: TreeNode, itemId: string) => {
     const parsed = parseCommitNodeId(node.id);
     if (!parsed) return;
 
@@ -168,9 +169,9 @@ export function GitCommits({
         onSquashCommits?.(repoId, worktreePath, commitIds);
       }
     }
-  };
+  }, [parseCommitNodeId, selectedIds, getSelectedCommitIdsForWorktree, onSquashCommits]);
 
-  const getContextMenuItems = (node: TreeNode, activeSelectedIds: string[]) => {
+  const getContextMenuItems = useCallback((node: TreeNode, activeSelectedIds: string[]) => {
     const baseItems = node.contextMenu ?? [];
     if (activeSelectedIds.length < 2) return baseItems;
 
@@ -185,7 +186,7 @@ export function GitCommits({
     if (commitIds.length < 2) return baseItems;
 
     return [{ id: "squash-commits", label: "Squash Commits" }, ...baseItems];
-  };
+  }, [parseCommitNodeId, getSelectedCommitIdsForWorktree]);
 
   return (
     <div className="git-tree">
@@ -225,4 +226,6 @@ export function GitCommits({
       />
     </div>
   );
-}
+});
+
+GitCommits.displayName = 'GitCommits';
