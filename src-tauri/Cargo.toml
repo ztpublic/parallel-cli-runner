@@ -50,3 +50,7 @@ env_logger = "0.11"
 [[example]]
 name = "agent_example"
 path = "src/acp/examples/agent_example.rs"
+
+[[bin]]
+name = "export_types"
+path = "src/bin/export_types.rs"

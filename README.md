@@ -31,3 +31,43 @@ Tauri + React app for running multiple terminal panes alongside a Git-focused si
 - Git data is read directly from local repositories; no extra metadata is stored outside the repos themselves.
 - Worktrees are standard git worktrees created/removed via the sidebar actions.
 - Terminal panes are backed by PTY sessions managed in the Rust backend.
+
+## TypeScript type generation
+
+TypeScript types for Rust DTOs are automatically generated using the `ts-rs` crate. This ensures type safety between the Rust backend and TypeScript frontend.
+
+### Regenerating types
+
+When you modify Rust DTOs in `src-tauri/src/git/types.rs`, you need to regenerate the corresponding TypeScript types:
+
+```bash
+# Using cargo alias (recommended)
+cargo export-types
+
+# Or using the full command
+cargo run --bin export_types --manifest-path src-tauri/Cargo.toml
+```
+
+### Verifying types are in sync
+
+To check if TypeScript types are up to date without regenerating:
+
+```bash
+# Using cargo alias (recommended)
+cargo check-types
+
+# Or using the full command
+cargo test --manifest-path src-tauri/Cargo.toml types_are_synced
+```
+
+### Type files
+
+- `src/types/git.ts` — Auto-generated from Rust DTOs. **Do not edit manually.**
+- `src/types/git-ui.ts` — UI-layer types. Manually maintained, separate from DTOs.
+
+### CI check
+
+A GitHub Actions workflow (`.github/workflows/type-safety.yml`) automatically verifies that types are in sync when:
+- `src-tauri/src/git/types.rs` changes
+- `src-tauri/src/export_types.rs` changes
+- `src/types/git.ts` changes

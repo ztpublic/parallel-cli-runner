@@ -5,7 +5,9 @@ use tauri::{Emitter, Manager};
 use uuid::Uuid;
 
 mod command_error;
+mod error;
 use crate::command_error::CommandError;
+use crate::error::AppResult;
 
 pub mod acp;
 pub mod git;
@@ -31,17 +33,21 @@ fn build_init_script(config: &AppConfig) -> String {
 #[cfg(test)]
 mod export_types;
 
-fn with_cwd<T>(
-    cwd: String,
-    f: impl FnOnce(&Path) -> Result<T, git::GitError>,
-) -> Result<T, CommandError> {
+/// Helper function to execute an operation with a working directory path.
+///
+/// This converts the string path to a PathBuf and executes the function,
+/// automatically converting any AppError to CommandError for Tauri.
+fn with_cwd<T>(cwd: String, f: impl FnOnce(&Path) -> AppResult<T>) -> Result<T, CommandError> {
     let path = PathBuf::from(cwd);
     f(&path).map_err(CommandError::from)
 }
 
+/// Helper function to execute an operation with a repository root path.
+///
+/// Similar to `with_cwd` but specifically for repository root operations.
 fn with_repo_root<T>(
     repo_root: String,
-    f: impl FnOnce(&Path) -> Result<T, git::GitError>,
+    f: impl FnOnce(&Path) -> AppResult<T>,
 ) -> Result<T, CommandError> {
     let path = PathBuf::from(repo_root);
     f(&path).map_err(CommandError::from)

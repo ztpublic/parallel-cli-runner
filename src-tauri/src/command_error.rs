@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+use crate::error::{AppError, codes};
 use crate::git;
 
 #[derive(Debug, Clone, Serialize)]
@@ -17,18 +18,19 @@ impl CommandError {
     }
 
     pub fn internal(err: impl ToString) -> Self {
-        Self::new("internal", err.to_string())
+        Self::new(codes::INTERNAL_ERROR, err.to_string())
     }
 }
 
-impl From<git::GitError> for CommandError {
-    fn from(value: git::GitError) -> Self {
-        match value {
-            git::GitError::GitNotFound => Self::new("git_not_found", "git not found"),
-            git::GitError::GitFailed { code: _, stderr } => Self::new("git_failed", stderr),
-            git::GitError::Git2(err) => Self::new("git_failed", err.message()),
-            git::GitError::Io(err) => Self::internal(err),
-            git::GitError::Utf8(err) => Self::internal(err),
-        }
+impl From<AppError> for CommandError {
+    fn from(err: AppError) -> Self {
+        let code = err.code().to_string();
+        let message = err.user_message();
+        Self { code, message }
     }
 }
+
+// Note: We don't need a separate From<git::GitError> implementation
+// because git::GitError is just a type alias for AppError, and the
+// From<AppError> implementation already covers it.
+
