@@ -3,6 +3,7 @@ import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
 import { CreateWorktreeDialog } from "../dialogs/CreateWorktreeDialog";
 import { DeleteWorktreeDialog } from "../dialogs/DeleteWorktreeDialog";
+import { makeWorktreeTargetId } from "../../hooks/git/gitTargets";
 import type { CommitItem, RepoGroup, RepoHeader, WorktreeItem } from "../../types/git-ui";
 import type { TreeNode } from "../../types/tree";
 
@@ -244,7 +245,8 @@ export const GitWorktrees = memo(function GitWorktrees({
         const worktrees = repoGroup.items.filter((worktree) => worktree.path !== repoGroup.repo.path);
         for (const worktree of worktrees) {
           if (worktree.branch !== activeBranch) {
-            await onRebaseBranch?.(repoGroup.repo.repoId, worktree.branch, activeBranch);
+            const worktreeTargetId = makeWorktreeTargetId(repoGroup.repo.repoId, worktree.path);
+            await onRebaseBranch?.(worktreeTargetId, worktree.branch, activeBranch);
           }
         }
       }
