@@ -572,18 +572,20 @@ export function useGitRepos() {
 
   const rebaseBranch = useCallback(
     async (repoId: RepoId, targetBranch: string, ontoBranch: string) => {
+      const target = resolveTarget(repoId);
+      if (!target) return;
       await withRepo(
-        repoId,
-        (repo) =>
+        target.repo.repo_id,
+        () =>
           gitRebaseBranch({
-            repoRoot: repo.root_path,
+            repoRoot: target.cwd,
             targetBranch,
             ontoBranch,
           }),
         { errorMessage: "Failed to rebase branch" }
       );
     },
-    [withRepo]
+    [resolveTarget, withRepo]
   );
 
   const smartUpdateWorktrees = useCallback(
