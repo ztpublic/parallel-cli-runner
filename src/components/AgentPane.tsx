@@ -29,7 +29,7 @@ export function AgentPane({ pane, isActive, onFocused }: AgentPaneProps) {
       onClick={() => onFocused(pane.id)}
     >
       <div className="pane-agent-content h-full">
-        <AcpAgentPanel />
+        <AcpAgentPanel agentId={pane.agentId} cwd={pane.meta?.cwd} />
       </div>
     </div>
   );
