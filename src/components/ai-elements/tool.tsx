@@ -15,9 +15,20 @@ import {
   ClockIcon,
   WrenchIcon,
   XCircleIcon,
+  FileTextIcon,
+  PencilIcon,
+  TrashIcon,
+  MoveIcon,
+  SearchIcon,
+  PlayIcon,
+  BrainIcon,
+  DownloadIcon,
 } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { CodeBlock } from './code-block';
+
+// ACP tool kinds from protocol
+export type ToolKind = 'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'other';
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -32,6 +43,7 @@ export type ToolHeaderProps = {
   title?: string;
   type: ToolUIPart['type'];
   state: ToolUIPart['state'];
+  kind?: ToolKind | string;
   className?: string;
 };
 
@@ -58,11 +70,37 @@ const getStatusBadge = (status: ToolUIPart['state']) => {
   );
 };
 
+// Get appropriate icon for tool kind
+const getKindIcon = (kind?: ToolKind | string) => {
+  switch (kind) {
+    case 'read':
+      return <FileTextIcon className="size-4 text-blue-600" />;
+    case 'edit':
+      return <PencilIcon className="size-4 text-yellow-600" />;
+    case 'delete':
+      return <TrashIcon className="size-4 text-red-600" />;
+    case 'move':
+      return <MoveIcon className="size-4 text-purple-600" />;
+    case 'search':
+      return <SearchIcon className="size-4 text-cyan-600" />;
+    case 'execute':
+      return <PlayIcon className="size-4 text-green-600" />;
+    case 'think':
+      return <BrainIcon className="size-4 text-pink-600" />;
+    case 'fetch':
+      return <DownloadIcon className="size-4 text-indigo-600" />;
+    case 'other':
+    default:
+      return <WrenchIcon className="size-4 text-muted-foreground" />;
+  }
+};
+
 export const ToolHeader = ({
   className,
   title,
   type,
   state,
+  kind,
   ...props
 }: ToolHeaderProps) => (
   <CollapsibleTrigger
@@ -73,7 +111,7 @@ export const ToolHeader = ({
     {...props}
   >
     <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
+      {getKindIcon(kind)}
       <span className="font-medium text-sm">{title ?? type.split("-").slice(1).join("-")}</span>
       {getStatusBadge(state)}
     </div>

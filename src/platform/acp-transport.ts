@@ -67,10 +67,12 @@ type AcpTransportConfig = {
 type ToolCallPayload = {
   toolCallId?: unknown;
   title?: unknown;
+  kind?: unknown; // Tool kind: read, edit, delete, move, search, execute, think, fetch, other
   rawInput?: unknown;
   rawOutput?: unknown;
   status?: unknown;
-  content?: unknown;
+  content?: unknown; // ToolCallContent array
+  locations?: unknown; // ToolCallLocation array
 };
 
 const EMPTY_PROMPT_ERROR = "No user message available to send.";
@@ -102,6 +104,17 @@ function extractTextFromContentBlock(block: unknown): string | null {
     return "...";
   }
   return null;
+}
+
+// Helper to check if content block is rich content (not plain text)
+function isRichContentBlock(block: unknown): boolean {
+  if (!block || typeof block !== "object") return false;
+  const record = block as Record<string, unknown>;
+  const blockType = record.type;
+  if (typeof blockType !== "string") return false;
+  // Rich content types from ACP protocol
+  return blockType === "image" || blockType === "audio" ||
+         blockType === "resource" || blockType === "resource_link";
 }
 
 function pickPromptMessage(messages: UIMessage[]): UIMessage | null {
@@ -205,7 +218,20 @@ export class AcpChatTransport implements ChatTransport<UIMessage> {
 
             switch (updateEntry.kind) {
               case "agent_message_chunk": {
-                const text = extractTextFromContentBlock(updateEntry.payload.content);
+                const content = updateEntry.payload.content;
+
+                // Check if this is rich content (image, audio, resource, resource_link)
+                if (isRichContentBlock(content)) {
+                  // Pass rich content through via message-metadata
+                  controller.enqueue({
+                    type: "message-metadata",
+                    messageMetadata: { richContent: content },
+                  });
+                  break;
+                }
+
+                // Handle plain text content
+                const text = extractTextFromContentBlock(content);
                 if (!text) return;
                 if (!textStarted) {
                   controller.enqueue({ type: "text-start", id: textId });
@@ -239,14 +265,26 @@ export class AcpChatTransport implements ChatTransport<UIMessage> {
                 const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId : null;
                 if (!toolCallId) return;
                 const toolName = normalizeToolName(payload.title, payload.toolCallId);
-                const input = payload.rawInput ?? payload.content ?? {};
+                const toolKind = typeof payload.kind === "string" ? payload.kind : undefined;
+                const rawInput = payload.rawInput ?? payload.content ?? {};
+
+                // Wrap input in the format expected by messageRenderer
+                // { toolName: string, args: Record<string, unknown>, _kind?, _locations?, _content? }
+                const enrichedInput = {
+                  toolName: toolName,
+                  args: rawInput,
+                  _kind: toolKind,
+                  _locations: Array.isArray(payload.locations) ? payload.locations : undefined,
+                  _content: Array.isArray(payload.content) ? payload.content : undefined,
+                };
+
                 if (toolStates.get(toolCallId) !== "output") {
                   toolStates.set(toolCallId, "input");
                   controller.enqueue({
                     type: "tool-input-available",
                     toolCallId,
                     toolName,
-                    input,
+                    input: enrichedInput,
                     providerExecuted: true,
                   });
                 }
@@ -257,18 +295,34 @@ export class AcpChatTransport implements ChatTransport<UIMessage> {
                 const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId : null;
                 if (!toolCallId) return;
                 const toolName = normalizeToolName(payload.title, payload.toolCallId);
+                const toolKind = typeof payload.kind === "string" ? payload.kind : undefined;
                 const status = typeof payload.status === "string" ? payload.status : null;
                 const rawOutput = payload.rawOutput ?? payload.content ?? null;
 
+                // Include kind, locations, and content in output for the messageRenderer
+                const enrichedOutput = rawOutput !== null ? {
+                  _rawOutput: rawOutput,
+                  _kind: toolKind,
+                  _locations: Array.isArray(payload.locations) ? payload.locations : undefined,
+                  _content: Array.isArray(payload.content) ? payload.content : undefined,
+                } : null;
+
                 if (toolStates.get(toolCallId) !== "output") {
-                  const input = payload.rawInput ?? {};
+                  const rawInput = payload.rawInput ?? {};
+                  const enrichedInput = {
+                    toolName: toolName,
+                    args: rawInput,
+                    _kind: toolKind,
+                    _locations: Array.isArray(payload.locations) ? payload.locations : undefined,
+                    _content: Array.isArray(payload.content) ? payload.content : undefined,
+                  };
                   if (payload.rawInput !== undefined || !toolStates.has(toolCallId)) {
                     toolStates.set(toolCallId, "input");
                     controller.enqueue({
                       type: "tool-input-available",
                       toolCallId,
                       toolName,
-                      input,
+                      input: enrichedInput,
                       providerExecuted: true,
                     });
                   }
@@ -290,8 +344,42 @@ export class AcpChatTransport implements ChatTransport<UIMessage> {
                   controller.enqueue({
                     type: "tool-output-available",
                     toolCallId,
-                    output: rawOutput,
+                    output: enrichedOutput,
                     providerExecuted: true,
+                  });
+                }
+                break;
+              }
+              case "user_message_chunk": {
+                // Handle user message chunks for session loading/replay
+                const text = extractTextFromContentBlock(updateEntry.payload.content);
+                if (!text) return;
+                // Create a text part for user messages
+                controller.enqueue({
+                  type: "text-delta",
+                  id: textId,
+                  delta: text,
+                });
+                break;
+              }
+              case "available_commands_update": {
+                // Handle available slash commands
+                const availableCommands = updateEntry.payload.availableCommands;
+                if (Array.isArray(availableCommands)) {
+                  controller.enqueue({
+                    type: "message-metadata",
+                    messageMetadata: { availableCommands },
+                  });
+                }
+                break;
+              }
+              case "current_mode_update": {
+                // Handle session mode changes
+                const modeId = updateEntry.payload.modeId;
+                if (typeof modeId === "string") {
+                  controller.enqueue({
+                    type: "message-metadata",
+                    messageMetadata: { currentMode: modeId },
                   });
                 }
                 break;
