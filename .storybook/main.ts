@@ -24,8 +24,8 @@ const config: StorybookConfig = {
         alias: {
           '@tauri-apps/api/core': path.resolve(__dirname, '../src/mocks/tauri.ts'),
           '@tauri-apps/api/event': path.resolve(__dirname, '../src/mocks/tauri.ts'),
-          '@/': path.resolve(__dirname, '../ai-elements-fork/app') + path.sep,
-          '~': path.resolve(__dirname, '../ai-elements-fork/app'),
+          '@/': path.resolve(__dirname, '../src') + path.sep,
+          '~': path.resolve(__dirname, '../src'),
           'types': path.resolve(__dirname, '../ai-elements-fork/types'),
         },
       },
