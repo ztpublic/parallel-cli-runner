@@ -19,6 +19,7 @@ use uuid::Uuid;
 use crate::command_error::CommandError;
 use crate::acp::{self, types::{AcpAgentConfig, AcpEvent}};
 use crate::git::{self, DiffRequestDto};
+use crate::utils;
 use crate::pty::{
     broadcast_line_with_manager, create_session_with_emitter, kill_session_with_manager,
     resize_session_with_manager, write_to_session_with_manager, PtyManager, SessionData,
@@ -622,7 +623,7 @@ async fn handle_request(
         "git_detect_repo" => {
             let params: CwdParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| {
+                utils::with_cwd(params.cwd, |path| {
                     git::detect_repo(path).map(|opt| opt.map(|p| p.to_string_lossy().to_string()))
                 })
             })
@@ -633,7 +634,7 @@ async fn handle_request(
             let params: CwdParams = parse_params(params)?;
             let events = state.events.clone();
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| {
+                utils::with_cwd(params.cwd, |path| {
                     git::scan_repos(path, |p| emit_event(&events, "scan-progress", p))
                 })
             })
@@ -642,13 +643,13 @@ async fn handle_request(
         }
         "git_status" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::status)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::status)).await?;
             to_value(result)
         }
         "git_diff" => {
             let params: GitDiffParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| git::diff(path, &params.pathspecs))
+                utils::with_cwd(params.cwd, |path| git::diff(path, &params.pathspecs))
             })
             .await?;
             to_value(result)
@@ -663,19 +664,19 @@ async fn handle_request(
         }
         "git_list_branches" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::list_branches)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::list_branches)).await?;
             to_value(result)
         }
         "git_list_remote_branches" => {
             let params: CwdParams = parse_params(params)?;
             let result =
-                run_blocking(move || with_cwd(params.cwd, git::list_remote_branches)).await?;
+                run_blocking(move || utils::with_cwd(params.cwd, git::list_remote_branches)).await?;
             to_value(result)
         }
         "git_list_commits" => {
             let params: GitListCommitsParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| git::list_commits(path, params.limit, params.skip))
+                utils::with_cwd(params.cwd, |path| git::list_commits(path, params.limit, params.skip))
             })
             .await?;
             to_value(result)
@@ -683,7 +684,7 @@ async fn handle_request(
         "git_list_commits_range" => {
             let params: GitListCommitsRangeParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| {
+                utils::with_cwd(params.cwd, |path| {
                     git::list_commits_range(path, &params.include_branch, &params.exclude_branch)
                 })
             })
@@ -692,58 +693,58 @@ async fn handle_request(
         }
         "git_list_worktrees" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::list_worktrees)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::list_worktrees)).await?;
             to_value(result)
         }
         "git_list_remotes" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::list_remotes)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::list_remotes)).await?;
             to_value(result)
         }
         "git_list_submodules" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::list_submodules)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::list_submodules)).await?;
             to_value(result)
         }
         "git_list_stashes" => {
             let params: CwdParams = parse_params(params)?;
-            let result = run_blocking(move || with_cwd(params.cwd, git::list_stashes)).await?;
+            let result = run_blocking(move || utils::with_cwd(params.cwd, git::list_stashes)).await?;
             to_value(result)
         }
         "git_list_tags" => {
             let params: GitListTagsParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| git::list_tags(path, params.limit, params.skip))
+                utils::with_cwd(params.cwd, |path| git::list_tags(path, params.limit, params.skip))
             })
             .await?;
             to_value(result)
         }
         "git_apply_stash" => {
             let params: GitApplyStashParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, |path| git::apply_stash(path, params.index)))
+            run_blocking(move || utils::with_cwd(params.cwd, |path| git::apply_stash(path, params.index)))
                 .await?;
             Ok(Value::Null)
         }
         "git_drop_stash" => {
             let params: GitApplyStashParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, |path| git::drop_stash(path, params.index)))
+            run_blocking(move || utils::with_cwd(params.cwd, |path| git::drop_stash(path, params.index)))
                 .await?;
             Ok(Value::Null)
         }
         "git_pull" => {
             let params: CwdParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, git::pull)).await?;
+            run_blocking(move || utils::with_cwd(params.cwd, git::pull)).await?;
             Ok(Value::Null)
         }
         "git_push" => {
             let params: GitPushParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, |path| git::push(path, params.force))).await?;
+            run_blocking(move || utils::with_cwd(params.cwd, |path| git::push(path, params.force))).await?;
             Ok(Value::Null)
         }
         "git_commit" => {
             let params: GitCommitParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| {
+                utils::with_cwd(params.cwd, |path| {
                     git::commit(path, &params.message, params.stage_all, params.amend)
                 })
             })
@@ -752,14 +753,14 @@ async fn handle_request(
         }
         "git_stage_files" => {
             let params: GitStageFilesParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, |path| git::stage_paths(path, &params.paths)))
+            run_blocking(move || utils::with_cwd(params.cwd, |path| git::stage_paths(path, &params.paths)))
                 .await?;
             Ok(Value::Null)
         }
         "git_unstage_files" => {
             let params: GitStageFilesParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::unstage_paths(path, &params.paths))
+                utils::with_cwd(params.cwd, |path| git::unstage_paths(path, &params.paths))
             })
             .await?;
             Ok(Value::Null)
@@ -767,25 +768,25 @@ async fn handle_request(
         "git_discard_files" => {
             let params: GitStageFilesParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::discard_paths(path, &params.paths))
+                utils::with_cwd(params.cwd, |path| git::discard_paths(path, &params.paths))
             })
             .await?;
             Ok(Value::Null)
         }
         "git_stage_all" => {
             let params: CwdParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, git::stage_all)).await?;
+            run_blocking(move || utils::with_cwd(params.cwd, git::stage_all)).await?;
             Ok(Value::Null)
         }
         "git_unstage_all" => {
             let params: CwdParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, git::unstage_all)).await?;
+            run_blocking(move || utils::with_cwd(params.cwd, git::unstage_all)).await?;
             Ok(Value::Null)
         }
         "git_merge_into_branch" => {
             let params: GitMergeParams = parse_params(params)?;
             run_blocking(move || {
-                with_repo_root(params.repo_root, |path| {
+                utils::with_repo_root(params.repo_root, |path| {
                     git::merge_into_branch(path, &params.target_branch, &params.source_branch)
                 })
             })
@@ -795,7 +796,7 @@ async fn handle_request(
         "git_rebase_branch" => {
             let params: GitRebaseParams = parse_params(params)?;
             run_blocking(move || {
-                with_repo_root(params.repo_root, |path| {
+                utils::with_repo_root(params.repo_root, |path| {
                     git::rebase_branch(path, &params.target_branch, &params.onto_branch)
                 })
             })
@@ -805,7 +806,7 @@ async fn handle_request(
         "git_create_branch" => {
             let params: GitCreateBranchParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| {
+                utils::with_cwd(params.cwd, |path| {
                     git::create_branch(path, &params.branch_name, params.source_branch)
                 })
             })
@@ -815,20 +816,20 @@ async fn handle_request(
         "git_checkout_branch" => {
             let params: GitCheckoutBranchParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::checkout_local_branch(path, &params.branch_name))
+                utils::with_cwd(params.cwd, |path| git::checkout_local_branch(path, &params.branch_name))
             })
             .await?;
             Ok(Value::Null)
         }
         "git_detach_worktree_head" => {
             let params: CwdParams = parse_params(params)?;
-            run_blocking(move || with_cwd(params.cwd, git::detach_worktree_head)).await?;
+            run_blocking(move || utils::with_cwd(params.cwd, git::detach_worktree_head)).await?;
             Ok(Value::Null)
         }
         "git_smart_checkout_branch" => {
             let params: GitSmartCheckoutParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::smart_checkout_branch(path, &params.branch_name))
+                utils::with_cwd(params.cwd, |path| git::smart_checkout_branch(path, &params.branch_name))
             })
             .await?;
             Ok(Value::Null)
@@ -836,7 +837,7 @@ async fn handle_request(
         "git_reset" => {
             let params: GitResetParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::reset(path, &params.target, &params.mode))
+                utils::with_cwd(params.cwd, |path| git::reset(path, &params.target, &params.mode))
             })
             .await?;
             Ok(Value::Null)
@@ -844,7 +845,7 @@ async fn handle_request(
         "git_revert" => {
             let params: GitRevertParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::revert(path, &params.commit))
+                utils::with_cwd(params.cwd, |path| git::revert(path, &params.commit))
             })
             .await?;
             Ok(Value::Null)
@@ -852,7 +853,7 @@ async fn handle_request(
         "git_squash_commits" => {
             let params: GitSquashParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::squash_commits(path, &params.commits))
+                utils::with_cwd(params.cwd, |path| git::squash_commits(path, &params.commits))
             })
             .await?;
             Ok(Value::Null)
@@ -860,7 +861,7 @@ async fn handle_request(
         "git_commits_in_remote" => {
             let params: GitCommitsInRemoteParams = parse_params(params)?;
             let result = run_blocking(move || {
-                with_cwd(params.cwd, |path| git::commits_in_remote(path, &params.commits))
+                utils::with_cwd(params.cwd, |path| git::commits_in_remote(path, &params.commits))
             })
             .await?;
             to_value(result)
@@ -868,7 +869,7 @@ async fn handle_request(
         "git_add_worktree" => {
             let params: GitAddWorktreeParams = parse_params(params)?;
             run_blocking(move || {
-                with_repo_root(params.repo_root, |root| {
+                utils::with_repo_root(params.repo_root, |root| {
                     let worktree_path = PathBuf::from(params.path);
                     git::add_worktree(root, &worktree_path, &params.branch, &params.start_point)
                 })
@@ -879,7 +880,7 @@ async fn handle_request(
         "git_remove_worktree" => {
             let params: GitRemoveWorktreeParams = parse_params(params)?;
             run_blocking(move || {
-                with_repo_root(params.repo_root, |root| {
+                utils::with_repo_root(params.repo_root, |root| {
                     let worktree_path = PathBuf::from(params.path);
                     git::remove_worktree(root, &worktree_path, params.force)
                 })
@@ -890,7 +891,7 @@ async fn handle_request(
         "git_delete_branch" => {
             let params: GitDeleteBranchParams = parse_params(params)?;
             run_blocking(move || {
-                with_repo_root(params.repo_root, |root| {
+                utils::with_repo_root(params.repo_root, |root| {
                     git::delete_branch(root, &params.branch, params.force)
                 })
             })
@@ -900,7 +901,7 @@ async fn handle_request(
         "git_stash_save" => {
             let params: GitStashSaveParams = parse_params(params)?;
             run_blocking(move || {
-                with_cwd(params.cwd, |path| git::stash_save(path, params.message, params.include_untracked))
+                utils::with_cwd(params.cwd, |path| git::stash_save(path, params.message, params.include_untracked))
             })
             .await?;
             Ok(Value::Null)
@@ -970,16 +971,6 @@ fn acp_event_sink(events: broadcast::Sender<EventMessage>) -> acp::types::AcpEve
             emit_event(&events, "acp-permission-request", payload)
         }
     })
-}
-
-fn with_cwd<T>(cwd: String, f: impl FnOnce(&std::path::Path) -> Result<T, git::GitError>) -> Result<T, CommandError> {
-    let path = PathBuf::from(cwd);
-    f(&path).map_err(CommandError::from)
-}
-
-fn with_repo_root<T>(repo_root: String, f: impl FnOnce(&std::path::Path) -> Result<T, git::GitError>) -> Result<T, CommandError> {
-    let path = PathBuf::from(repo_root);
-    f(&path).map_err(CommandError::from)
 }
 
 fn handle_dialog_open(params: OpenDialogParams) -> Value {

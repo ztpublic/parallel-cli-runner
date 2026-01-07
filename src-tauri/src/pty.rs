@@ -13,6 +13,7 @@ use tauri::{AppHandle, Emitter, State};
 use uuid::Uuid;
 
 use crate::command_error::CommandError;
+use crate::utils::mutex_lock_or_panic;
 
 #[derive(Default, Clone)]
 pub struct PtyManager {
@@ -21,17 +22,17 @@ pub struct PtyManager {
 
 impl PtyManager {
     pub fn insert(&self, id: Uuid, session: Arc<PtySession>) {
-        let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = mutex_lock_or_panic(&self.sessions);
         guard.insert(id, session);
     }
 
     pub fn remove(&self, id: &Uuid) -> Option<Arc<PtySession>> {
-        let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut guard = mutex_lock_or_panic(&self.sessions);
         guard.remove(id)
     }
 
     pub fn get(&self, id: &Uuid) -> Option<Arc<PtySession>> {
-        let guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let guard = mutex_lock_or_panic(&self.sessions);
         guard.get(id).cloned()
     }
 }
@@ -56,14 +57,14 @@ impl PtySession {
     }
 
     pub fn write(&self, data: &str) -> anyhow::Result<()> {
-        let mut writer = self.writer.lock().unwrap_or_else(|e| e.into_inner());
+        let mut writer = mutex_lock_or_panic(&self.writer);
         writer.write_all(data.as_bytes())?;
         writer.flush()?;
         Ok(())
     }
 
     pub fn resize(&self, cols: u16, rows: u16) -> anyhow::Result<()> {
-        let master = self.master.lock().unwrap_or_else(|e| e.into_inner());
+        let master = mutex_lock_or_panic(&self.master);
         let size = PtySize {
             rows,
             cols,
@@ -75,7 +76,7 @@ impl PtySession {
     }
 
     pub fn kill(&self) -> anyhow::Result<()> {
-        let mut child = self.child.lock().unwrap_or_else(|e| e.into_inner());
+        let mut child = mutex_lock_or_panic(&self.child);
         child.kill().context("failed to kill child")
     }
 }
