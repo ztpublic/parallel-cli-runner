@@ -27,11 +27,6 @@ pub mod codes {
     pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
     pub const PARSE_ERROR: &str = "PARSE_ERROR";
     pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
-    pub const NOT_FOUND: &str = "NOT_FOUND";
-    pub const PERMISSION_DENIED: &str = "PERMISSION_DENIED";
-    pub const CONFLICT_ERROR: &str = "CONFLICT_ERROR";
-    pub const NETWORK_ERROR: &str = "NETWORK_ERROR";
-    pub const TIMEOUT_ERROR: &str = "TIMEOUT_ERROR";
 }
 
 // ============================================================================
@@ -233,6 +228,7 @@ impl From<anyhow::Error> for AppError {
 
 /// Serializable error structure that can be sent to the frontend.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct ErrorResponse {
     /// Error code (matches codes module)
     pub code: String,
@@ -269,11 +265,13 @@ impl From<AppError> for ErrorResponse {
 
 /// Error type for Tauri commands that can be serialized and sent to the frontend.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct CommandError {
     pub code: String,
     pub message: String,
 }
 
+#[allow(dead_code)]
 impl CommandError {
     pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
@@ -309,6 +307,7 @@ pub type AppResult<T> = Result<T, AppError>;
 // ============================================================================
 
 /// Helper trait for adding context to errors.
+#[allow(dead_code)]
 pub trait ErrorContext<T> {
     /// Add context to an error.
     fn with_context(self, context: impl FnOnce() -> String) -> AppResult<T>;
@@ -317,6 +316,7 @@ pub trait ErrorContext<T> {
     fn with_msg(self, msg: &str) -> AppResult<T>;
 }
 
+#[allow(dead_code)]
 impl<T, E> ErrorContext<T> for Result<T, E>
 where
     E: std::error::Error + Send + Sync + 'static,

@@ -1,7 +1,6 @@
 use serde::Serialize;
 
 use crate::error::{AppError, codes};
-use crate::git;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CommandError {
