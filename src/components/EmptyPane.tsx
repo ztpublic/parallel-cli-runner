@@ -93,4 +93,3 @@ export function EmptyPane({ pane, onChoose }: EmptyPaneProps) {
     </div>
   );
 }
-import type { KeyboardEvent } from "react";

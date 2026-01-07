@@ -119,7 +119,7 @@ const AcpAgentPanel = () => {
                 key={message.id}
               >
                 <MessageContent>
-                  {message.parts.map((part, index) =>
+                  {message.parts.map((part: any, index: number) =>
                     renderMessagePart(
                       part,
                       message.id,

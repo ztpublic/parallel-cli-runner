@@ -11,7 +11,7 @@
  * 4. This transport converts those events to an AI SDK-compatible stream
  */
 
-import type { ChatTransport, SendMessagesOptions } from "ai";
+import type { ChatTransport } from "ai";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -51,15 +51,6 @@ function prepareAcpMessages(messages: unknown[]): unknown {
 }
 
 /**
- * Get the current working directory
- */
-async function getCwd(): Promise<string> {
-  // In Tauri, we can use the current working directory
-  // For now, use a reasonable default
-  return process.cwd?.() ?? "/";
-}
-
-/**
  * Get agent configuration from localStorage or use defaults
  */
 function getAgentConfig(): AcpChatRequest["agent"] {
@@ -90,59 +81,55 @@ function getAgentEnvVars(agentName: string): Record<string, string> {
 }
 
 /**
- * ReadableStream that converts Tauri events to AI SDK chunks
+ * Create a ReadableStream that converts Tauri events to AI SDK chunks
  */
-class TauriEventStream extends ReadableStream {
-  constructor(streamId: string, controller: AbortController) {
-    super({
-      async start(controller) {
-        const unlisten = await listen<[string, AcpChunkEvent]>(
-          "acp:chunk",
-          (event) => {
-            const [eventId, chunk] = event.payload;
-            if (eventId !== streamId) return;
+function createTauriEventStream(
+  streamId: string,
+  abortSignal: AbortSignal
+): ReadableStream<any> {
+  let messageId = crypto.randomUUID();
 
-            if (chunk.chunkType === "done") {
-              controller.close();
-              return;
-            }
+  return new ReadableStream({
+    async start(controller) {
+      const unlisten = await listen<[string, AcpChunkEvent]>(
+        "acp:chunk",
+        (event) => {
+          const [eventId, chunk] = event.payload;
+          if (eventId !== streamId) return;
 
-            if (chunk.chunkType === "error") {
-              controller.error(new Error(chunk.text ?? "Unknown error"));
-              return;
-            }
-
-            if (chunk.chunkType === "text" && chunk.text) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  `data: ${JSON.stringify({
-                    type: "text-delta",
-                    textDelta: chunk.text,
-                  })}\n\n`
-                )
-              );
-            }
-
-            if (chunk.chunkType === "metadata" && chunk.metadata) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  `data: ${JSON.stringify({
-                    type: "metadata",
-                    metadata: chunk.metadata,
-                  })}\n\n`
-                )
-              );
-            }
+          if (chunk.chunkType === "done") {
+            controller.close();
+            return;
           }
-        );
 
-        // Cleanup on abort
-        controller.signal.addEventListener("abort", () => {
-          unlisten();
-        });
-      },
-    });
-  }
+          if (chunk.chunkType === "error") {
+            controller.error(new Error(chunk.text ?? "Unknown error"));
+            return;
+          }
+
+          if (chunk.chunkType === "text" && chunk.text) {
+            controller.enqueue({
+              type: "text-delta",
+              delta: chunk.text,
+              id: messageId,
+            });
+          }
+
+          if (chunk.chunkType === "metadata" && chunk.metadata) {
+            controller.enqueue({
+              type: "message-metadata",
+              messageMetadata: chunk.metadata,
+            });
+          }
+        }
+      );
+
+      // Cleanup on abort
+      abortSignal.addEventListener("abort", () => {
+        unlisten();
+      });
+    },
+  });
 }
 
 /**
@@ -150,16 +137,18 @@ class TauriEventStream extends ReadableStream {
  *
  * This implements the ChatTransport interface from the AI SDK.
  */
-export class TauriAcpTransport implements ChatTransport {
+export class TauriAcpTransport implements ChatTransport<any> {
   /**
    * Send messages to the ACP agent and return a stream of responses
    */
-  async sendMessages({ messages, abortSignal }: SendMessagesOptions) {
+  async sendMessages(
+    options: Parameters<ChatTransport<any>["sendMessages"]>[0]
+  ): Promise<ReadableStream<any>> {
     const controller = new AbortController();
 
     // Handle abort from the caller
-    if (abortSignal) {
-      abortSignal.addEventListener("abort", () => {
+    if (options.abortSignal) {
+      options.abortSignal.addEventListener("abort", () => {
         controller.abort();
       });
     }
@@ -170,7 +159,7 @@ export class TauriAcpTransport implements ChatTransport {
 
     // Prepare the request
     const request: AcpChatRequest = {
-      messages: prepareAcpMessages(messages),
+      messages: prepareAcpMessages(options.messages),
       agent,
       envVars,
     };
@@ -182,7 +171,7 @@ export class TauriAcpTransport implements ChatTransport {
       });
 
       // Return a stream that listens for Tauri events
-      return new TauriEventStream(response.streamId, controller);
+      return createTauriEventStream(response.streamId, controller.signal);
     } catch (error) {
       controller.abort(error as Error);
       throw error;
@@ -193,7 +182,7 @@ export class TauriAcpTransport implements ChatTransport {
    * Reconnection is not supported for ACP sessions
    * Each request creates a new session or reuses a cached one
    */
-  async reconnectToStream() {
+  async reconnectToStream(): Promise<ReadableStream<any> | null> {
     throw new Error("Reconnection not supported for ACP transport");
   }
 }
