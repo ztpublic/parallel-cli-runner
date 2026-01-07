@@ -2,7 +2,7 @@
 //!
 //! Provides dual output to both stdout and log files with configurable levels.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
@@ -87,7 +87,7 @@ pub fn init_ws_server_logging() -> Option<WorkerGuard> {
 #[cfg(target_os = "macos")]
 pub fn init_desktop_logging() -> Option<WorkerGuard> {
     let log_dir = dirs::home_dir()
-        .map(|p| p.join("Library").join("Logs").join("ParallelCliRunner"));
+        .map(|p| p.join("Library").join("Logs").join("parallel-cli-runner"));
     init_logging(log_dir.as_deref())
 }
 
@@ -97,8 +97,8 @@ pub fn init_desktop_logging() -> Option<WorkerGuard> {
 /// log directory for desktop application operation.
 #[cfg(target_os = "windows")]
 pub fn init_desktop_logging() -> Option<WorkerGuard> {
-    let log_dir = dirs::data_local_dir()
-        .map(|p| p.join("ParallelCliRunner").join("logs"));
+    let log_dir = dirs::home_dir()
+        .map(|p| p.join("parallel-cli-runner").join("logs"));
     init_logging(log_dir.as_deref())
 }
 
@@ -108,8 +108,8 @@ pub fn init_desktop_logging() -> Option<WorkerGuard> {
 /// log directory for desktop application operation.
 #[cfg(target_os = "linux")]
 pub fn init_desktop_logging() -> Option<WorkerGuard> {
-    let log_dir = dirs::state_dir()
-        .map(|p| p.join("parallel-cli-runner").join("logs"));
+    let log_dir = dirs::home_dir()
+        .map(|p| p.join(".parallel-cli-runner").join("logs"));
     init_logging(log_dir.as_deref())
 }
 
@@ -121,4 +121,41 @@ pub fn init_desktop_logging() -> Option<WorkerGuard> {
 pub fn init_desktop_logging() -> Option<WorkerGuard> {
     // Fallback to current directory for unknown platforms
     init_logging(None)
+}
+
+/// Initializes logging for VSCode extension mode.
+///
+/// Reads the log directory from the PARALLEL_CLI_RUNNER_LOG_DIR environment variable.
+/// If not set, falls back to logging in the current directory.
+pub fn init_extension_logging() -> Option<WorkerGuard> {
+    let log_dir = std::env::var("PARALLEL_CLI_RUNNER_LOG_DIR")
+        .ok()
+        .map(|path| PathBuf::from(path));
+
+    init_logging(log_dir.as_deref())
+}
+
+/// Sets up a panic hook to capture panics to the log file.
+///
+/// This function installs a custom panic handler that logs panic information
+/// using tracing::error! before executing the original panic handler.
+/// This ensures panics are captured in log files for debugging.
+pub fn setup_panic_hook() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        let location = panic_info.location().unwrap_or_else(|| std::panic::Location::caller());
+        let msg = match panic_info.payload().downcast_ref::<&str>() {
+            Some(s) => *s,
+            None => match panic_info.payload().downcast_ref::<String>() {
+                Some(s) => &s[..],
+                None => "Box<Any>",
+            },
+        };
+        tracing::error!(
+            msg = msg,
+            file = location.file(),
+            line = location.line(),
+            column = location.column(),
+            "PANIC"
+        );
+    }));
 }

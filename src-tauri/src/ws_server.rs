@@ -364,7 +364,7 @@ async fn run_ws_server_on_tokio_listener(
         let token = auth_token.clone();
         tokio::spawn(async move {
             if let Err(err) = handle_connection(stream, state, token).await {
-                eprintln!("ws connection error: {err}");
+                tracing::error!("ws connection error: {err}");
             }
         });
     }

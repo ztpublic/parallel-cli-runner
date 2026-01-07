@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod logging;
+
 use std::env;
 
 struct WsArgs {
@@ -9,6 +11,20 @@ struct WsArgs {
 }
 
 fn main() {
+    // Determine mode and initialize logging
+    let is_ws_mode = parse_ws_args().is_ok_and(|opt| opt.is_some());
+
+    let _guard = if is_ws_mode {
+        // Extension mode: check for custom log directory
+        logging::init_extension_logging().or_else(|| logging::init_ws_server_logging())
+    } else {
+        // Desktop mode: use platform-specific log directory
+        logging::init_desktop_logging()
+    };
+
+    // Set up panic hook to capture panics to log file
+    logging::setup_panic_hook();
+
     match parse_ws_args() {
         Ok(Some(args)) => {
             let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -21,7 +37,7 @@ fn main() {
                     args.auth_token,
                 ))
             {
-                eprintln!("ws server failed: {err}");
+                tracing::error!("ws server failed: {err}");
                 std::process::exit(1);
             }
         }
@@ -29,7 +45,7 @@ fn main() {
             parallel_cli_runner_lib::run();
         }
         Err(err) => {
-            eprintln!("{err}");
+            tracing::error!("{err}");
             std::process::exit(2);
         }
     }

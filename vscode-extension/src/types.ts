@@ -1,9 +1,10 @@
-import type { TaskExecution } from "vscode";
+import type { ChildProcess } from "child_process";
 
 export const CONFIG_FILE = ".vscode/parallel-cli-runner.json";
 
 export const ENV_WS_URL = "PARALLEL_CLI_RUNNER_WS_URL";
 export const ENV_AUTH_TOKEN = "PARALLEL_CLI_RUNNER_AUTH_TOKEN";
+export const ENV_LOG_DIR = "PARALLEL_CLI_RUNNER_LOG_DIR";
 
 export type ExtensionSettings = {
   backendPath: string;
@@ -15,7 +16,7 @@ export type BackendState = {
   wsUrl: string;
   authToken: string;
   port: number;
-  taskExecution: TaskExecution | null;
+  process: ChildProcess | null;
   settings: ExtensionSettings;
 };
 

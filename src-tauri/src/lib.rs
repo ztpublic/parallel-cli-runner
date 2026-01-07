@@ -453,7 +453,7 @@ pub fn run() {
             let token = auth_token.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = ws_server::run_ws_server_on_listener(listener, token).await {
-                    eprintln!("ws server error: {err}");
+                    tracing::error!("ws server error: {err}");
                 }
             });
             Ok(())
