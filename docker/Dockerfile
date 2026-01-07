@@ -50,7 +50,7 @@ COPY --from=deps /project /project
 COPY . .
 
 # Build Windows binary
-RUN cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-gnu --cap-lints warn
+RUN cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-gnu
 
 # =============================================================================
 # Stage 4: Build frontend
