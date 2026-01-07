@@ -10,8 +10,7 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "~/*": ["ai-elements-fork/app/*"],
-      "types": ["ai-elements-fork/types"]
+      "~/*": ["./src/*"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,

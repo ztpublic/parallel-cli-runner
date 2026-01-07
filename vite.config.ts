@@ -14,18 +14,21 @@ export default defineConfig(async ({ mode }) => {
   return {
   plugins: [react()],
   resolve: {
-    alias: useTauriMock
-      ? {
-          "@tauri-apps/api/core": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
-          "@tauri-apps/api/event": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
-          "@tauri-apps/plugin-dialog": fileURLToPath(
-            new URL("./src/mocks/dialog.ts", import.meta.url),
-          ),
-          "@tauri-apps/plugin-opener": fileURLToPath(
-            new URL("./src/mocks/opener.ts", import.meta.url),
-          ),
-        }
-      : undefined,
+    alias: {
+      "~": fileURLToPath(new URL("./src", import.meta.url)),
+      ...(useTauriMock
+        ? {
+            "@tauri-apps/api/core": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
+            "@tauri-apps/api/event": fileURLToPath(new URL("./src/mocks/tauri.ts", import.meta.url)),
+            "@tauri-apps/plugin-dialog": fileURLToPath(
+              new URL("./src/mocks/dialog.ts", import.meta.url),
+            ),
+            "@tauri-apps/plugin-opener": fileURLToPath(
+              new URL("./src/mocks/opener.ts", import.meta.url),
+            ),
+          }
+        : {}),
+    },
   },
 
   base: isVscodeWebview ? "./" : undefined,

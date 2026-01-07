@@ -5,9 +5,10 @@ import { Icon } from "./Icons";
 
 type TopBarProps = {
   onOpenFolder: (path: string) => void;
+  onAgentClick?: () => void;
 };
 
-export function TopBar({ onOpenFolder }: TopBarProps) {
+export function TopBar({ onOpenFolder, onAgentClick }: TopBarProps) {
   const [isFileMenuOpen, setIsFileMenuOpen] = useState(false);
   const fileMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,6 +83,13 @@ export function TopBar({ onOpenFolder }: TopBarProps) {
           </button>
           <button type="button" className="menu-item">
             Terminal
+          </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={onAgentClick}
+          >
+            Agent
           </button>
         </nav>
       </div>
