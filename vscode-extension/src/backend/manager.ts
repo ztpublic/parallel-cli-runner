@@ -65,6 +65,11 @@ export async function ensureBackend(
     }
   }
 
+  // Set log directory to extension storage path
+  const logDir = context.globalStorageUri.fsPath;
+  env["PARALLEL_CLI_RUNNER_LOG_DIR"] = logDir;
+  output.appendLine(`Backend logs will be written to: ${logDir}`);
+
   // Spawn the backend process
   const childProcess = spawn(backendPath, args, {
     env,

@@ -4,6 +4,7 @@ export const CONFIG_FILE = ".vscode/parallel-cli-runner.json";
 
 export const ENV_WS_URL = "PARALLEL_CLI_RUNNER_WS_URL";
 export const ENV_AUTH_TOKEN = "PARALLEL_CLI_RUNNER_AUTH_TOKEN";
+export const ENV_LOG_DIR = "PARALLEL_CLI_RUNNER_LOG_DIR";
 
 export type ExtensionSettings = {
   backendPath: string;

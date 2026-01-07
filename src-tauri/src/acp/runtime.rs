@@ -81,7 +81,7 @@ impl AcpManager {
                     pending_permissions,
                 ));
             if let Err(err) = result {
-                eprintln!("acp connection {id} failed: {err}");
+                tracing::error!("acp connection {id} failed: {err}");
             }
         });
 
@@ -552,7 +552,7 @@ async fn log_stderr(id: Uuid, stderr: tokio::process::ChildStderr) {
             Ok(_) => {
                 let trimmed = line.trim_end();
                 if !trimmed.is_empty() {
-                    eprintln!("acp agent {id} stderr: {trimmed}");
+                    tracing::warn!("acp agent {id} stderr: {trimmed}");
                 }
             }
             Err(_) => break,
