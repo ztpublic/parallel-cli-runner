@@ -424,7 +424,7 @@ fn commits_tab_commits_in_remote() {
     let commit_id = &commits[0].id;
 
     // No remote configured, should return false
-    let in_remote = git::commits_in_remote(repo.path(), &[commit_id.clone()])
+    let in_remote = git::commits_in_remote(repo.path(), std::slice::from_ref(commit_id))
         .expect("check commits in remote");
     assert!(!in_remote, "should return false when no remote");
 
@@ -436,7 +436,7 @@ fn commits_tab_commits_in_remote() {
         .expect("create remote tracking");
 
     // Now the commit should be in remote
-    let in_remote = git::commits_in_remote(repo.path(), &[commit_id.clone()])
+    let in_remote = git::commits_in_remote(repo.path(), std::slice::from_ref(commit_id))
         .expect("check commits in remote");
     assert!(in_remote, "should return true when commit is in remote");
 }
@@ -486,7 +486,7 @@ fn commits_tab_multiple_commits_sequence() {
         let filename = format!("file{}.txt", i);
         fs::write(repo.path().join(&filename), format!("content {}\n", i))
             .expect("write file");
-        git::stage_paths(repo.path(), &[filename.clone()]).expect("stage");
+        git::stage_paths(repo.path(), std::slice::from_ref(&filename)).expect("stage");
         git::commit(repo.path(), &format!("Commit {}", i), false, false)
             .expect("commit");
     }

@@ -300,7 +300,7 @@ fn repos_tab_scan_with_submodules() {
 
     // Scan should find at least the main repo
     let repos = git::scan_repos(repo.path(), |_| {}).expect("scan repos");
-    assert!(repos.len() >= 1, "should find main repo");
+    assert!(!repos.is_empty(), "should find main repo");
 }
 
 /// Tests scan progress callback is invoked.
@@ -350,7 +350,7 @@ fn repos_tab_scan_handles_permission_errors() {
 
     // Scan should still succeed and find the valid repo
     let repos = git::scan_repos(root, |_| {}).expect("scan repos");
-    assert!(repos.len() >= 1, "should find valid repo despite restricted dir");
+    assert!(!repos.is_empty(), "should find valid repo despite restricted dir");
 
     // Clean up - restore permissions for cleanup
     #[cfg(unix)]

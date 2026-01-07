@@ -186,7 +186,7 @@ impl AcpManager {
         for key in to_remove {
             if let Some(entry) = cache.remove(&key) {
                 // Disconnect the connection associated with this session
-                let _ = self.disconnect(entry.connection_id);
+                std::mem::drop(self.disconnect(entry.connection_id));
             }
         }
     }
@@ -554,7 +554,7 @@ async fn run_connection(
         },
     );
 
-    let mut io_handle = tokio::task::spawn_local(async move { io_task.await });
+    let mut io_handle = tokio::task::spawn_local(io_task);
 
     let init_request = InitializeRequest::new(ProtocolVersion::LATEST)
         .client_capabilities(ClientCapabilities::default())

@@ -25,11 +25,13 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Test repository with metadata
+#[allow(dead_code)]
 pub struct TestRepo {
     temp: TempDir,
     pub repo: Repository,
 }
 
+#[allow(dead_code)]
 impl TestRepo {
     /// Get the path to the repository
     pub fn path(&self) -> &Path {
@@ -80,6 +82,7 @@ pub struct GitRepoBuilder {
     operations: Vec<Operation>,
 }
 
+#[allow(dead_code)]
 enum Operation {
     WriteFile { path: String, content: String },
     Commit { message: String },
@@ -94,6 +97,7 @@ impl Default for GitRepoBuilder {
     }
 }
 
+#[allow(dead_code)]
 impl GitRepoBuilder {
     /// Create a new builder
     pub fn new() -> Self {
@@ -290,7 +294,7 @@ impl GitRepoBuilder {
         // Use empty tree for empty commit
         let tree_id = repo
             .treebuilder(None)
-            .and_then(|mut tb| tb.write())
+            .and_then(|tb| tb.write())
             .expect("create empty tree");
         let tree = repo.find_tree(tree_id).expect("find tree");
 

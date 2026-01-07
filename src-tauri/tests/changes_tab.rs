@@ -463,7 +463,7 @@ fn changes_tab_merge_conflict_detection() {
         .build();
 
     // Merge feature into main (should cause conflict)
-    let result = git::merge_into_branch(repo.path(), "main", "feature");
+    let _result = git::merge_into_branch(repo.path(), "main", "feature");
     // We expect either success or conflict, both are valid test outcomes
     // Just verify the operation doesn't crash
 

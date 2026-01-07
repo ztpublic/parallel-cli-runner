@@ -620,10 +620,10 @@ pub fn commits_in_remote(repo_root: &Path, commit_ids: &[String]) -> Result<bool
     }
 
     let repo = open_repo(repo_root)?;
-    let mut remote_refs = repo.references_glob("refs/remotes/*")?;
+    let remote_refs = repo.references_glob("refs/remotes/*")?;
     let mut remote_heads = Vec::new();
 
-    while let Some(reference) = remote_refs.next() {
+    for reference in remote_refs {
         let reference = reference?;
         if let Ok(commit) = reference.peel_to_commit() {
             remote_heads.push(commit.id());

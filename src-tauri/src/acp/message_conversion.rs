@@ -27,7 +27,7 @@ use serde_json::{json, Value};
 pub fn ai_messages_to_content_blocks(messages: &[Value]) -> Vec<ContentBlock> {
     messages
         .iter()
-        .filter_map(|msg| convert_ai_message_to_content_blocks(msg))
+        .filter_map(convert_ai_message_to_content_blocks)
         .flatten()
         .collect()
 }
@@ -94,7 +94,7 @@ fn convert_part_to_content_block(part: &Value) -> Option<ContentBlock> {
         _ => {
             // Unknown part type - try to represent as text
             let text = part.get("text").and_then(|t| t.as_str());
-            text.map(|t| text_to_content_block(t))
+            text.map(text_to_content_block)
         }
     }
 }

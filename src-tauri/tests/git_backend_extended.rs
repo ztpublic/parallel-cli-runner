@@ -62,7 +62,7 @@ fn list_submodules_test() {
     
     // Use git CLI to add submodule as it handles .gitmodules and cloning reliably
     let output = std::process::Command::new("git")
-        .args(&["-c", "protocol.file.allow=always", "submodule", "add", url, "libs/mylib"])
+        .args(["-c", "protocol.file.allow=always", "submodule", "add", url, "libs/mylib"])
         .current_dir(temp.path())
         .output()
         .expect("git submodule add");
@@ -190,7 +190,7 @@ fn worktree_initializes_submodules() {
 
     // Add submodule to main repo using git CLI
     let output = std::process::Command::new("git")
-        .args(&["-c", "protocol.file.allow=always", "submodule", "add", url, "libs/mylib"])
+        .args(["-c", "protocol.file.allow=always", "submodule", "add", url, "libs/mylib"])
         .current_dir(temp.path())
         .output()
         .expect("git submodule add");

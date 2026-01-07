@@ -217,7 +217,7 @@ fn rebase_all_on_active_workflow() {
     // Create three worktrees OUTSIDE the main repo to simulate a real scenario
     let parent_dir = temp.path().parent().unwrap();
     let pid = std::process::id();
-    let worktree_paths = vec![
+    let worktree_paths = [
         parent_dir.join(format!("rebase-workflow-a-{}", pid)),
         parent_dir.join(format!("rebase-workflow-b-{}", pid)),
         parent_dir.join(format!("rebase-workflow-c-{}", pid)),

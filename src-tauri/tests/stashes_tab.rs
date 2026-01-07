@@ -67,7 +67,7 @@ fn stashes_tab_save_without_message() {
     assert_eq!(stashes.len(), 1, "should have 1 stash");
     // When no message is provided, git creates a default message
     // Just verify the stash was created (message format varies by git version)
-    assert!(!stashes[0].message.is_empty() || stashes[0].id.len() > 0,
+    assert!(!stashes[0].message.is_empty() || !stashes[0].id.is_empty(),
             "stash should exist with either message or ID");
 }
 

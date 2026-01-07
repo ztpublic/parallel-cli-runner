@@ -130,7 +130,7 @@ pub fn init_desktop_logging() -> Option<WorkerGuard> {
 pub fn init_extension_logging() -> Option<WorkerGuard> {
     let log_dir = std::env::var("PARALLEL_CLI_RUNNER_LOG_DIR")
         .ok()
-        .map(|path| PathBuf::from(path));
+        .map(PathBuf::from);
 
     init_logging(log_dir.as_deref())
 }

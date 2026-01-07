@@ -144,13 +144,13 @@ fn map_delta_status(status: Delta) -> DiffDeltaStatus {
 fn index_conflicted_paths(repo: &git2::Repository) -> Result<Vec<String>, GitError> {
     let index = repo.index()?;
     let mut paths = std::collections::HashSet::new();
-    let mut conflicts = match index.conflicts() {
+    let conflicts = match index.conflicts() {
         Ok(conflicts) => conflicts,
         Err(err) if err.code() == ErrorCode::NotFound => return Ok(Vec::new()),
         Err(err) => return Err(GitError::Git2(err)),
     };
 
-    while let Some(conflict) = conflicts.next() {
+    for conflict in conflicts {
         let conflict = conflict?;
         let path = conflict
             .our

@@ -62,12 +62,14 @@ impl TestHarness {
     }
 
     /// Pop the next event if available.
+    #[allow(dead_code)]
     fn pop_event(&self) -> Option<AcpEvent> {
         (*self.events_collector).pop()
     }
 }
 
 /// Get the path to the example agent binary.
+#[allow(dead_code)]
 fn example_agent_path() -> String {
     // The example agent should be built as part of the test setup
     // For now, we'll use cargo to run it in-process

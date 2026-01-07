@@ -16,7 +16,7 @@ fn main() {
 
     let _guard = if is_ws_mode {
         // Extension mode: check for custom log directory
-        logging::init_extension_logging().or_else(|| logging::init_ws_server_logging())
+        logging::init_extension_logging().or_else(logging::init_ws_server_logging)
     } else {
         // Desktop mode: use platform-specific log directory
         logging::init_desktop_logging()

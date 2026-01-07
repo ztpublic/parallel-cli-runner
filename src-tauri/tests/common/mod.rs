@@ -2,4 +2,4 @@
 
 pub mod git_repo_builder;
 
-pub use git_repo_builder::{GitRepoBuilder, TestRepo};
+pub use git_repo_builder::GitRepoBuilder;
