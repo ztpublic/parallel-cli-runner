@@ -311,7 +311,10 @@ fn default_shell() -> String {
     }
 }
 
-fn apply_login_shell_args(command: &mut CommandBuilder, shell: &str) {
+fn apply_login_shell_args(
+    #[cfg(not(target_os = "windows"))] command: &mut CommandBuilder,
+    #[cfg(not(target_os = "windows"))] shell: &str,
+) {
     #[cfg(not(target_os = "windows"))]
     {
         let shell_name = Path::new(shell)
