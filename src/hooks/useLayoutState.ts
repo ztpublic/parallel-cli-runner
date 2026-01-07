@@ -10,6 +10,7 @@ import {
   getLayoutOrientation,
   removePane,
   splitPane,
+  updatePaneInLayout,
 } from "../types/layout";
 import { killSession, writeToSession } from "../services/backend";
 import { disposeTerminal } from "../services/terminalRegistry";
@@ -275,6 +276,25 @@ export function useLayoutState() {
     []
   );
 
+  const updatePaneInTab = useCallback(
+    async (tabId: string, paneId: string, updatedPane: PaneNode) => {
+      setTabs((prev) => {
+        return prev.map((item) => {
+          if (item.id !== tabId) return item;
+
+          const nextLayout = updatePaneInLayout(item.layout, paneId, updatedPane);
+
+          return {
+            ...item,
+            layout: nextLayout,
+            activePaneId: updatedPane.id,
+          };
+        });
+      });
+    },
+    []
+  );
+
   const closeActivePane = useCallback(async () => {
     const tabId = getActiveTabId();
     if (!tabId) return;
@@ -315,6 +335,7 @@ export function useLayoutState() {
     closePane,
     closePaneInTab,
     closePanesInTab,
+    updatePaneInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,

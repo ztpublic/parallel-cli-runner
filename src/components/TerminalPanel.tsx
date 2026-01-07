@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
-import { countPanes, type LayoutNode } from "../types/layout";
+import { countPanes, collectPanes, type LayoutNode } from "../types/layout";
 import { clearTerminalBuffer } from "../services/terminalRegistry";
 import { ContextMenu } from "./ContextMenu";
 import { Icon } from "./Icons";
 import { LayoutRenderer } from "./LayoutRenderer";
+import { DEFAULT_AGENT } from "~/constants/agents";
 
 type TerminalTab = {
   id: string;
@@ -22,6 +23,8 @@ type TerminalPanelProps = {
   onSetActivePane: (id: string) => void;
   onCloseTab: (id: string) => void;
   onNewPane: () => void;
+  onNewAgentTab?: (agentId: string) => void;
+  onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent") => void;
   onSetTerminalView: (
     tabId: string,
     view: "single" | "vertical" | "horizontal" | "quad"
@@ -43,6 +46,15 @@ function getSessionIdsFromLayout(node: LayoutNode): string[] {
   return [];
 }
 
+// Helper to get the primary pane type for a tab
+function getTabPrimaryType(tab: TerminalTab): "agent" | "terminal" {
+  const panes = collectPanes(tab.layout);
+  const activePane = panes.find((p) => p.id === tab.activePaneId);
+  if (activePane?.paneType === "agent") return "agent";
+  if (panes.some((p) => p.paneType === "agent")) return "agent";
+  return "terminal";
+}
+
 export function TerminalPanel({
   tabs,
   activeTabId,
@@ -53,11 +65,16 @@ export function TerminalPanel({
   onSetActivePane,
   onCloseTab,
   onNewPane,
+  onNewAgentTab,
+  onChooseEmptyPane,
   onSetTerminalView,
 }: TerminalPanelProps) {
   const activeView: TerminalView = "terminals";
   const [menuState, setMenuState] = useState<{
     tabId: string;
+    position: { x: number; y: number };
+  } | null>(null);
+  const [newTabDropdown, setNewTabDropdown] = useState<{
     position: { x: number; y: number };
   } | null>(null);
 
@@ -94,6 +111,7 @@ export function TerminalPanel({
   }, [menuState, tabs, terminalSplitPaneIds, terminalSplitViews]);
 
   return (
+    <>
     <section className="terminal-panel">
       <div className="terminal-tabbar">
         {activeView === "terminals" ? (
@@ -101,6 +119,7 @@ export function TerminalPanel({
             <div className="terminal-tabs" role="tablist" aria-label="Terminal sessions">
               {tabs.map((tab, index) => {
                 const isActive = tab.id === activeTabId;
+                const tabType = getTabPrimaryType(tab);
                 return (
                   <div
                     key={tab.id}
@@ -116,8 +135,8 @@ export function TerminalPanel({
                       }
                     }}
                   >
-                    <Icon name="terminal" size={14} />
-                    <span>{tab.title || `Terminal ${index + 1}`}</span>
+                    <Icon name={tabType === "agent" ? "robot" : "terminal"} size={14} />
+                    <span>{tab.title || `${tabType === "agent" ? "Agent" : "Terminal"} ${index + 1}`}</span>
                     <button
                       type="button"
                       className="terminal-tab-menu"
@@ -153,8 +172,13 @@ export function TerminalPanel({
               <button
                 type="button"
                 className="icon-button"
-                title="New terminal"
-                onClick={onNewPane}
+                title="New tab"
+                onClick={(event) => {
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setNewTabDropdown({
+                    position: { x: rect.left, y: rect.bottom + 6 },
+                  });
+                }}
               >
                 <Icon name="plus" size={16} />
               </button>
@@ -180,6 +204,7 @@ export function TerminalPanel({
                   node={tab.layout}
                   activePaneId={isActiveTab ? tab.activePaneId : null}
                   onFocus={onSetActivePane}
+                  onChooseEmptyPane={onChooseEmptyPane}
                   layoutTick={layoutTick}
                 />
               </div>
@@ -222,6 +247,36 @@ export function TerminalPanel({
           }}
         />
       ) : null}
+      {newTabDropdown ? (
+        <ContextMenu
+          items={[
+            {
+              id: "new-terminal",
+              label: "New Terminal Tab",
+            },
+            {
+              id: "new-agent",
+              label: "New Agent Tab",
+            },
+          ]}
+          position={newTabDropdown.position}
+          onClose={() => setNewTabDropdown(null)}
+          onSelect={(itemId) => {
+            if (itemId === "new-terminal") {
+              onNewPane();
+            }
+            if (itemId === "new-agent") {
+              if (onNewAgentTab) {
+                onNewAgentTab(DEFAULT_AGENT);
+              }
+              setNewTabDropdown(null);
+              return;
+            }
+            setNewTabDropdown(null);
+          }}
+        />
+      ) : null}
     </section>
+  </>
   );
 }

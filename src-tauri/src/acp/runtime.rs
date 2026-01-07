@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use tokio::io::AsyncBufReadExt;
@@ -24,12 +25,48 @@ use super::types::{
     AcpEventSink, AcpPermissionRequestEvent, AcpSessionUpdateEvent,
 };
 
+/// Cache entry for a session with its last access time
+#[derive(Clone)]
+struct SessionCacheEntry {
+    connection_id: Uuid,
+    session_id: String,
+    last_accessed: Arc<Mutex<Instant>>,
+}
+
+impl SessionCacheEntry {
+    fn new(connection_id: Uuid, session_id: String) -> Self {
+        Self {
+            connection_id,
+            session_id,
+            last_accessed: Arc::new(Mutex::new(Instant::now())),
+        }
+    }
+
+    fn touch(&self) {
+        if let Ok(mut last) = self.last_accessed.lock() {
+            *last = Instant::now();
+        }
+    }
+
+    fn is_stale(&self, timeout: Duration) -> bool {
+        self.last_accessed
+            .lock()
+            .map(|last| last.elapsed() > timeout)
+            .unwrap_or(true)
+    }
+}
+
 #[derive(Clone)]
 pub struct AcpManager {
     connections: Arc<Mutex<HashMap<Uuid, AcpConnectionHandle>>>,
     sessions: Arc<Mutex<HashMap<String, Uuid>>>,
     pending_permissions: Arc<Mutex<HashMap<String, oneshot::Sender<RequestPermissionOutcome>>>>,
     event_sink: AcpEventSink,
+    /// Session cache for reusing agent sessions
+    /// Maps agent config hash -> (connection_id, session_id, last_accessed)
+    session_cache: Arc<Mutex<HashMap<String, SessionCacheEntry>>>,
+    /// Session timeout - sessions idle longer than this will be cleaned up
+    session_timeout: Duration,
 }
 
 impl Default for AcpManager {
@@ -40,11 +77,117 @@ impl Default for AcpManager {
 
 impl AcpManager {
     pub fn new(event_sink: AcpEventSink) -> Self {
+        Self::with_timeout(event_sink, Duration::from_secs(300)) // 5 minutes default
+    }
+
+    pub fn with_timeout(event_sink: AcpEventSink, session_timeout: Duration) -> Self {
         Self {
             connections: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             pending_permissions: Arc::new(Mutex::new(HashMap::new())),
             event_sink,
+            session_cache: Arc::new(Mutex::new(HashMap::new())),
+            session_timeout,
+        }
+    }
+
+    /// Generate a hash key for an agent configuration
+    fn agent_config_key(config: &AcpAgentConfig) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        config.command.hash(&mut hasher);
+        config.args.hash(&mut hasher);
+        // Note: we don't hash env vars as they may change between calls
+        // but same command + args should use the same connection
+        format!("{}:{:x}", config.command, hasher.finish())
+    }
+
+    /// Get or create a session for the given agent configuration
+    ///
+    /// This method:
+    /// 1. Checks if a cached session exists for this agent config
+    /// 2. If yes, returns the cached session (updating its access time)
+    /// 3. If no, creates a new connection and session, caches it, and returns it
+    pub async fn get_or_create_session(
+        &self,
+        config: AcpAgentConfig,
+        cwd: String,
+        mcp_servers: Vec<McpServer>,
+    ) -> Result<String> {
+        let key = Self::agent_config_key(&config);
+
+        // Check if we have a cached session
+        {
+            let cache = self.session_cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(entry) = cache.get(&key) {
+                // Verify the connection is still alive
+                if let Some(info) = self.get_info(entry.connection_id) {
+                    if info.status == AcpConnectionStatus::Ready {
+                        // Touch the entry to update its access time
+                        entry.touch();
+                        // Return the cached session_id
+                        return Ok(entry.session_id.clone());
+                    }
+                }
+                // Connection is dead, remove from cache and continue to create new
+                drop(cache);
+                self.remove_cached_session(&key);
+            }
+        }
+
+        // No valid cached session, create a new one
+        // First connect to the agent
+        let connection_info = self.connect(config.clone()).await?;
+
+        // Create a new session
+        let session_response = self
+            .new_session(connection_info.id.parse()?, cwd, mcp_servers)
+            .await?;
+
+        let session_id = session_response.session_id.to_string();
+
+        // Cache the session
+        {
+            let mut cache = self
+                .session_cache
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            cache.insert(
+                key.clone(),
+                SessionCacheEntry::new(connection_info.id.parse()?, session_id.clone()),
+            );
+        }
+
+        Ok(session_id)
+    }
+
+    /// Remove a session from the cache
+    fn remove_cached_session(&self, key: &str) {
+        let mut cache = self.session_cache.lock().unwrap_or_else(|e| e.into_inner());
+        cache.remove(key);
+    }
+
+    /// Clean up stale sessions from the cache
+    ///
+    /// This should be called periodically to remove sessions that haven't been used
+    /// within the timeout period.
+    pub fn cleanup_stale_sessions(&self) {
+        let mut cache = self.session_cache.lock().unwrap_or_else(|e| e.into_inner());
+        let mut to_remove = Vec::new();
+
+        for (key, entry) in cache.iter() {
+            if entry.is_stale(self.session_timeout) {
+                to_remove.push(key.clone());
+            }
+        }
+
+        for key in to_remove {
+            if let Some(entry) = cache.remove(&key) {
+                // Disconnect the connection associated with this session
+                let _ = self.disconnect(entry.connection_id);
+            }
         }
     }
 

@@ -51,6 +51,7 @@ export function AppLayout({
     appendPane,
     splitPaneInTab,
     closePanesInTab,
+    updatePaneInTab,
     closeActivePane,
     closeTab,
     getTabsSnapshot,
@@ -127,6 +128,7 @@ export function AppLayout({
           closePanesInTab={closePanesInTab}
           splitPaneInTab={splitPaneInTab}
           appendPane={appendPane}
+          updatePaneInTab={updatePaneInTab}
           setActiveTabId={setActiveTabId}
           setActivePaneId={setActivePaneId}
         />
