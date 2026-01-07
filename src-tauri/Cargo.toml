@@ -57,5 +57,9 @@ name = "agent_example"
 path = "src/acp/examples/agent_example.rs"
 
 [[bin]]
+name = "parallel-cli-runner"
+path = "src/main.rs"
+
+[[bin]]
 name = "export_types"
 path = "src/bin/export_types.rs"
