@@ -5,11 +5,12 @@
 
 - tests
 
-- ui
-  - ACP based components
-  - chat bot step by step
-  - UI state persistence
+- acp
+  - acp integration test against real server
+  - connect app/.client/acp-agent.tsx with backend
 
+- ui
+  - UI state persistence
 - ci
 
 - utilities
