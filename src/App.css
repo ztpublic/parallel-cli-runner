@@ -36,6 +36,7 @@ body,
 
 body {
   background: var(--bg);
+  color: var(--text);
   overflow: hidden;
 }
 
@@ -1491,6 +1492,29 @@ button {
   min-width: 0;
   overflow: hidden;
   position: relative;
+}
+
+.pane-agent {
+  background: var(--bg);
+  --background: 0 0% 11.8%;
+  --foreground: 0 0% 80%;
+  --card: 240 1.3% 14.7%;
+  --card-foreground: 0 0% 80%;
+  --popover: 240 1.3% 14.7%;
+  --popover-foreground: 0 0% 80%;
+  --primary: 204 100% 40%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 204 85% 24%;
+  --accent-foreground: 0 0% 100%;
+  --secondary: 240 3.2% 18.2%;
+  --secondary-foreground: 0 0% 80%;
+  --muted: 240 3.2% 18.2%;
+  --muted-foreground: 0 0% 58.8%;
+  --destructive: 10.1 85.6% 70%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 23.5%;
+  --input: 0 0% 23.5%;
+  --ring: 204 100% 40%;
 }
 
 .pane-active {

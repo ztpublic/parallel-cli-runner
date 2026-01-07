@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TerminalPanel } from "../components/TerminalPanel";
-import { createPaneNode } from "../services/sessions";
-import { collectPanes, countPanes, findPane, getFirstPane, type LayoutNode, type Orientation, type PaneNode } from "../types/layout";
+import { createPaneNode, createAgentPaneNode, convertEmptyPane } from "../services/sessions";
+import { collectPanes, findPane, getFirstPane, createEmptyPane, type LayoutNode, type Orientation, type PaneNode } from "../types/layout";
 
 type Tab = {
   id: string;
@@ -22,6 +22,7 @@ interface TerminalPanelContainerProps {
     orientation: Orientation
   ) => void;
   appendPane: (pane: PaneNode, title?: string) => void;
+  updatePaneInTab: (tabId: string, paneId: string, updatedPane: PaneNode) => void;
   setActiveTabId: (tabId: string) => void;
   setActivePaneId: (paneId: string) => void;
 }
@@ -33,6 +34,7 @@ export function TerminalPanelContainer({
   closePanesInTab,
   splitPaneInTab,
   appendPane,
+  updatePaneInTab,
   setActiveTabId,
   setActivePaneId,
 }: TerminalPanelContainerProps) {
@@ -134,34 +136,23 @@ export function TerminalPanelContainer({
 
       if (!targetPaneId) return;
       const paneId = targetPaneId;
-      const targetPane = findPane(tab.layout, paneId);
-      const cwd = targetPane?.meta?.cwd ?? targetPane?.meta?.subtitle;
-      const subtitle = targetPane?.meta?.subtitle;
-      const baseIndex = countPanes(tab.layout);
 
-      const createSplitPane = async (indexOffset: number) =>
-        createPaneNode({
-          cwd,
-          meta: {
-            title: `Terminal ${baseIndex + indexOffset}`,
-            subtitle,
-            cwd,
-          },
-        });
+      // Create empty panes for split (user will choose Terminal or Agent)
+      const createEmptySplitPane = () => createEmptyPane("terminal");
 
       if (view === "vertical" || view === "horizontal") {
-        const next = await createSplitPane(1);
+        const next = createEmptySplitPane();
         splitPaneInTab(tabId, next, paneId, view === "vertical" ? "vertical" : "horizontal");
         setTerminalSplitPaneIds((prev) => ({ ...prev, [tabId]: [next.id] }));
         setTerminalSplitViews((prev) => ({ ...prev, [tabId]: view }));
       } else {
-        const paneA = await createSplitPane(1);
+        const paneA = createEmptySplitPane();
         splitPaneInTab(tabId, paneA, paneId, "vertical");
 
-        const paneB = await createSplitPane(2);
+        const paneB = createEmptySplitPane();
         splitPaneInTab(tabId, paneB, paneId, "horizontal");
 
-        const paneC = await createSplitPane(3);
+        const paneC = createEmptySplitPane();
         splitPaneInTab(tabId, paneC, paneA.id, "horizontal");
 
         setTerminalSplitPaneIds((prev) => ({
@@ -179,6 +170,44 @@ export function TerminalPanelContainer({
     [closePanesInTab, splitPaneInTab, tabs, terminalSplitPaneIds, terminalSplitViews]
   );
 
+  // Handler for creating a new agent tab
+  const handleNewAgentTab = useCallback(async (agentId?: string) => {
+    const nextIndex = tabs.length + 1;
+    const title = `Agent ${nextIndex}`;
+    const next = await createAgentPaneNode({
+      agentId: agentId ?? "Claude Code",
+      meta: {
+        title,
+      },
+    });
+    appendPane(next, title);
+  }, [appendPane, tabs.length]);
+
+  // Handler for converting an empty pane to a terminal or agent pane
+  const handleChooseEmptyPane = useCallback(
+    async (paneId: string, paneType: "terminal" | "agent") => {
+      const tabId = activeTabId ?? tabs[0]?.id ?? null;
+      if (!tabId) return;
+
+      const tab = tabs.find((item) => item.id === tabId);
+      if (!tab) return;
+
+      const existingPane = findPane(tab.layout, paneId);
+      if (!existingPane) return;
+
+      const cwd = existingPane.meta?.cwd ?? existingPane.meta?.subtitle;
+
+      // Convert the empty pane to the requested type
+      const updatedPane = await convertEmptyPane(paneId, paneType, {
+        agentId: paneType === "agent" ? "Claude Code" : undefined,
+        cwd,
+      });
+
+      updatePaneInTab(tabId, paneId, updatedPane);
+    },
+    [activeTabId, tabs, updatePaneInTab]
+  );
+
   const resolvedActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
 
   return (
@@ -192,6 +221,8 @@ export function TerminalPanelContainer({
       onSetActivePane={setActivePaneId}
       onCloseTab={(id) => closeTab(id)}
       onNewPane={() => void handleNewPane()}
+      onNewAgentTab={(agentId) => void handleNewAgentTab(agentId)}
+      onChooseEmptyPane={(paneId, paneType) => void handleChooseEmptyPane(paneId, paneType)}
       onSetTerminalView={(tabId, view) => void handleSetTerminalView(tabId, view)}
     />
   );

@@ -6,11 +6,16 @@ export type PaneMeta = {
   cwd?: string;
 };
 
+export type PaneType = "terminal" | "agent";
+
 export type PaneNode = {
   type: "pane";
   id: string;
-  sessionId: string;
+  paneType: PaneType;
+  sessionId: string;  // Used by terminals; agents may have empty string
+  agentId?: string;   // Used by agents
   meta?: PaneMeta;
+  isEmpty?: boolean; // For newly split empty panes
 };
 
 export type SplitNode = {
@@ -163,4 +168,83 @@ export function buildLayoutFromPanes(
     (acc, pane) => appendPaneToLayout(acc, pane, orientation),
     null
   );
+}
+
+/**
+ * Create an empty pane node for newly split panes.
+ * Empty panes are rendered as placeholders with buttons to choose Terminal or Agent.
+ */
+export function createEmptyPane(paneType: PaneType = "terminal"): PaneNode {
+  return {
+    type: "pane",
+    id: createId(),
+    paneType,
+    sessionId: "",
+    isEmpty: true,
+  };
+}
+
+/**
+ * Update a pane node in the layout with a new pane node.
+ * Used when converting an empty pane to a terminal or agent pane.
+ */
+export function updatePaneInLayout(
+  node: LayoutNode,
+  targetPaneId: string,
+  updatedPane: PaneNode
+): LayoutNode {
+  if (node.type === "pane") {
+    return node.id === targetPaneId ? updatedPane : node;
+  }
+
+  const [nextLeft, updatedLeft] = updatePaneRecursive(
+    node.children[0],
+    targetPaneId,
+    updatedPane
+  );
+  if (updatedLeft) {
+    return { ...node, children: [nextLeft, node.children[1]] };
+  }
+
+  const [nextRight, updatedRight] = updatePaneRecursive(
+    node.children[1],
+    targetPaneId,
+    updatedPane
+  );
+  if (updatedRight) {
+    return { ...node, children: [node.children[0], nextRight] };
+  }
+
+  return node;
+}
+
+function updatePaneRecursive(
+  node: LayoutNode,
+  targetPaneId: string,
+  updatedPane: PaneNode
+): [LayoutNode, boolean] {
+  if (node.type === "pane") {
+    if (node.id !== targetPaneId) return [node, false];
+    return [updatedPane, true];
+  }
+
+  const [nextLeft, updatedLeft] = updatePaneRecursive(
+    node.children[0],
+    targetPaneId,
+    updatedPane
+  );
+  if (updatedLeft) {
+    return [{ ...node, children: [nextLeft, node.children[1]] }, true];
+  }
+
+  const [nextRight, updatedRight] = updatePaneRecursive(
+    node.children[1],
+    targetPaneId,
+    updatedPane
+  );
+  if (updatedRight) {
+    return [{ ...node, children: [node.children[0], nextRight] }, true];
+  }
+
+  return [node, false];
 }

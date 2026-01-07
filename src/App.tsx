@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import "../ai-elements-fork/app/tailwind.css";
 import "./App.css";
 import { AppLayout } from "./app/AppLayout";
 import { RepoManager } from "./app/RepoManager";
@@ -7,12 +8,10 @@ import { GitErrorDialog } from "./components/dialogs/GitErrorDialog";
 import { RebaseWorktreeGuardDialog } from "./components/dialogs/RebaseWorktreeGuardDialog";
 import { SmartSwitchDialog } from "./components/dialogs/SmartSwitchDialog";
 import { SquashCommitsDialog } from "./components/dialogs/SquashCommitsDialog";
-import { AcpModal } from "./components/AcpModal";
 import { useGitRepos } from "./hooks/git/useGitRepos";
 import { useGitCommandErrorDialog } from "./hooks/git/useGitCommandErrorDialog";
 
 function App() {
-  const [isAcpModalOpen, setIsAcpModalOpen] = useState(false);
 
   const {
     repos,
@@ -148,22 +147,6 @@ function App() {
           onSquashCommitsWithCheck={handleSquashCommitsWithCheck}
           gitRefreshRequest={gitRefreshRequest}
         >
-          {/* ACP AI Agent Modal */}
-          <AcpModal
-            open={isAcpModalOpen}
-            onClose={() => setIsAcpModalOpen(false)}
-          />
-
-          {/* Floating button to open ACP Agent */}
-          <button
-            type="button"
-            onClick={() => setIsAcpModalOpen(true)}
-            className="fixed bottom-6 right-6 z-40 px-4 py-2 bg-[--accent] hover:bg-[--accent-strong] text-white rounded-lg shadow-lg transition-colors font-medium flex items-center gap-2"
-            title="Open AI Agent"
-          >
-            <span>AI Agent</span>
-          </button>
-
           {/* Dialogs */}
           <GitErrorDialog
             open={Boolean(gitCommandError)}

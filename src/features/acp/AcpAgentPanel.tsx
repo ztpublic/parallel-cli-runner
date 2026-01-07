@@ -108,8 +108,8 @@ const AcpAgentPanel = () => {
   };
 
   return (
-    <div className="flex flex-col w-full h-full min-h-0">
-      <div className="flex-1 overflow-hidden h-[calc(100vh-15rem)] max-h-[calc(100vh-15rem)]">
+    <div className="flex flex-col w-full h-full min-h-0 bg-background text-foreground">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <Conversation className="h-full">
           <ConversationContent className="h-full overflow-y-auto p-4 space-y-4">
             {messages.map((message) => (
@@ -143,7 +143,7 @@ const AcpAgentPanel = () => {
         </Conversation>
       </div>
 
-      <div className="flex-shrink-0 border-t bg-background pt-4 pb-4">
+      <div className="flex-shrink-0 border-t bg-background pt-3 pb-0">
         <PromptInput onSubmit={handleSubmit}>
           <PromptInputTextarea
             onChange={(e) => setInput(e.target.value)}

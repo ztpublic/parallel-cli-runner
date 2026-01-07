@@ -25,6 +25,7 @@ export type IconName =
   | "plus"
   | "pull"
   | "refresh"
+  | "robot"
   | "settings"
   | "sparkle"
   | "split"
@@ -164,6 +165,15 @@ const iconPaths: Record<IconName, ReactNode> = {
       <polyline points="3 17 5.5 17 5.5 14.5" />
       <path d="M3 12a9 9 0 0 1 15.5-6.5" />
       <polyline points="21 7 18.5 7 18.5 9.5" />
+    </>
+  ),
+  robot: (
+    <>
+      <rect x="3" y="11" width="18" height="10" rx="2" />
+      <circle cx="12" cy="5" r="2" />
+      <path d="M12 7v4" />
+      <line x1="8" y1="16" x2="8" y2="16" />
+      <line x1="16" y1="16" x2="16" y2="16" />
     </>
   ),
   settings: (
