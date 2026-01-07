@@ -112,6 +112,7 @@ pub fn create_session_with_emitter(
     let writer = pair.master.take_writer().map_err(CommandError::internal)?;
     let mut command = CommandBuilder::new(&shell);
     command.env("TERM", "xterm-256color");
+    #[cfg(not(target_os = "windows"))]
     apply_login_shell_args(&mut command, &shell);
     if let Some(dir) = cwd {
         command.cwd(dir);
