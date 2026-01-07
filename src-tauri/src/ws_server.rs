@@ -131,7 +131,10 @@ struct AcpPermissionReplyParams {
 #[serde(tag = "outcome", rename_all = "snake_case")]
 enum AcpPermissionOutcomeDto {
     Cancelled,
-    Selected { option_id: String },
+    Selected {
+        #[serde(rename = "optionId")]
+        option_id: String,
+    },
 }
 
 #[derive(Deserialize)]
@@ -543,7 +546,8 @@ async fn handle_request(
         "acp_connect" => {
             let params: AcpAgentConfig = parse_params(params)?;
             let manager = state.acp.clone();
-            let info = manager.connect(params).await.map_err(CommandError::internal)?;
+            let config = acp::normalize_agent_config(params);
+            let info = manager.connect(config).await.map_err(CommandError::internal)?;
             to_value(info)
         }
         "acp_disconnect" => {

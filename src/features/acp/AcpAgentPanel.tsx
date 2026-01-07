@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import type { UIMessage } from "ai";
 import {
   Conversation,
   ConversationContent,
@@ -24,27 +25,46 @@ import {
 } from "~/components/ai-elements/prompt-input";
 import { Loader } from "~/components/ai-elements/loader";
 import { SettingsDialog } from "~/components/settings-dialog";
-import { useAgent } from "~/hooks/useAgent";
 import { useAgentEnv } from "~/hooks/useAgentEnv";
 import { renderMessagePart } from "~/utils/messageRenderer";
 import { AVAILABLE_AGENTS, DEFAULT_AGENT } from "~/constants/agents";
-import { createTauriAcpTransport } from "~/platform/acp-transport";
+import {
+  createAcpChatTransport,
+  type AcpPermissionRequestEvent,
+} from "~/platform/acp-transport";
+import { PermissionDialog } from "~/components/PermissionDialog";
 
 /**
  * AcpAgentPanel - Main chat interface for ACP (Agent Client Protocol) agents
  *
  * This component provides a chat UI that connects to ACP-compatible agents
- * through the Tauri backend. It supports:
+ * through the backend ACP runtime. It supports:
  * - Multiple ACP agents (Claude Code, Codex, Gemini, etc.)
  * - Per-agent environment variable configuration
  * - Streaming responses from agents
  * - Agent selection and switching
  */
-const AcpAgentPanel = () => {
+interface AcpAgentPanelProps {
+  agentId?: string;
+  cwd?: string;
+}
+
+const AcpAgentPanel = ({ agentId, cwd }: AcpAgentPanelProps) => {
   const [input, setInput] = useState("");
-  // Persist selected agent using useAgent hook
-  const { agent: selectedAgent, setAgent: setSelectedAgent } =
-    useAgent(DEFAULT_AGENT);
+  const [selectedAgent, setSelectedAgent] = useState(
+    agentId ?? DEFAULT_AGENT
+  );
+  const [permissionQueue, setPermissionQueue] = useState<
+    AcpPermissionRequestEvent[]
+  >([]);
+  const agentIdRef = useRef(agentId);
+
+  useEffect(() => {
+    if (agentId && agentId !== agentIdRef.current) {
+      setSelectedAgent(agentId);
+    }
+    agentIdRef.current = agentId;
+  }, [agentId]);
 
   // Get the selected agent object
   const currentAgent =
@@ -61,15 +81,53 @@ const AcpAgentPanel = () => {
     allEnvKeys
   );
 
-  const selectedAgentRef = useRef(selectedAgent);
+  const preparedEnv = useMemo(() => {
+    const env: Record<string, string> = {};
+    currentAgent.env.forEach((envConfig) => {
+      const value = envVars[envConfig.key];
+      if (value && value.trim()) {
+        env[envConfig.key] = value;
+      }
+    });
+    return env;
+  }, [currentAgent, envVars]);
+
+  const handlePermissionRequest = useCallback(
+    (event: AcpPermissionRequestEvent) => {
+      setPermissionQueue((prev) => [...prev, event]);
+    },
+    []
+  );
+
+  const transport = useMemo(
+    () =>
+      createAcpChatTransport({
+        agent: currentAgent,
+        env: preparedEnv,
+        cwd,
+        onPermissionRequest: handlePermissionRequest,
+      }),
+    [currentAgent, preparedEnv, cwd, handlePermissionRequest]
+  );
 
   useEffect(() => {
-    selectedAgentRef.current = selectedAgent;
-  }, [selectedAgent]);
+    return () => {
+      void transport.dispose();
+    };
+  }, [transport]);
 
-  // Use the Tauri ACP transport for chat
+  useEffect(() => {
+    setPermissionQueue([]);
+  }, [transport]);
+
+  const chatId = useMemo(
+    () => `${selectedAgent}-${cwd ?? ""}`,
+    [selectedAgent, cwd]
+  );
+
   const { messages, sendMessage, status, stop } = useChat({
-    transport: createTauriAcpTransport(),
+    transport,
+    id: chatId,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -84,35 +142,39 @@ const AcpAgentPanel = () => {
         return;
       }
 
-      // Prepare environment variables based on selected agent
-      const preparedEnv: Record<string, string> = {};
-      currentAgent.env.forEach((envConfig) => {
-        const value = envVars[envConfig.key];
-        if (value && value.trim()) {
-          preparedEnv[envConfig.key] = value;
-        }
-      });
-
-      // Send message with agent configuration
-      sendMessage(
-        { text: input },
-        {
-          body: {
-            agent: currentAgent,
-            envVars: preparedEnv,
-          },
-        }
-      );
+      sendMessage({ text: input });
       setInput("");
     }
   };
+
+  const activePermission = permissionQueue[0] ?? null;
+
+  const handlePermissionSelect = useCallback(
+    async (optionId: string) => {
+      if (!activePermission) return;
+      await transport.replyPermission(activePermission.requestId, {
+        outcome: "selected",
+        optionId,
+      });
+      setPermissionQueue((prev) => prev.slice(1));
+    },
+    [activePermission, transport]
+  );
+
+  const handlePermissionCancel = useCallback(async () => {
+    if (!activePermission) return;
+    await transport.replyPermission(activePermission.requestId, {
+      outcome: "cancelled",
+    });
+    setPermissionQueue((prev) => prev.slice(1));
+  }, [activePermission, transport]);
 
   return (
     <div className="flex flex-col w-full h-full min-h-0 bg-background text-foreground">
       <div className="flex-1 min-h-0 overflow-hidden">
         <Conversation className="h-full">
           <ConversationContent className="h-full overflow-y-auto p-4 space-y-4">
-            {messages.map((message) => (
+          {messages.map((message: UIMessage) => (
               <Message
                 className="items-start"
                 from={message.role as "user" | "assistant"}
@@ -189,6 +251,12 @@ const AcpAgentPanel = () => {
           </PromptInputToolbar>
         </PromptInput>
       </div>
+      <PermissionDialog
+        open={Boolean(activePermission)}
+        request={activePermission}
+        onCancel={handlePermissionCancel}
+        onSelect={handlePermissionSelect}
+      />
     </div>
   );
 };

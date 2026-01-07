@@ -22,6 +22,17 @@ export interface Agent {
 
 export const AVAILABLE_AGENTS: Agent[] = [
   {
+    name: "Demo",
+    command: "demo",
+    args: [],
+    env: [],
+    configHint: "Local demo agent using the built-in ACP example",
+    configLink: "https://agentclientprotocol.com",
+    meta: {
+      icon: svgToDataUri(AGENT_ICONS.goose),
+    },
+  },
+  {
     name: "Claude Code",
     command: "npx",
     args: ["-y", "@zed-industries/claude-code-acp"],

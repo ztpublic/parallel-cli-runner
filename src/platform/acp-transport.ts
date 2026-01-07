@@ -1,195 +1,448 @@
-/**
- * TauriAcpTransport - AI SDK Chat Transport for ACP (Agent Client Protocol)
- *
- * This transport bridges the AI SDK's useChat hook with the Tauri backend
- * that communicates with ACP agents.
- *
- * Flow:
- * 1. sendMessages() invokes the Tauri "acp_chat" command
- * 2. Tauri creates/uses an ACP session and sends the prompt
- * 3. Responses are streamed via Tauri events ("acp:chunk")
- * 4. This transport converts those events to an AI SDK-compatible stream
- */
+import type { ChatTransport, FinishReason, UIMessage, UIMessageChunk } from "ai";
+import { getAppConfig } from "./config";
+import { getTransport } from "./transport";
 
-import type { ChatTransport } from "ai";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+type AcpAgentConfig = {
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+};
 
-interface AcpChunkEvent {
-  chunkType: string;
+type AcpConnectionInfo = {
+  id: string;
+  status: string;
+  protocolVersion?: string;
+  agentInfo?: { name: string; title?: string; version?: string };
+};
+
+type AcpSessionNotification = {
+  sessionId: string;
+  update: Record<string, unknown>;
+};
+
+type AcpSessionUpdateEvent = {
+  connectionId: string;
+  notification: AcpSessionNotification;
+};
+
+export type PermissionOption = {
+  optionId: string;
+  name: string;
+  kind: string;
+};
+
+export type AcpPermissionRequest = {
+  sessionId: string;
+  options: PermissionOption[];
+  toolCall?: Record<string, unknown>;
+};
+
+export type AcpPermissionRequestEvent = {
+  connectionId: string;
+  requestId: string;
+  request: AcpPermissionRequest;
+};
+
+type AcpPermissionOutcome =
+  | { outcome: "cancelled" }
+  | { outcome: "selected"; optionId: string };
+
+type ContentBlock = {
+  type: string;
   text?: string;
-  metadata?: unknown;
-}
+};
 
-interface AcpChatRequest {
-  messages: unknown;
+type AcpTransportConfig = {
   agent: {
     command: string;
-    args: string[];
-    env: Record<string, string>;
-    cwd?: string;
+    args?: string[];
+    acpDelay?: number;
   };
-  envVars: Record<string, string>;
+  env: Record<string, string>;
+  cwd?: string;
+  onPermissionRequest?: (event: AcpPermissionRequestEvent) => void;
+};
+
+type ToolCallPayload = {
+  toolCallId?: unknown;
+  title?: unknown;
+  rawInput?: unknown;
+  rawOutput?: unknown;
+  status?: unknown;
+  content?: unknown;
+};
+
+const EMPTY_PROMPT_ERROR = "No user message available to send.";
+
+function createId(prefix: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${prefix}-${crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-interface AcpChatResponse {
-  streamId: string;
+function resolveCwd(cwd?: string): string {
+  if (cwd && cwd.trim()) return cwd;
+  const config = getAppConfig();
+  return config.workspacePath?.trim() || "/";
 }
 
-/**
- * Convert AI SDK messages to ACP format
- *
- * AI SDK CoreMessage format:
- * { role: "user" | "assistant" | "system", content: string | { parts: [...] } }
- *
- * ACP expects messages array
- */
-function prepareAcpMessages(messages: unknown[]): unknown {
-  return {
-    messages,
-  };
-}
-
-/**
- * Get agent configuration from localStorage or use defaults
- */
-function getAgentConfig(): AcpChatRequest["agent"] {
-  // For now, return a default config
-  // This should be enhanced to read from the selected agent
-  return {
-    command: "claude",
-    args: ["acp"],
-    env: {},
-  };
-}
-
-/**
- * Get agent environment variables from localStorage
- */
-function getAgentEnvVars(agentName: string): Record<string, string> {
-  const vars: Record<string, string> = {};
-  // Read from localStorage pattern: AI_AGENT_ENV_${agent}_${key}
-  const prefix = `AI_AGENT_ENV_${agentName}_`;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key?.startsWith(prefix)) {
-      const envKey = key.slice(prefix.length);
-      vars[envKey] = localStorage.getItem(key) ?? "";
+function extractTextFromContentBlock(block: unknown): string | null {
+  if (!block || typeof block !== "object") return null;
+  const record = block as Record<string, unknown>;
+  const blockType = record.type;
+  if (blockType === "text" || blockType === "thinking") {
+    const text = record.text;
+    if (typeof text === "string") {
+      return text;
     }
   }
-  return vars;
+  if (blockType === "thinking_silently") {
+    return "...";
+  }
+  return null;
 }
 
-/**
- * Create a ReadableStream that converts Tauri events to AI SDK chunks
- */
-function createTauriEventStream(
-  streamId: string,
-  abortSignal: AbortSignal
-): ReadableStream<any> {
-  let messageId = crypto.randomUUID();
+function pickPromptMessage(messages: UIMessage[]): UIMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].role === "user") {
+      return messages[i];
+    }
+  }
+  return null;
+}
 
-  return new ReadableStream({
-    async start(controller) {
-      const unlisten = await listen<[string, AcpChunkEvent]>(
-        "acp:chunk",
-        (event) => {
-          const [eventId, chunk] = event.payload;
-          if (eventId !== streamId) return;
-
-          if (chunk.chunkType === "done") {
-            controller.close();
-            return;
-          }
-
-          if (chunk.chunkType === "error") {
-            controller.error(new Error(chunk.text ?? "Unknown error"));
-            return;
-          }
-
-          if (chunk.chunkType === "text" && chunk.text) {
-            controller.enqueue({
-              type: "text-delta",
-              delta: chunk.text,
-              id: messageId,
-            });
-          }
-
-          if (chunk.chunkType === "metadata" && chunk.metadata) {
-            controller.enqueue({
-              type: "message-metadata",
-              messageMetadata: chunk.metadata,
-            });
-          }
-        }
-      );
-
-      // Cleanup on abort
-      abortSignal.addEventListener("abort", () => {
-        unlisten();
-      });
-    },
+function uiMessageToContentBlocks(message: UIMessage): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  message.parts.forEach((part) => {
+    if (part.type === "text" && part.text) {
+      blocks.push({ type: "text", text: part.text });
+    }
   });
+  return blocks;
 }
 
-/**
- * TauriAcpTransport - Chat transport that uses Tauri commands for ACP
- *
- * This implements the ChatTransport interface from the AI SDK.
- */
-export class TauriAcpTransport implements ChatTransport<any> {
-  /**
-   * Send messages to the ACP agent and return a stream of responses
-   */
-  async sendMessages(
-    options: Parameters<ChatTransport<any>["sendMessages"]>[0]
-  ): Promise<ReadableStream<any>> {
-    const controller = new AbortController();
+function getUpdateEntry(update: Record<string, unknown>): {
+  kind: string;
+  payload: Record<string, unknown>;
+} | null {
+  const kind = update.sessionUpdate;
+  if (typeof kind === "string") {
+    return { kind, payload: update };
+  }
+  return null;
+}
 
-    // Handle abort from the caller
-    if (options.abortSignal) {
-      options.abortSignal.addEventListener("abort", () => {
-        controller.abort();
-      });
-    }
+function normalizeToolName(title: unknown, toolCallId: unknown): string {
+  if (typeof title === "string" && title.trim()) {
+    return title;
+  }
+  if (typeof toolCallId === "string" && toolCallId.trim()) {
+    return toolCallId;
+  }
+  return "tool";
+}
 
-    // Get agent configuration
-    const agent = getAgentConfig();
-    const envVars = getAgentEnvVars(agent.command);
-
-    // Prepare the request
-    const request: AcpChatRequest = {
-      messages: prepareAcpMessages(options.messages),
-      agent,
-      envVars,
-    };
-
+function formatToolError(rawOutput: unknown): string {
+  if (typeof rawOutput === "string") {
+    return rawOutput;
+  }
+  if (rawOutput && typeof rawOutput === "object") {
     try {
-      // Invoke the Tauri command
-      const response = await invoke<AcpChatResponse>("acp_chat", {
-        request,
-      });
-
-      // Return a stream that listens for Tauri events
-      return createTauriEventStream(response.streamId, controller.signal);
-    } catch (error) {
-      controller.abort(error as Error);
-      throw error;
+      return JSON.stringify(rawOutput);
+    } catch {
+      return "Tool failed.";
     }
   }
+  return "Tool failed.";
+}
 
-  /**
-   * Reconnection is not supported for ACP sessions
-   * Each request creates a new session or reuses a cached one
-   */
-  async reconnectToStream(): Promise<ReadableStream<any> | null> {
-    throw new Error("Reconnection not supported for ACP transport");
+export class AcpChatTransport implements ChatTransport<UIMessage> {
+  private readonly transport = getTransport();
+  private connectionId: string | null = null;
+  private sessionId: string | null = null;
+  private connectPromise: Promise<void> | null = null;
+  private permissionUnsubscribe: (() => void) | null = null;
+
+  constructor(private readonly config: AcpTransportConfig) {}
+
+  async sendMessages({ messages, abortSignal }: Parameters<ChatTransport<UIMessage>["sendMessages"]>[0]) {
+    const sessionId = await this.ensureSession();
+    const promptMessage = pickPromptMessage(messages);
+    if (!promptMessage) {
+      throw new Error(EMPTY_PROMPT_ERROR);
+    }
+
+    const prompt = uiMessageToContentBlocks(promptMessage);
+    if (!prompt.length) {
+      throw new Error(EMPTY_PROMPT_ERROR);
+    }
+
+    const textId = createId("text");
+    const reasoningId = createId("reasoning");
+    const toolStates = new Map<string, "input" | "output">();
+    let textStarted = false;
+    let reasoningStarted = false;
+    let closed = false;
+
+    return new ReadableStream<UIMessageChunk>({
+      start: (controller) => {
+        const unsubscribe = this.transport.subscribe<AcpSessionUpdateEvent>(
+          "acp-session-update",
+          (event) => {
+            if (event.connectionId !== this.connectionId) {
+              return;
+            }
+            if (event.notification.sessionId !== sessionId) {
+              return;
+            }
+
+            const updateEntry = getUpdateEntry(event.notification.update);
+            if (!updateEntry) {
+              return;
+            }
+
+            switch (updateEntry.kind) {
+              case "agent_message_chunk": {
+                const text = extractTextFromContentBlock(updateEntry.payload.content);
+                if (!text) return;
+                if (!textStarted) {
+                  controller.enqueue({ type: "text-start", id: textId });
+                  textStarted = true;
+                }
+                controller.enqueue({ type: "text-delta", id: textId, delta: text });
+                break;
+              }
+              case "agent_thought_chunk": {
+                const text = extractTextFromContentBlock(updateEntry.payload.content);
+                if (!text) return;
+                if (!reasoningStarted) {
+                  controller.enqueue({ type: "reasoning-start", id: reasoningId });
+                  reasoningStarted = true;
+                }
+                controller.enqueue({ type: "reasoning-delta", id: reasoningId, delta: text });
+                break;
+              }
+              case "plan": {
+                const entries = updateEntry.payload.entries;
+                if (Array.isArray(entries)) {
+                  controller.enqueue({
+                    type: "message-metadata",
+                    messageMetadata: { plan: entries },
+                  });
+                }
+                break;
+              }
+              case "tool_call": {
+                const payload = updateEntry.payload as ToolCallPayload;
+                const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId : null;
+                if (!toolCallId) return;
+                const toolName = normalizeToolName(payload.title, payload.toolCallId);
+                const input = payload.rawInput ?? payload.content ?? {};
+                if (toolStates.get(toolCallId) !== "output") {
+                  toolStates.set(toolCallId, "input");
+                  controller.enqueue({
+                    type: "tool-input-available",
+                    toolCallId,
+                    toolName,
+                    input,
+                    providerExecuted: true,
+                  });
+                }
+                break;
+              }
+              case "tool_call_update": {
+                const payload = updateEntry.payload as ToolCallPayload;
+                const toolCallId = typeof payload.toolCallId === "string" ? payload.toolCallId : null;
+                if (!toolCallId) return;
+                const toolName = normalizeToolName(payload.title, payload.toolCallId);
+                const status = typeof payload.status === "string" ? payload.status : null;
+                const rawOutput = payload.rawOutput ?? payload.content ?? null;
+
+                if (toolStates.get(toolCallId) !== "output") {
+                  const input = payload.rawInput ?? {};
+                  if (payload.rawInput !== undefined || !toolStates.has(toolCallId)) {
+                    toolStates.set(toolCallId, "input");
+                    controller.enqueue({
+                      type: "tool-input-available",
+                      toolCallId,
+                      toolName,
+                      input,
+                      providerExecuted: true,
+                    });
+                  }
+                }
+
+                if (status === "failed") {
+                  toolStates.set(toolCallId, "output");
+                  controller.enqueue({
+                    type: "tool-output-error",
+                    toolCallId,
+                    errorText: formatToolError(rawOutput),
+                    providerExecuted: true,
+                  });
+                  break;
+                }
+
+                if (status === "completed" || rawOutput !== null) {
+                  toolStates.set(toolCallId, "output");
+                  controller.enqueue({
+                    type: "tool-output-available",
+                    toolCallId,
+                    output: rawOutput,
+                    providerExecuted: true,
+                  });
+                }
+                break;
+              }
+              default:
+                break;
+            }
+          }
+        );
+
+        const closeStream = (finishReason?: FinishReason) => {
+          if (closed) return;
+          closed = true;
+          if (textStarted) {
+            controller.enqueue({ type: "text-end", id: textId });
+          }
+          if (reasoningStarted) {
+            controller.enqueue({ type: "reasoning-end", id: reasoningId });
+          }
+          controller.enqueue(
+            finishReason ? { type: "finish", finishReason } : { type: "finish" }
+          );
+          controller.close();
+          unsubscribe();
+        };
+
+        const sendPrompt = async () => {
+          try {
+            await this.transport.request<void>("acp_session_prompt", {
+              sessionId,
+              prompt,
+            });
+            closeStream();
+          } catch (error) {
+            controller.enqueue({
+              type: "error",
+              errorText: error instanceof Error ? error.message : String(error),
+            });
+            closeStream("error");
+          }
+        };
+
+        sendPrompt();
+
+        if (abortSignal) {
+          abortSignal.addEventListener(
+            "abort",
+            () => {
+              this.transport
+                .request<void>("acp_session_cancel", { sessionId })
+                .catch(() => undefined);
+              controller.enqueue({ type: "abort" });
+              closeStream();
+            },
+            { once: true }
+          );
+        }
+      },
+    });
+  }
+
+  async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
+    return null;
+  }
+
+  async replyPermission(requestId: string, outcome: AcpPermissionOutcome): Promise<void> {
+    await this.transport.request<void>("acp_permission_reply", {
+      requestId,
+      outcome,
+    });
+  }
+
+  async dispose(): Promise<void> {
+    if (!this.connectionId) {
+      return;
+    }
+    const connectionId = this.connectionId;
+    this.connectionId = null;
+    this.sessionId = null;
+    if (this.permissionUnsubscribe) {
+      this.permissionUnsubscribe();
+      this.permissionUnsubscribe = null;
+    }
+    await this.transport.request<void>("acp_disconnect", { id: connectionId }).catch(() => undefined);
+  }
+
+  getConnectionId(): string | null {
+    return this.connectionId;
+  }
+
+  private async ensureSession(): Promise<string> {
+    await this.ensureConnection();
+    if (!this.connectionId) {
+      throw new Error("ACP connection not initialized.");
+    }
+    if (this.sessionId) {
+      return this.sessionId;
+    }
+    const cwd = resolveCwd(this.config.cwd);
+    const sessionId = await this.transport.request<string>("acp_session_new", {
+      connectionId: this.connectionId,
+      cwd,
+      mcpServers: [],
+    });
+    this.sessionId = sessionId;
+    return sessionId;
+  }
+
+  private async ensureConnection(): Promise<void> {
+    if (this.connectionId) return;
+    if (!this.connectPromise) {
+      this.connectPromise = (async () => {
+        const info = await this.transport.request<AcpConnectionInfo>("acp_connect", {
+          command: this.config.agent.command,
+          args: this.config.agent.args ?? [],
+          env: this.config.env,
+          cwd: this.config.cwd,
+        } satisfies AcpAgentConfig);
+        this.connectionId = info.id;
+        this.listenForPermissions();
+        if (this.config.agent.acpDelay && this.config.agent.acpDelay > 0) {
+          await new Promise((resolve) => {
+            setTimeout(resolve, this.config.agent.acpDelay);
+          });
+        }
+      })().finally(() => {
+        this.connectPromise = null;
+      });
+    }
+    await this.connectPromise;
+  }
+
+  private listenForPermissions(): void {
+    if (this.permissionUnsubscribe || !this.connectionId) {
+      return;
+    }
+    this.permissionUnsubscribe = this.transport.subscribe<AcpPermissionRequestEvent>(
+      "acp-permission-request",
+      (event) => {
+        if (event.connectionId !== this.connectionId) {
+          return;
+        }
+        if (this.sessionId && event.request.sessionId !== this.sessionId) {
+          return;
+        }
+        this.config.onPermissionRequest?.(event);
+      }
+    );
   }
 }
 
-/**
- * Create a TauriAcpTransport instance
- */
-export function createTauriAcpTransport(): TauriAcpTransport {
-  return new TauriAcpTransport();
+export function createAcpChatTransport(config: AcpTransportConfig): AcpChatTransport {
+  return new AcpChatTransport(config);
 }

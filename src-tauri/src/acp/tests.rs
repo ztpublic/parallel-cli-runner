@@ -329,8 +329,7 @@ async fn test_acp_prompt_and_session_updates() {
     use agent_client_protocol::StopReason;
     assert_eq!(response.stop_reason, StopReason::EndTurn);
 
-    // Note: The example agent doesn't send session updates for simplicity
-    // A real agent would stream responses via SessionUpdate events
+    // Note: The example agent may emit session updates; we don't assert them here.
 
     // Clean up
     harness

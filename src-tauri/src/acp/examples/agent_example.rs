@@ -3,6 +3,7 @@
 //! The agent communicates with clients over stdio.
 
 use std::cell::Cell;
+use std::time::Duration;
 
 use agent_client_protocol::{self as acp, Client as _};
 use tokio::sync::{mpsc, oneshot};
@@ -21,6 +22,43 @@ impl ExampleAgent {
             session_update_tx,
             next_session_id: Cell::new(0),
         }
+    }
+
+    async fn send_session_update(
+        &self,
+        notification: acp::SessionNotification,
+    ) -> Result<(), acp::Error> {
+        let (tx, rx) = oneshot::channel();
+        self.session_update_tx
+            .send((notification, tx))
+            .map_err(|_| acp::Error::internal_error())?;
+        rx.await.map_err(|_| acp::Error::internal_error())?;
+        Ok(())
+    }
+
+    fn prompt_text(prompt: &[acp::ContentBlock]) -> String {
+        let mut out = String::new();
+        for block in prompt {
+            if let acp::ContentBlock::Text(text) = block {
+                if !out.is_empty() {
+                    out.push(' ');
+                }
+                out.push_str(&text.text);
+            }
+        }
+        out
+    }
+
+    fn chunk_text(text: &str, max_chars: usize) -> Vec<String> {
+        let chars: Vec<char> = text.chars().collect();
+        let mut chunks = Vec::new();
+        let mut index = 0;
+        while index < chars.len() {
+            let end = (index + max_chars).min(chars.len());
+            chunks.push(chars[index..end].iter().collect());
+            index = end;
+        }
+        chunks
     }
 }
 
@@ -78,10 +116,33 @@ impl acp::Agent for ExampleAgent {
     ) -> Result<acp::PromptResponse, acp::Error> {
         eprintln!("Example agent: Received prompt request with {} content blocks", arguments.prompt.len());
 
-        // For this simple example, we'll just acknowledge the prompt
-        // In a real agent, you would process the prompt and send back responses
+        let session_id = arguments.session_id.clone();
+        let prompt_text = Self::prompt_text(&arguments.prompt);
+        let reply = if prompt_text.trim().is_empty() {
+            "Hello from the demo agent.".to_string()
+        } else {
+            format!("Demo reply: {}", prompt_text.trim())
+        };
 
-        // Return EndTurn response immediately
+        let thought_notification = acp::SessionNotification::new(
+            session_id.clone(),
+            acp::SessionUpdate::AgentThoughtChunk(acp::ContentChunk::new(
+                acp::ContentBlock::from("Composing demo response..."),
+            )),
+        );
+        self.send_session_update(thought_notification).await?;
+
+        for chunk in Self::chunk_text(&reply, 18) {
+            let notification = acp::SessionNotification::new(
+                session_id.clone(),
+                acp::SessionUpdate::AgentMessageChunk(acp::ContentChunk::new(
+                    acp::ContentBlock::from(chunk),
+                )),
+            );
+            self.send_session_update(notification).await?;
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+
         Ok(acp::PromptResponse::new(acp::StopReason::EndTurn))
     }
 
@@ -96,24 +157,6 @@ impl acp::Agent for ExampleAgent {
     ) -> Result<acp::SetSessionModeResponse, acp::Error> {
         eprintln!("Example agent: Received set session mode request");
         Ok(acp::SetSessionModeResponse::new())
-    }
-
-    #[cfg(feature = "unstable_session_model")]
-    async fn set_session_model(
-        &self,
-        _args: acp::SetSessionModelRequest,
-    ) -> Result<acp::SetSessionModelResponse, acp::Error> {
-        eprintln!("Example agent: Received set session model request");
-        Ok(acp::SetSessionModelResponse::new())
-    }
-
-    #[cfg(feature = "unstable_session_config_options")]
-    async fn set_session_config_option(
-        &self,
-        _args: acp::SetSessionConfigOptionRequest,
-    ) -> Result<acp::SetSessionConfigOptionResponse, acp::Error> {
-        eprintln!("Example agent: Received set session config option request");
-        Ok(acp::SetSessionConfigOptionResponse::new(vec![]))
     }
 
     async fn ext_method(&self, args: acp::ExtRequest) -> Result<acp::ExtResponse, acp::Error> {

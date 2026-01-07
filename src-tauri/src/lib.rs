@@ -4,6 +4,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use uuid::Uuid;
+use agent_client_protocol::{
+    ContentBlock, McpServer, PermissionOptionId, RequestPermissionOutcome, SelectedPermissionOutcome,
+};
 
 mod command_error;
 mod error;
@@ -12,7 +15,7 @@ use crate::error::AppResult;
 
 pub mod acp;
 use crate::acp::{AcpManager, AcpResponseChunk, ai_messages_to_content_blocks};
-use crate::acp::types::AcpAgentConfig;
+use crate::acp::types::{AcpAgentConfig, AcpConnectionInfo, AcpEvent};
 pub mod git;
 use crate::git::{DiffRequestDto, DiffResponseDto, RepoInfoDto, RepoStatusDto};
 mod pty;
@@ -54,6 +57,24 @@ fn with_repo_root<T>(
 ) -> Result<T, CommandError> {
     let path = PathBuf::from(repo_root);
     f(&path).map_err(CommandError::from)
+}
+
+fn parse_uuid(id: &str) -> Result<Uuid, CommandError> {
+    Uuid::parse_str(id).map_err(|_| CommandError::new("invalid_argument", "invalid id"))
+}
+
+fn acp_event_sink(app: tauri::AppHandle) -> acp::types::AcpEventSink {
+    Arc::new(move |event| match event {
+        AcpEvent::SessionUpdate(payload) => {
+            let _ = app.emit("acp-session-update", payload);
+        }
+        AcpEvent::ConnectionState(payload) => {
+            let _ = app.emit("acp-session-state", payload);
+        }
+        AcpEvent::PermissionRequest(payload) => {
+            let _ = app.emit("acp-permission-request", payload);
+        }
+    })
 }
 
 // Re-export commands from pty module so tauri::generate_handler! can find them
@@ -326,6 +347,59 @@ struct AcpChatRequest {
     env_vars: std::collections::HashMap<String, String>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpConnectionIdParams {
+    id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionNewParams {
+    connection_id: String,
+    cwd: String,
+    mcp_servers: Option<Vec<McpServer>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionLoadParams {
+    connection_id: String,
+    session_id: String,
+    cwd: String,
+    mcp_servers: Option<Vec<McpServer>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionPromptParams {
+    session_id: String,
+    prompt: Vec<ContentBlock>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpSessionCancelParams {
+    session_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AcpPermissionReplyParams {
+    request_id: String,
+    outcome: AcpPermissionOutcomeDto,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+enum AcpPermissionOutcomeDto {
+    Cancelled,
+    Selected {
+        #[serde(rename = "optionId")]
+        option_id: String,
+    },
+}
+
 /// Response containing the stream ID for the ACP chat
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -358,7 +432,7 @@ async fn acp_chat(
     }
 
     // Create agent config with environment variables
-    let mut agent_config = request.agent;
+    let mut agent_config = acp::normalize_agent_config(request.agent);
     agent_config.env.extend(request.env_vars);
 
     // Get or create session for this agent
@@ -412,6 +486,111 @@ async fn acp_chat(
     Ok(AcpChatResponse { stream_id })
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_connect(
+    app: tauri::AppHandle,
+    config: AcpAgentConfig,
+) -> Result<AcpConnectionInfo, CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    let config = acp::normalize_agent_config(config);
+    manager
+        .connect(config)
+        .await
+        .map_err(|e| CommandError::internal(format!("Failed to connect ACP agent: {e}")))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_disconnect(
+    app: tauri::AppHandle,
+    params: AcpConnectionIdParams,
+) -> Result<(), CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    let connection_id = parse_uuid(&params.id)?;
+    if manager.get_info(connection_id).is_none() {
+        return Err(CommandError::new("not_found", "acp connection not found"));
+    }
+    manager
+        .disconnect(connection_id)
+        .await
+        .map_err(|e| CommandError::internal(format!("Failed to disconnect ACP agent: {e}")))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_session_new(
+    app: tauri::AppHandle,
+    params: AcpSessionNewParams,
+) -> Result<String, CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    let connection_id = parse_uuid(&params.connection_id)?;
+    let mcp_servers = params.mcp_servers.unwrap_or_default();
+    let response = manager
+        .new_session(connection_id, params.cwd, mcp_servers)
+        .await
+        .map_err(|e| CommandError::internal(format!("Failed to create ACP session: {e}")))?;
+    Ok(response.session_id.to_string())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_session_load(
+    app: tauri::AppHandle,
+    params: AcpSessionLoadParams,
+) -> Result<serde_json::Value, CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    let connection_id = parse_uuid(&params.connection_id)?;
+    let mcp_servers = params.mcp_servers.unwrap_or_default();
+    let response = manager
+        .load_session(connection_id, params.session_id, params.cwd, mcp_servers)
+        .await
+        .map_err(|e| CommandError::internal(format!("Failed to load ACP session: {e}")))?;
+    serde_json::to_value(response).map_err(CommandError::internal)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_session_prompt(
+    app: tauri::AppHandle,
+    params: AcpSessionPromptParams,
+) -> Result<(), CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    manager
+        .prompt(params.session_id, params.prompt)
+        .await
+        .map_err(|e| CommandError::internal(format!("ACP prompt failed: {e}")))?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_session_cancel(
+    app: tauri::AppHandle,
+    params: AcpSessionCancelParams,
+) -> Result<(), CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    manager
+        .cancel(params.session_id)
+        .await
+        .map_err(|e| CommandError::internal(format!("ACP cancel failed: {e}")))?;
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn acp_permission_reply(
+    app: tauri::AppHandle,
+    params: AcpPermissionReplyParams,
+) -> Result<(), CommandError> {
+    let manager = app.state::<Arc<AcpManager>>().inner().clone();
+    let outcome = match params.outcome {
+        AcpPermissionOutcomeDto::Cancelled => RequestPermissionOutcome::Cancelled,
+        AcpPermissionOutcomeDto::Selected { option_id } => {
+            RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
+                PermissionOptionId::new(option_id),
+            ))
+        }
+    };
+    manager
+        .reply_permission(params.request_id, outcome)
+        .map_err(|e| CommandError::internal(format!("Failed to reply to ACP permission: {e}")))?;
+    Ok(())
+}
+
 /// Clean up stale ACP sessions
 ///
 /// This should be called periodically to free up resources
@@ -435,16 +614,10 @@ pub fn run() {
     let init_script = build_init_script(&config);
     let init_script_for_builder = init_script.clone();
 
-    // Create AcpManager with event sink that emits via Tauri events
-    // Note: For WebSocket server compatibility, we'll create a separate AcpManager
-    let acp_manager = Arc::new(AcpManager::new(Arc::new(|_| {
-        // Event sink for standalone AcpManager (no-op for now)
-        // WebSocket server uses its own AcpManager
-    })));
-
     tauri::Builder::default()
         .append_invoke_initialization_script(init_script_for_builder)
         .setup(move |app| {
+            let acp_manager = Arc::new(AcpManager::new(acp_event_sink(app.handle().clone())));
             app.manage(config.clone());
             app.manage(acp_manager.clone());
             if let Some(window) = app.get_webview_window("main") {
@@ -467,6 +640,13 @@ pub fn run() {
             pty::resize_session,
             pty::kill_session,
             pty::broadcast_line,
+            acp_connect,
+            acp_disconnect,
+            acp_session_new,
+            acp_session_load,
+            acp_session_prompt,
+            acp_session_cancel,
+            acp_permission_reply,
             acp_chat,
             acp_cleanup_sessions,
             git_detect_repo,
