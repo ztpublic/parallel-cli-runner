@@ -4,7 +4,7 @@ import { useGitRepos } from "../hooks/git/useGitRepos";
 import { useGitCommandErrorDialog } from "../hooks/git/useGitCommandErrorDialog";
 import { makeWorktreeTargetId } from "../hooks/git/gitTargets";
 import { openPath } from "../platform/actions";
-import { createPaneNode } from "../services/sessions";
+import { createPaneNode, createAgentPaneNode } from "../services/sessions";
 import type { RepoInfoDto } from "../types/git";
 import type { PaneNode } from "../types/layout";
 import type {
@@ -296,6 +296,26 @@ export function GitPanelContainer({
     [showGitCommandError]
   );
 
+  const handleOpenRepoAgent = useCallback(
+    async (repo: RepoHeader) => {
+      try {
+        const next = await createAgentPaneNode({
+          agentId: "Claude Code",
+          cwd: repo.path,
+          meta: {
+            title: repo.name,
+            subtitle: repo.path,
+            cwd: repo.path,
+          },
+        });
+        appendPane(next, next.meta?.title ?? "Agent");
+      } catch (error) {
+        console.warn("Failed to open agent pane", error);
+      }
+    },
+    [appendPane]
+  );
+
   const handleOpenWorktreeTerminal = useCallback(
     (repo: RepoHeader, worktree: WorktreeItem) => {
       const title = `${repo.name}:${worktree.branch}`;
@@ -317,6 +337,26 @@ export function GitPanelContainer({
       }
     },
     [showGitCommandError]
+  );
+
+  const handleOpenWorktreeAgent = useCallback(
+    async (_repo: RepoHeader, worktree: WorktreeItem) => {
+      try {
+        const next = await createAgentPaneNode({
+          agentId: "Claude Code",
+          cwd: worktree.path,
+          meta: {
+            title: `${_repo.name}:${worktree.branch}`,
+            subtitle: worktree.path,
+            cwd: worktree.path,
+          },
+        });
+        appendPane(next, next.meta?.title ?? "Agent");
+      } catch (error) {
+        console.warn("Failed to open agent pane", error);
+      }
+    },
+    [appendPane]
   );
 
   const handleRebaseBranch = useCallback(
@@ -494,8 +534,10 @@ export function GitPanelContainer({
       }}
       onOpenRepoTerminal={handleOpenRepoTerminal}
       onOpenRepoFolder={handleOpenRepoFolder}
+      onOpenRepoAgent={handleOpenRepoAgent}
       onOpenWorktreeTerminal={handleOpenWorktreeTerminal}
       onOpenWorktreeFolder={handleOpenWorktreeFolder}
+      onOpenWorktreeAgent={handleOpenWorktreeAgent}
       onSmartUpdateWorktrees={handleSmartUpdateWorktrees}
       onOpenFolder={onTriggerOpenFolder}
       onLoadMoreCommits={(repoId, worktreePath) => {

@@ -92,8 +92,10 @@ type GitPanelProps = {
   onActivateRepo?: (repoId: string) => void;
   onOpenRepoTerminal?: (repo: RepoHeader) => void;
   onOpenRepoFolder?: (repo: RepoHeader) => void;
+  onOpenRepoAgent?: (repo: RepoHeader) => void;
   onOpenWorktreeTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
+  onOpenWorktreeAgent?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onSmartUpdateWorktrees?: (repoId: string) => void;
 };
 
@@ -165,8 +167,10 @@ export function GitPanel({
   onActivateRepo,
   onOpenRepoTerminal,
   onOpenRepoFolder,
+  onOpenRepoAgent,
   onOpenWorktreeTerminal,
   onOpenWorktreeFolder,
+  onOpenWorktreeAgent,
   onSmartUpdateWorktrees,
 }: GitPanelProps) {
   const {
@@ -352,6 +356,7 @@ export function GitPanel({
           onRemoveRepo={onRemoveRepo}
           onOpenTerminal={onOpenRepoTerminal}
           onOpenRepoFolder={onOpenRepoFolder}
+          onOpenAgent={onOpenRepoAgent}
         />
       ) : null}
 
@@ -444,6 +449,7 @@ export function GitPanel({
               onDeleteWorktree={onDeleteWorktree}
               onOpenTerminal={onOpenWorktreeTerminal}
               onOpenWorktreeFolder={onOpenWorktreeFolder}
+              onOpenAgent={onOpenWorktreeAgent}
               onMergeBranch={onMergeBranch}
               onRebaseBranch={onRebaseBranch}
               onSmartUpdateWorktrees={onSmartUpdateWorktrees}

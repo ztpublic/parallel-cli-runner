@@ -1,6 +1,8 @@
 import { memo, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import { Icon } from "../Icons";
 import { TreeView } from "../TreeView";
+import { ActionMenu } from "../ActionMenu";
 import { CreateWorktreeDialog } from "../dialogs/CreateWorktreeDialog";
 import { DeleteWorktreeDialog } from "../dialogs/DeleteWorktreeDialog";
 import { makeWorktreeTargetId } from "../../hooks/git/gitTargets";
@@ -36,6 +38,7 @@ type GitWorktreesProps = {
   onDeleteWorktree?: (repoId: string, branchName: string) => void;
   onOpenTerminal?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onOpenWorktreeFolder?: (repo: RepoHeader, worktree: WorktreeItem) => void;
+  onOpenAgent?: (repo: RepoHeader, worktree: WorktreeItem) => void;
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
   onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
   onSmartUpdateWorktrees?: (repoId: string) => void;
@@ -50,6 +53,7 @@ export const GitWorktrees = memo(function GitWorktrees({
   onDeleteWorktree,
   onOpenTerminal,
   onOpenWorktreeFolder,
+  onOpenAgent,
   onMergeBranch,
   onRebaseBranch,
   onSmartUpdateWorktrees,
@@ -66,6 +70,11 @@ export const GitWorktrees = memo(function GitWorktrees({
     repoId: string;
     branchName: string;
   }>({ open: false, repoId: "", branchName: "" });
+
+  const [actionMenu, setActionMenu] = useState<{
+    node: TreeNode;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const nodes: TreeNode[] = worktreeGroups.map((group) => {
     const activeBranch = group.repo.activeBranch;
@@ -168,15 +177,9 @@ export const GitWorktrees = memo(function GitWorktrees({
             ],
             actions: [
             {
-              id: "open-folder",
-              icon: "folder",
-              label: "Open in File Explorer",
-              disabled: !onOpenWorktreeFolder,
-            },
-            {
-              id: "terminal",
-              icon: "terminal",
-              label: "Terminal",
+              id: "open",
+              icon: "plus",
+              label: "Open",
             },
             {
               id: "delete-worktree",
@@ -191,7 +194,7 @@ export const GitWorktrees = memo(function GitWorktrees({
     };
   });
 
-  const handleAction = (node: TreeNode, actionId: string) => {
+  const handleAction = (node: TreeNode, actionId: string, event?: ReactMouseEvent) => {
     if (actionId === "create-worktree") {
       const group = worktreeGroups.find((g) => g.repo.repoId === node.id);
       if (group) {
@@ -201,35 +204,67 @@ export const GitWorktrees = memo(function GitWorktrees({
           repoName: group.repo.name,
         });
       }
-    } else if (
-      actionId === "terminal" ||
-      actionId === "delete-worktree" ||
-      actionId === "open-folder"
-    ) {
+      return;
+    }
+
+    if (actionId === "delete-worktree") {
       // id format: repoId:branchName
       const lastColonIndex = node.id.lastIndexOf(":");
       if (lastColonIndex !== -1) {
         const repoId = node.id.substring(0, lastColonIndex);
         const branchName = node.id.substring(lastColonIndex + 1);
-        const group = worktreeGroups.find((g) => g.repo.repoId === repoId);
-        const worktree = group?.items.find((item) => item.branch === branchName);
-        if (actionId === "terminal") {
-          if (group && worktree) {
-            onOpenTerminal?.(group.repo, worktree);
-          }
-          return;
-        }
-        if (actionId === "open-folder") {
-          if (group && worktree) {
-            onOpenWorktreeFolder?.(group.repo, worktree);
-          }
-          return;
-        }
         setDeleteDialog({
           open: true,
           repoId,
           branchName,
         });
+      }
+      return;
+    }
+
+    if (actionId === "open") {
+      // Show the action menu
+      if (event) {
+        const buttonElement = event.currentTarget;
+        const rect = buttonElement.getBoundingClientRect();
+        setActionMenu({
+          node,
+          position: {
+            x: rect.left,
+            y: rect.bottom + 4,
+          },
+        });
+      }
+      return;
+    }
+
+    // Handle menu actions: open-folder, terminal, open-agent
+    const lastColonIndex = node.id.lastIndexOf(":");
+    if (lastColonIndex !== -1) {
+      const repoId = node.id.substring(0, lastColonIndex);
+      const branchName = node.id.substring(lastColonIndex + 1);
+      const group = worktreeGroups.find((g) => g.repo.repoId === repoId);
+      const worktree = group?.items.find((item) => item.branch === branchName);
+
+      if (actionId === "terminal") {
+        if (group && worktree) {
+          onOpenTerminal?.(group.repo, worktree);
+        }
+        return;
+      }
+
+      if (actionId === "open-folder") {
+        if (group && worktree) {
+          onOpenWorktreeFolder?.(group.repo, worktree);
+        }
+        return;
+      }
+
+      if (actionId === "open-agent") {
+        if (group && worktree) {
+          onOpenAgent?.(group.repo, worktree);
+        }
+        return;
       }
     }
   };
@@ -319,6 +354,22 @@ export const GitWorktrees = memo(function GitWorktrees({
           onDeleteWorktree?.(deleteDialog.repoId, deleteDialog.branchName);
         }}
       />
+
+      {actionMenu ? (
+        <ActionMenu
+          items={[
+            { id: "open-folder", icon: "folder", label: "Open in File Explorer" },
+            { id: "terminal", icon: "terminal", label: "Terminal" },
+            { id: "open-agent", icon: "robot", label: "Open Agent" },
+          ]}
+          position={actionMenu.position}
+          onSelect={(itemId) => {
+            handleAction(actionMenu.node, itemId);
+            setActionMenu(null);
+          }}
+          onClose={() => setActionMenu(null)}
+        />
+      ) : null}
     </div>
   );
 });
