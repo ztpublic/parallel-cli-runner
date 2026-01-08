@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import "../ai-elements-fork/app/tailwind.css";
 import "./App.css";
 import { AppLayout } from "./app/AppLayout";
 import { RepoManager } from "./app/RepoManager";
