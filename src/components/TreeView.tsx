@@ -24,7 +24,7 @@ type TreeViewProps = {
     node: TreeNode,
     selectedIds: string[]
   ) => TreeNodeContextMenuItem[];
-  onAction?: (node: TreeNode, actionId: string) => void;
+  onAction?: (node: TreeNode, actionId: string, event: ReactMouseEvent) => void;
   toggleOnRowClick?: boolean;
   renderRightSlot?: (node: TreeNode) => ReactNode;
   renderActions?: (node: TreeNode) => ReactNode;
@@ -346,7 +346,7 @@ export const TreeView = memo(function TreeView({
                       disabled={action.disabled}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onAction?.(node, action.id);
+                        onAction?.(node, action.id, event);
                       }}
                     >
                       <Icon name={action.icon} size={12} />

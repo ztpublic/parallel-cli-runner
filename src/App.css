@@ -960,6 +960,46 @@ button {
   white-space: nowrap;
 }
 
+.action-menu {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 180px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+}
+
+.action-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.action-menu-item:hover {
+  background: var(--surface-2);
+  color: var(--text-strong);
+}
+
+.action-menu-item:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.action-menu-icon {
+  color: var(--text-muted);
+}
+
 .git-badge {
   font-size: 10px;
   color: var(--accent);
