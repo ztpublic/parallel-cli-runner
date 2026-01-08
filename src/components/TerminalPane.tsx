@@ -34,11 +34,15 @@ export function TerminalPane({
     const handle = terminalRef.current;
     const term = handle?.term ?? null;
     const fitAddon = handle?.fitAddon ?? null;
-    if (!term || !fitAddon) return;
+    const container = containerRef.current;
+    if (!term || !fitAddon || !container) return;
+    const { width, height } = container.getBoundingClientRect();
+    if (width === 0 || height === 0) return;
 
     fitAddon.fit();
     const cols = term.cols;
     const rows = term.rows;
+    if (cols === 0 || rows === 0) return;
     await resizeSession({ id: pane.sessionId, cols, rows });
   }, [pane.sessionId]);
 
