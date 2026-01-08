@@ -617,31 +617,15 @@ export function useGitRepos() {
         );
       }
 
-      // First pass: rebase each worktree onto active branch, then fast-forward active branch to each worktree
+      // First pass: merge each worktree branch INTO active branch (creating merge commits)
       for (const worktree of worktrees) {
         if (worktree.branch === activeBranch) continue;
 
-        // Detach the worktree HEAD before rebasing
-        await gitDetachWorktreeHead({ cwd: worktree.path });
-
-        // Rebase the worktree branch onto active branch
-        await gitRebaseBranch({
-          repoRoot: repo.root_path,
-          targetBranch: worktree.branch,
-          ontoBranch: activeBranch,
-        });
-
-        // Fast-forward the active branch to the rebased worktree branch
-        await gitRebaseBranch({
+        // Merge worktree branch into active branch
+        await gitMergeIntoBranch({
           repoRoot: repo.root_path,
           targetBranch: activeBranch,
-          ontoBranch: worktree.branch,
-        });
-
-        // Checkout the branch back in the worktree
-        await gitCheckoutBranch({
-          cwd: worktree.path,
-          branchName: worktree.branch,
+          sourceBranch: worktree.branch,
         });
       }
 
