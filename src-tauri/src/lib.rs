@@ -15,6 +15,7 @@ use crate::acp::types::AcpEvent;
 pub mod git;
 mod pty;
 use crate::pty::PtyManager;
+pub mod ws;
 pub mod ws_server;
 
 #[derive(Clone, Serialize)]
