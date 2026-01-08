@@ -7,8 +7,17 @@
   - acp protocol debug infrastructure
 
 - acp
-  - acp integration test against real server
-  - connect app/.client/acp-agent.tsx with backend
+  - session status indicator
+  - session notification
+  - session important information
+    - cwd
+    - version
+    - model
+  - close session/terminal(right click menu), go back to place holder
+  - support commands
+  - add some paddings
+  - make UI style more similar to main app
+
 
 - ui
   - UI state persistence
