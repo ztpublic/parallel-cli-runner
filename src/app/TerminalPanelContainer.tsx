@@ -137,8 +137,12 @@ export function TerminalPanelContainer({
       if (!targetPaneId) return;
       const paneId = targetPaneId;
 
+      // Get the source pane to preserve its directory context
+      const sourcePane = findPane(tab.layout, paneId);
+      const sourceMeta = sourcePane?.meta;
+
       // Create empty panes for split (user will choose Terminal or Agent)
-      const createEmptySplitPane = () => createEmptyPane("terminal");
+      const createEmptySplitPane = () => createEmptyPane("terminal", sourceMeta);
 
       if (view === "vertical" || view === "horizontal") {
         const next = createEmptySplitPane();

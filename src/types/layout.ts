@@ -174,13 +174,14 @@ export function buildLayoutFromPanes(
  * Create an empty pane node for newly split panes.
  * Empty panes are rendered as placeholders with buttons to choose Terminal or Agent.
  */
-export function createEmptyPane(paneType: PaneType = "terminal"): PaneNode {
+export function createEmptyPane(paneType: PaneType = "terminal", meta?: PaneMeta): PaneNode {
   return {
     type: "pane",
     id: createId(),
     paneType,
     sessionId: "",
     isEmpty: true,
+    meta,
   };
 }
 
