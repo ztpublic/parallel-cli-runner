@@ -7,7 +7,7 @@
     "dev": "vite",
     "dev:browser": "TAURI_MOCK=1 vite --open",
     "frontend:build:vscode": "vite build --mode vscode",
-    "build": "tsc -p tsconfig.build.json && vite build",
+    "build": "tsc && vite build",
     "backend:build:win-x64": "cargo build --manifest-path src-tauri/Cargo.toml --release --target x86_64-pc-windows-msvc",
     "backend:build:mac-arm64": "cargo build --manifest-path src-tauri/Cargo.toml --release --target aarch64-apple-darwin",
     "backend:stage:win-x64": "node scripts/stage-backend.mjs win32-x64 x86_64-pc-windows-msvc parallel-cli-runner.exe",
