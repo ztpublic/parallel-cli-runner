@@ -40,7 +40,6 @@ export function TerminalPane({
     const cols = term.cols;
     const rows = term.rows;
     await resizeSession({ id: pane.sessionId, cols, rows });
-    term.refresh(0, Math.max(0, term.rows - 1));
   }, [pane.sessionId]);
 
   const scheduleSyncSize = useCallback(() => {
