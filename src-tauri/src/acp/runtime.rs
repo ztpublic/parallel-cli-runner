@@ -4,6 +4,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_os = "windows"))]
+use std::path::Path;
+#[cfg(not(target_os = "windows"))]
+use std::sync::OnceLock;
+
 use anyhow::{anyhow, Context, Result};
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
@@ -15,9 +20,9 @@ use uuid::Uuid;
 use agent_client_protocol::{
     Agent, CancelNotification, Client, ClientCapabilities, ClientSideConnection, ContentBlock,
     Implementation, InitializeRequest, InitializeResponse, LoadSessionRequest, LoadSessionResponse,
-    McpServer, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
+    McpServer, Meta, NewSessionRequest, NewSessionResponse, PromptRequest, PromptResponse,
     ProtocolVersion, RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-    SessionNotification,
+    SessionModelState, SessionNotification, SetSessionModelRequest, SetSessionModelResponse,
 };
 
 use super::types::{
@@ -200,6 +205,7 @@ impl AcpManager {
         let task_state = state.clone();
         let event_sink = self.event_sink.clone();
         let pending_permissions = self.pending_permissions.clone();
+        let handle_config = config.clone();
         let join = thread::spawn(move || {
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -243,6 +249,7 @@ impl AcpManager {
                 state,
                 command_tx,
                 join,
+                config: handle_config,
             },
         );
 
@@ -280,13 +287,25 @@ impl AcpManager {
         cwd: String,
         mcp_servers: Vec<McpServer>,
     ) -> Result<NewSessionResponse> {
+        let config = self.get_connection_config(connection_id)?;
         let command_tx = self.get_command_tx(connection_id)?;
-        let request = NewSessionRequest::new(cwd).mcp_servers(mcp_servers);
+        let mut request = NewSessionRequest::new(cwd).mcp_servers(mcp_servers);
+        if let Some(meta) = build_claude_code_meta(&config) {
+            request = request.meta(meta);
+        }
         let response = send_request(&command_tx, |respond_to| AcpCommand::NewSession {
             request,
             respond_to,
         })
         .await?;
+        log_session_models("new", &response.models);
+        self.apply_session_model_override(
+            &command_tx,
+            &config,
+            &response.session_id.to_string(),
+            &response.models,
+        )
+        .await;
 
         if let Ok(mut guard) = self.sessions.lock() {
             guard.insert(response.session_id.to_string(), connection_id);
@@ -302,13 +321,26 @@ impl AcpManager {
         cwd: String,
         mcp_servers: Vec<McpServer>,
     ) -> Result<LoadSessionResponse> {
+        let config = self.get_connection_config(connection_id)?;
         let command_tx = self.get_command_tx(connection_id)?;
-        let request = LoadSessionRequest::new(session_id.clone(), cwd).mcp_servers(mcp_servers);
+        let mut request =
+            LoadSessionRequest::new(session_id.clone(), cwd).mcp_servers(mcp_servers);
+        if let Some(meta) = build_claude_code_meta(&config) {
+            request = request.meta(meta);
+        }
         let response = send_request(&command_tx, |respond_to| AcpCommand::LoadSession {
             request,
             respond_to,
         })
         .await?;
+        log_session_models("load", &response.models);
+        self.apply_session_model_override(
+            &command_tx,
+            &config,
+            &session_id,
+            &response.models,
+        )
+        .await;
 
         if let Ok(mut guard) = self.sessions.lock() {
             guard.insert(session_id, connection_id);
@@ -362,6 +394,64 @@ impl AcpManager {
             .ok_or_else(|| anyhow!("acp connection {id} not found"))
     }
 
+    fn get_connection_config(&self, id: Uuid) -> Result<AcpAgentConfig> {
+        let guard = self.connections.lock().unwrap_or_else(|e| e.into_inner());
+        guard
+            .get(&id)
+            .map(|handle| handle.config.clone())
+            .ok_or_else(|| anyhow!("acp connection {id} not found"))
+    }
+
+    async fn apply_session_model_override(
+        &self,
+        command_tx: &mpsc::UnboundedSender<AcpCommand>,
+        config: &AcpAgentConfig,
+        session_id: &str,
+        models: &Option<SessionModelState>,
+    ) {
+        let Some(model_override) = resolve_model_override(config) else {
+            return;
+        };
+        let Some(models) = models else {
+            tracing::info!(
+                session_id,
+                model_override,
+                "acp model override skipped (agent did not report models)"
+            );
+            return;
+        };
+        let supports_override = models.available_models.iter().any(|model| {
+            model.model_id.to_string() == model_override
+        });
+        if !supports_override {
+            tracing::warn!(
+                session_id,
+                model_override,
+                "acp model override not available in supported models"
+            );
+            return;
+        }
+        let request = SetSessionModelRequest::new(session_id.to_string(), model_override.clone());
+        match send_request(command_tx, |respond_to| AcpCommand::SetSessionModel {
+            request,
+            respond_to,
+        })
+        .await
+        {
+            Ok(_) => tracing::info!(
+                session_id,
+                model_override,
+                "acp model override applied"
+            ),
+            Err(err) => tracing::warn!(
+                session_id,
+                model_override,
+                error = %err,
+                "acp model override failed"
+            ),
+        }
+    }
+
     fn connection_for_session(&self, session_id: &str) -> Result<Uuid> {
         let guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
         guard
@@ -391,6 +481,7 @@ struct AcpConnectionHandle {
     state: Arc<Mutex<AcpConnectionState>>,
     command_tx: mpsc::UnboundedSender<AcpCommand>,
     join: thread::JoinHandle<()>,
+    config: AcpAgentConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -456,6 +547,10 @@ enum AcpCommand {
     Prompt {
         request: PromptRequest,
         respond_to: oneshot::Sender<Result<PromptResponse>>,
+    },
+    SetSessionModel {
+        request: SetSessionModelRequest,
+        respond_to: oneshot::Sender<Result<SetSessionModelResponse>>,
     },
     Cancel {
         request: CancelNotification,
@@ -642,6 +737,10 @@ async fn run_command_loop(
                         let result = connection.prompt(request).await;
                         let _ = respond_to.send(result.map_err(|err| anyhow!("session/prompt failed: {err:?}")));
                     }
+                    Some(AcpCommand::SetSessionModel { request, respond_to }) => {
+                        let result = connection.set_session_model(request).await;
+                        let _ = respond_to.send(result.map_err(|err| anyhow!("session/set_model failed: {err:?}")));
+                    }
                     Some(AcpCommand::Cancel { request, respond_to }) => {
                         let result = connection.cancel(request).await;
                         let _ = respond_to.send(result.map_err(|err| anyhow!("session/cancel failed: {err:?}")));
@@ -714,9 +813,11 @@ async fn run_connection(
 
 fn spawn_agent(config: &AcpAgentConfig) -> Result<tokio::process::Child> {
     let mut command = Command::new(&config.command);
+    let env = build_agent_env(&config.env);
     command
         .args(&config.args)
-        .envs(&config.env)
+        .env_clear()
+        .envs(env)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -728,6 +829,114 @@ fn spawn_agent(config: &AcpAgentConfig) -> Result<tokio::process::Child> {
     command
         .spawn()
         .map_err(|err| anyhow!("failed to spawn ACP agent {}: {err}", config.command))
+}
+
+fn build_agent_env(extra_env: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    if let Some(shell_env) = load_shell_env() {
+        env.extend(shell_env);
+    }
+    for (key, value) in std::env::vars() {
+        env.insert(key, value);
+    }
+    for (key, value) in extra_env {
+        env.insert(key.clone(), value.clone());
+    }
+    env
+}
+
+fn resolve_model_override(config: &AcpAgentConfig) -> Option<String> {
+    let env = build_agent_env(&config.env);
+    env.get("CLAUDE_CODE_MODEL")
+        .or_else(|| env.get("CLAUDE_MODEL"))
+        .or_else(|| env.get("ANTHROPIC_MODEL"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn build_claude_code_meta(config: &AcpAgentConfig) -> Option<Meta> {
+    let model = resolve_model_override(config)?;
+    let mut options = serde_json::Map::new();
+    options.insert("model".to_string(), serde_json::Value::String(model));
+    let mut claude_code = serde_json::Map::new();
+    claude_code.insert("options".to_string(), serde_json::Value::Object(options));
+    let mut meta = Meta::new();
+    meta.insert("claudeCode".to_string(), serde_json::Value::Object(claude_code));
+    Some(meta)
+}
+
+fn log_session_models(context: &str, models: &Option<SessionModelState>) {
+    let Some(models) = models else {
+        return;
+    };
+    let available = models
+        .available_models
+        .iter()
+        .map(|model| format!("{} ({})", model.model_id, model.name))
+        .collect::<Vec<_>>();
+    tracing::info!(
+        context,
+        current_model = %models.current_model_id,
+        available_models = ?available,
+        "acp session models"
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+fn load_shell_env() -> Option<HashMap<String, String>> {
+    static SHELL_ENV: OnceLock<Option<HashMap<String, String>>> = OnceLock::new();
+    SHELL_ENV
+        .get_or_init(|| {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            let shell_name = Path::new(&shell)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or(&shell);
+            let mut command = std::process::Command::new(&shell);
+            if shell_name == "zsh" {
+                command.arg("-lic");
+            } else {
+                command.arg("-lc");
+            }
+            command.arg("/usr/bin/env");
+            let output = command.output().ok()?;
+            if !output.status.success() {
+                return None;
+            }
+            Some(parse_env_output(&output.stdout))
+        })
+        .clone()
+}
+
+#[cfg(target_os = "windows")]
+fn load_shell_env() -> Option<HashMap<String, String>> {
+    None
+}
+
+fn parse_env_output(output: &[u8]) -> HashMap<String, String> {
+    let mut env = HashMap::new();
+    let text = String::from_utf8_lossy(output);
+    for line in text.lines() {
+        let line = line.trim_end_matches('\r');
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if is_valid_env_key(key) {
+            env.insert(key.to_string(), value.to_string());
+        }
+    }
+    env
+}
+
+fn is_valid_env_key(key: &str) -> bool {
+    let mut chars = key.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return false;
+    }
+    chars.all(|c| c == '_' || c.is_ascii_alphanumeric())
 }
 
 async fn log_stderr(id: Uuid, stderr: tokio::process::ChildStderr) {
