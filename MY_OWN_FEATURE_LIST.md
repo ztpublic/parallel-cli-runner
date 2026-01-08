@@ -4,6 +4,7 @@
     - show conflicts between worktree and main, worktrees
 
 - tests
+  - acp protocol debug infrastructure
 
 - acp
   - acp integration test against real server
