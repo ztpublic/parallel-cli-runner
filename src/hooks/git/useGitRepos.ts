@@ -617,6 +617,20 @@ export function useGitRepos() {
         );
       }
 
+      // Check if repo-active has uncommitted changes before merging
+      const repoActiveStatus = statusByRepo[repoId];
+      const repoActiveHasUncommittedChanges =
+        repoActiveStatus?.has_staged || repoActiveStatus?.has_unstaged;
+
+      // Stash repo-active uncommitted changes before merges happen
+      if (repoActiveHasUncommittedChanges) {
+        await gitStashSave({
+          cwd: repo.root_path,
+          message: `Smart update: ${activeBranch} (repo-active)`,
+          includeUntracked: true,
+        });
+      }
+
       // First pass: merge each worktree branch INTO active branch (creating merge commits)
       // Only merge worktrees that have commits ahead of active branch
       for (const worktree of worktrees) {
@@ -635,6 +649,19 @@ export function useGitRepos() {
       for (const worktree of worktrees) {
         if (worktree.branch === activeBranch) continue;
 
+        // Check if the worktree has uncommitted changes before detaching HEAD
+        const worktreeStatus = statusByWorktreeByRepo[repoId]?.[worktree.path];
+        const hasUncommittedChanges = worktreeStatus?.has_staged || worktreeStatus?.has_unstaged;
+
+        // Stash uncommitted changes before detaching HEAD to prevent losing them
+        if (hasUncommittedChanges) {
+          await gitStashSave({
+            cwd: worktree.path,
+            message: `Smart update: ${worktree.branch}`,
+            includeUntracked: true,
+          });
+        }
+
         // Detach the worktree HEAD before rebasing
         await gitDetachWorktreeHead({ cwd: worktree.path });
 
@@ -650,11 +677,21 @@ export function useGitRepos() {
           cwd: worktree.path,
           branchName: worktree.branch,
         });
+
+        // Apply the stash back after rebase and checkout
+        if (hasUncommittedChanges) {
+          await gitApplyStash({ cwd: worktree.path, index: 0 });
+        }
+      }
+
+      // Apply the stash back to repo-active after all operations are done
+      if (repoActiveHasUncommittedChanges) {
+        await gitApplyStash({ cwd: repo.root_path, index: 0 });
       }
 
       await refreshRepos(repoId);
     },
-    [refreshRepos, resolveRepo, statusByRepo]
+    [refreshRepos, resolveRepo, statusByRepo, statusByWorktreeByRepo]
   );
 
   const createBranch = useCallback(
