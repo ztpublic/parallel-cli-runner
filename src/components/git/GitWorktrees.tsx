@@ -42,7 +42,6 @@ type GitWorktreesProps = {
   onMergeBranch?: (repoId: string, targetBranch: string, sourceBranch: string) => void;
   onRebaseBranch?: (repoId: string, targetBranch: string, ontoBranch: string) => void;
   onSmartUpdateWorktrees?: (repoId: string) => void;
-  onRefresh?: () => void;
 };
 
 export const GitWorktrees = memo(function GitWorktrees({
@@ -57,7 +56,6 @@ export const GitWorktrees = memo(function GitWorktrees({
   onMergeBranch,
   onRebaseBranch,
   onSmartUpdateWorktrees,
-  onRefresh,
 }: GitWorktreesProps) {
   const [createDialog, setCreateDialog] = useState<{
     open: boolean;
@@ -313,17 +311,6 @@ export const GitWorktrees = memo(function GitWorktrees({
 
   return (
     <div className="git-tree">
-      <div className="worktree-toolbar">
-        <button
-          type="button"
-          className="icon-button"
-          title="Refresh"
-          onClick={onRefresh}
-          disabled={!onRefresh}
-        >
-          <Icon name="refresh" size={15} />
-        </button>
-      </div>
       <TreeView
         nodes={nodes}
         toggleOnRowClick
