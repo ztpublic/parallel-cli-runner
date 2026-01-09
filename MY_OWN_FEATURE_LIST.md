@@ -7,16 +7,15 @@
   - acp protocol debug infrastructure
 
 - acp
-  - not auto scroll to end
   - permission dialog not dark
   - read file should show file name
+  - remove avatar
   - session status indicator
   - session notification
   - session important information
     - cwd
     - version
     - model
-  - close session/terminal(right click menu), go back to place holder
   - support commands
   - add some paddings
   - make UI style more similar to main app
@@ -24,14 +23,21 @@
   - only show one tool call
   - should show thinking
 
+- extension
+  - try support ctrl + w in webview to close tab
+
+- git
+  - commits
+    - see changes of a commit
 
 - ui
   - UI state persistence
+  - empty pane should have a directory input box and dropdown selection
+
 - ci
 
 - utilities
 
 - bugfix
-  - smart update should only merge needed branches
-  - smart update should keep un-committed changes
   - terminal still show
+  - smart update should stash first
