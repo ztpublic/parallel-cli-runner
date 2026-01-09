@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { TerminalPanel } from "../components/TerminalPanel";
 import { createPaneNode, createAgentPaneNode, convertEmptyPane } from "../services/sessions";
-import { collectPanes, findPane, getFirstPane, createEmptyPane, type LayoutNode, type Orientation, type PaneNode } from "../types/layout";
+import { killSession } from "../services/backend";
+import { disposeTerminal } from "../services/terminalRegistry";
+import { collectPanes, findPane, getFirstPane, createEmptyPane, countPanes, type LayoutNode, type Orientation, type PaneNode } from "../types/layout";
 
 type Tab = {
   id: string;
@@ -214,6 +216,41 @@ export function TerminalPanelContainer({
     [activeTabId, tabs, updatePaneInTab]
   );
 
+  // Handler for closing/resetting the active pane
+  const handleCloseActivePane = useCallback(async () => {
+    const tabId = activeTabId ?? tabs[0]?.id ?? null;
+    if (!tabId) return;
+
+    const tab = tabs.find((item) => item.id === tabId);
+    if (!tab || !tab.activePaneId) return;
+
+    const pane = findPane(tab.layout, tab.activePaneId);
+    if (!pane) return;
+
+    // If in split mode (multiple panes), convert to empty pane
+    if (countPanes(tab.layout) > 1) {
+      // Clean up terminal session if exists
+      if (pane.sessionId) {
+        try {
+          await killSession({ id: pane.sessionId });
+        } catch (error) {
+          console.warn("Failed to kill session", error);
+        }
+        disposeTerminal(pane.sessionId);
+      }
+
+      const emptyPane: PaneNode = {
+        ...pane,
+        isEmpty: true,
+        sessionId: "",
+      };
+      updatePaneInTab(tabId, pane.id, emptyPane);
+    } else {
+      // Single pane mode - close the tab/pane
+      closeActivePane();
+    }
+  }, [activeTabId, tabs, closeActivePane, updatePaneInTab]);
+
   const resolvedActiveTabId = activeTabId ?? tabs[0]?.id ?? null;
 
   return (
@@ -226,7 +263,7 @@ export function TerminalPanelContainer({
       onSetActiveTab={setActiveTabId}
       onSetActivePane={setActivePaneId}
       onCloseTab={(id) => closeTab(id)}
-      onCloseActivePane={closeActivePane}
+      onCloseActivePane={handleCloseActivePane}
       onNewPane={() => void handleNewPane()}
       onNewAgentTab={(agentId) => void handleNewAgentTab(agentId)}
       onChooseEmptyPane={(paneId, paneType) => void handleChooseEmptyPane(paneId, paneType)}
