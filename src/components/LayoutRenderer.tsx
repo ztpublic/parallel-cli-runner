@@ -2,14 +2,18 @@ import { LayoutNode } from "../types/layout";
 import { TerminalPane } from "./TerminalPane";
 import { AgentPane } from "./AgentPane";
 import { EmptyPane } from "./EmptyPane";
+import type { RepoInfoDto } from "../types/git";
+import type { WorktreeItem } from "../types/git-ui";
 
 type LayoutRendererProps = {
   node: LayoutNode;
   activePaneId: string | null;
   onFocus: (id: string) => void;
-  onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent") => void;
+  onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent", cwd?: string) => void;
   layoutTick?: number;
   onClose?: () => void;
+  repos?: RepoInfoDto[];
+  worktreesByRepo?: Record<string, WorktreeItem[]>;
 };
 
 export function LayoutRenderer({
@@ -19,6 +23,8 @@ export function LayoutRenderer({
   onChooseEmptyPane,
   layoutTick,
   onClose,
+  repos = [],
+  worktreesByRepo = {},
 }: LayoutRendererProps) {
   if (node.type === "pane") {
     const isActive = node.id === activePaneId;
@@ -29,6 +35,8 @@ export function LayoutRenderer({
         <EmptyPane
           pane={node}
           onChoose={onChooseEmptyPane}
+          repos={repos}
+          worktreesByRepo={worktreesByRepo}
         />
       );
     }
@@ -69,6 +77,8 @@ export function LayoutRenderer({
         onChooseEmptyPane={onChooseEmptyPane}
         layoutTick={layoutTick}
         onClose={onClose}
+        repos={repos}
+        worktreesByRepo={worktreesByRepo}
       />
       <LayoutRenderer
         node={node.children[1]}
@@ -77,6 +87,8 @@ export function LayoutRenderer({
         onChooseEmptyPane={onChooseEmptyPane}
         layoutTick={layoutTick}
         onClose={onClose}
+        repos={repos}
+        worktreesByRepo={worktreesByRepo}
       />
     </div>
   );

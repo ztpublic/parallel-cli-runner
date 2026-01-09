@@ -5,6 +5,8 @@ import { ContextMenu } from "./ContextMenu";
 import { Icon } from "./Icons";
 import { LayoutRenderer } from "./LayoutRenderer";
 import { DEFAULT_AGENT } from "~/constants/agents";
+import type { RepoInfoDto } from "../types/git";
+import type { WorktreeItem } from "../types/git-ui";
 
 type TerminalTab = {
   id: string;
@@ -25,11 +27,13 @@ type TerminalPanelProps = {
   onCloseActivePane?: () => void;
   onNewPane: () => void;
   onNewAgentTab?: (agentId: string) => void;
-  onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent") => void;
+  onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent", cwd?: string) => void;
   onSetTerminalView: (
     tabId: string,
     view: "single" | "vertical" | "horizontal" | "quad"
   ) => void;
+  repos?: RepoInfoDto[];
+  worktreesByRepo?: Record<string, WorktreeItem[]>;
 };
 
 type TerminalView = "terminals" | "acp";
@@ -70,6 +74,8 @@ export function TerminalPanel({
   onNewAgentTab,
   onChooseEmptyPane,
   onSetTerminalView,
+  repos = [],
+  worktreesByRepo = {},
 }: TerminalPanelProps) {
   const activeView: TerminalView = "terminals";
   const [menuState, setMenuState] = useState<{
@@ -209,6 +215,8 @@ export function TerminalPanel({
                   onChooseEmptyPane={onChooseEmptyPane}
                   layoutTick={layoutTick}
                   onClose={isActiveTab ? onCloseActivePane : undefined}
+                  repos={repos}
+                  worktreesByRepo={worktreesByRepo}
                 />
               </div>
             );

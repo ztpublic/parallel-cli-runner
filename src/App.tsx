@@ -146,6 +146,7 @@ function App() {
           onSwitchBranchWithCheck={handleSwitchBranchWithCheck}
           onSquashCommitsWithCheck={handleSquashCommitsWithCheck}
           gitRefreshRequest={gitRefreshRequest}
+          worktreesByRepo={worktreesByRepo}
         >
           {/* Dialogs */}
           <GitErrorDialog

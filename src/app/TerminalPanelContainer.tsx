@@ -4,6 +4,8 @@ import { createPaneNode, createAgentPaneNode, convertEmptyPane } from "../servic
 import { killSession } from "../services/backend";
 import { disposeTerminal } from "../services/terminalRegistry";
 import { collectPanes, findPane, getFirstPane, createEmptyPane, countPanes, type LayoutNode, type Orientation, type PaneNode } from "../types/layout";
+import type { RepoInfoDto } from "../types/git";
+import type { WorktreeItem } from "../types/git-ui";
 
 type Tab = {
   id: string;
@@ -28,6 +30,8 @@ interface TerminalPanelContainerProps {
   updatePaneInTab: (tabId: string, paneId: string, updatedPane: PaneNode) => void;
   setActiveTabId: (tabId: string) => void;
   setActivePaneId: (paneId: string) => void;
+  repos?: RepoInfoDto[];
+  worktreesByRepo?: Record<string, WorktreeItem[]>;
 }
 
 export function TerminalPanelContainer({
@@ -41,6 +45,8 @@ export function TerminalPanelContainer({
   updatePaneInTab,
   setActiveTabId,
   setActivePaneId,
+  repos = [],
+  worktreesByRepo = {},
 }: TerminalPanelContainerProps) {
   const [terminalSplitPaneIds, setTerminalSplitPaneIds] = useState<
     Record<string, string[]>
@@ -193,7 +199,7 @@ export function TerminalPanelContainer({
 
   // Handler for converting an empty pane to a terminal or agent pane
   const handleChooseEmptyPane = useCallback(
-    async (paneId: string, paneType: "terminal" | "agent") => {
+    async (paneId: string, paneType: "terminal" | "agent", cwd?: string) => {
       const tabId = activeTabId ?? tabs[0]?.id ?? null;
       if (!tabId) return;
 
@@ -203,12 +209,13 @@ export function TerminalPanelContainer({
       const existingPane = findPane(tab.layout, paneId);
       if (!existingPane) return;
 
-      const cwd = existingPane.meta?.cwd ?? existingPane.meta?.subtitle;
+      // Use the cwd from the callback parameter, or fall back to the existing pane's cwd
+      const resolvedCwd = cwd ?? existingPane.meta?.cwd ?? existingPane.meta?.subtitle;
 
       // Convert the empty pane to the requested type
       const updatedPane = await convertEmptyPane(paneId, paneType, {
         agentId: paneType === "agent" ? "Claude Code" : undefined,
-        cwd,
+        cwd: resolvedCwd,
       });
 
       updatePaneInTab(tabId, paneId, updatedPane);
@@ -266,8 +273,10 @@ export function TerminalPanelContainer({
       onCloseActivePane={handleCloseActivePane}
       onNewPane={() => void handleNewPane()}
       onNewAgentTab={(agentId) => void handleNewAgentTab(agentId)}
-      onChooseEmptyPane={(paneId, paneType) => void handleChooseEmptyPane(paneId, paneType)}
+      onChooseEmptyPane={(paneId, paneType, cwd) => void handleChooseEmptyPane(paneId, paneType, cwd)}
       onSetTerminalView={(tabId, view) => void handleSetTerminalView(tabId, view)}
+      repos={repos}
+      worktreesByRepo={worktreesByRepo}
     />
   );
 }
