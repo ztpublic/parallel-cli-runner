@@ -254,6 +254,31 @@ export const LongConversation: Story = {
 };
 
 // ============================================================================
+// Scroll Button Stories
+// ============================================================================
+
+/**
+ * This story demonstrates the scroll-to-end button feature.
+ * The button appears in the right bottom corner when the conversation
+ * is not scrolled to the end, and disappears when scrolled to the end.
+ *
+ * To test:
+ * 1. Scroll up manually to see the scroll button appear in the right bottom corner
+ * 2. Click the button to scroll back to the end
+ * 3. Scroll to the end to see the button disappear
+ */
+export const ScrollButton: Story = {
+  args: {
+    messages: sampleConversations.plannedWorkflow,
+    currentAgent: demoAgent,
+    agents: AVAILABLE_AGENTS,
+    status: "ready",
+  },
+  tags: ["scroll-button"],
+  description: "Tests the scroll-to-end button visibility and click behavior",
+};
+
+// ============================================================================
 // Comprehensive Example
 // ============================================================================
 

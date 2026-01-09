@@ -67,7 +67,7 @@ export const AcpMessagePanel = ({
       {/* Messages area - takes all available space */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <Conversation className="h-full">
-          <ConversationContent className="h-full overflow-y-auto p-4 space-y-4">
+          <ConversationContent className="p-4 space-y-4">
             {messages.map((message: UIMessage) => (
               <Message
                 className="items-start"

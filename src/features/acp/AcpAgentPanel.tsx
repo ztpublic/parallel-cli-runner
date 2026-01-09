@@ -173,7 +173,7 @@ const AcpAgentPanel = ({ agentId, cwd }: AcpAgentPanelProps) => {
     <div className="flex flex-col w-full h-full min-h-0 bg-background text-foreground">
       <div className="flex-1 min-h-0 overflow-hidden">
         <Conversation className="h-full">
-          <ConversationContent className="h-full overflow-y-auto p-4 space-y-4">
+          <ConversationContent className="p-4 space-y-4">
           {messages.map((message: UIMessage) => (
               <Message
                 className="items-start"
