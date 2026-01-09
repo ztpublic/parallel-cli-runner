@@ -9,6 +9,7 @@ type LayoutRendererProps = {
   onFocus: (id: string) => void;
   onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent") => void;
   layoutTick?: number;
+  onClose?: () => void;
 };
 
 export function LayoutRenderer({
@@ -17,6 +18,7 @@ export function LayoutRenderer({
   onFocus,
   onChooseEmptyPane,
   layoutTick,
+  onClose,
 }: LayoutRendererProps) {
   if (node.type === "pane") {
     const isActive = node.id === activePaneId;
@@ -38,6 +40,7 @@ export function LayoutRenderer({
           pane={node}
           isActive={isActive}
           onFocused={onFocus}
+          onClose={onClose}
         />
       );
     }
@@ -65,6 +68,7 @@ export function LayoutRenderer({
         onFocus={onFocus}
         onChooseEmptyPane={onChooseEmptyPane}
         layoutTick={layoutTick}
+        onClose={onClose}
       />
       <LayoutRenderer
         node={node.children[1]}
@@ -72,6 +76,7 @@ export function LayoutRenderer({
         onFocus={onFocus}
         onChooseEmptyPane={onChooseEmptyPane}
         layoutTick={layoutTick}
+        onClose={onClose}
       />
     </div>
   );
