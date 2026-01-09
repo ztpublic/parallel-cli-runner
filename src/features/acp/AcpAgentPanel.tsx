@@ -33,6 +33,7 @@ import {
   type AcpPermissionRequestEvent,
 } from "~/platform/acp-transport";
 import { PermissionDialog } from "~/components/PermissionDialog";
+import { Icon } from "~/components/Icons";
 
 /**
  * AcpAgentPanel - Main chat interface for ACP (Agent Client Protocol) agents
@@ -47,9 +48,10 @@ import { PermissionDialog } from "~/components/PermissionDialog";
 interface AcpAgentPanelProps {
   agentId?: string;
   cwd?: string;
+  onClose?: () => void;
 }
 
-const AcpAgentPanel = ({ agentId, cwd }: AcpAgentPanelProps) => {
+const AcpAgentPanel = ({ agentId, cwd, onClose }: AcpAgentPanelProps) => {
   const [input, setInput] = useState("");
   const [selectedAgent, setSelectedAgent] = useState(
     agentId ?? DEFAULT_AGENT
@@ -171,6 +173,18 @@ const AcpAgentPanel = ({ agentId, cwd }: AcpAgentPanelProps) => {
 
   return (
     <div className="flex flex-col w-full h-full min-h-0 bg-background text-foreground p-[5px]">
+      {onClose && (
+        <div className="flex items-center justify-end h-8 px-2 shrink-0">
+          <button
+            type="button"
+            className="p-1 hover:bg-muted rounded transition-colors"
+            onClick={onClose}
+            title="Close"
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-hidden">
         <Conversation className="h-full">
           <ConversationContent className="p-4 space-y-4">

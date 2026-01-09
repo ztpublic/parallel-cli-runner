@@ -15,6 +15,7 @@ interface TerminalPanelContainerProps {
   activeTabId: string | null | undefined;
   closeTab: (tabId: string) => void;
   closePanesInTab: (tabId: string, paneIds: string[]) => Promise<void>;
+  closeActivePane: () => void;
   splitPaneInTab: (
     tabId: string,
     pane: PaneNode,
@@ -32,6 +33,7 @@ export function TerminalPanelContainer({
   activeTabId,
   closeTab,
   closePanesInTab,
+  closeActivePane,
   splitPaneInTab,
   appendPane,
   updatePaneInTab,
@@ -224,6 +226,7 @@ export function TerminalPanelContainer({
       onSetActiveTab={setActiveTabId}
       onSetActivePane={setActivePaneId}
       onCloseTab={(id) => closeTab(id)}
+      onCloseActivePane={closeActivePane}
       onNewPane={() => void handleNewPane()}
       onNewAgentTab={(agentId) => void handleNewAgentTab(agentId)}
       onChooseEmptyPane={(paneId, paneType) => void handleChooseEmptyPane(paneId, paneType)}

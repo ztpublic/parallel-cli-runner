@@ -126,6 +126,7 @@ export function AppLayout({
           activeTabId={activeTabId}
           closeTab={closeTab}
           closePanesInTab={closePanesInTab}
+          closeActivePane={closeActivePane}
           splitPaneInTab={splitPaneInTab}
           appendPane={appendPane}
           updatePaneInTab={updatePaneInTab}

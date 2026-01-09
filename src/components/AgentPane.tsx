@@ -6,12 +6,13 @@ interface AgentPaneProps {
   pane: PaneNode;
   isActive: boolean;
   onFocused: (paneId: string) => void;
+  onClose?: () => void;
 }
 
 /**
  * AgentPane - ACP agent chat wrapped in the tab/pane layout.
  */
-export function AgentPane({ pane, isActive, onFocused }: AgentPaneProps) {
+export function AgentPane({ pane, isActive, onFocused, onClose }: AgentPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   // Handle focus when pane becomes active
@@ -29,7 +30,7 @@ export function AgentPane({ pane, isActive, onFocused }: AgentPaneProps) {
       onClick={() => onFocused(pane.id)}
     >
       <div className="pane-agent-content h-full">
-        <AcpAgentPanel agentId={pane.agentId} cwd={pane.meta?.cwd} />
+        <AcpAgentPanel agentId={pane.agentId} cwd={pane.meta?.cwd} onClose={onClose} />
       </div>
     </div>
   );

@@ -22,6 +22,7 @@ type TerminalPanelProps = {
   onSetActiveTab: (id: string) => void;
   onSetActivePane: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onCloseActivePane?: () => void;
   onNewPane: () => void;
   onNewAgentTab?: (agentId: string) => void;
   onChooseEmptyPane?: (paneId: string, paneType: "terminal" | "agent") => void;
@@ -64,6 +65,7 @@ export function TerminalPanel({
   onSetActiveTab,
   onSetActivePane,
   onCloseTab,
+  onCloseActivePane,
   onNewPane,
   onNewAgentTab,
   onChooseEmptyPane,
@@ -206,6 +208,7 @@ export function TerminalPanel({
                   onFocus={onSetActivePane}
                   onChooseEmptyPane={onChooseEmptyPane}
                   layoutTick={layoutTick}
+                  onClose={isActiveTab ? onCloseActivePane : undefined}
                 />
               </div>
             );
