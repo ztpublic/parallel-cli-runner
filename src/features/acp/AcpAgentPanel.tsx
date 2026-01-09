@@ -8,7 +8,6 @@ import {
 } from "~/components/ai-elements/conversation";
 import {
   Message,
-  MessageAvatar,
   MessageContent,
 } from "~/components/ai-elements/message";
 import {
@@ -205,12 +204,6 @@ const AcpAgentPanel = ({ agentId, cwd, onClose }: AcpAgentPanelProps) => {
                     )
                   )}
                 </MessageContent>
-                {message.role === "assistant" && (
-                  <MessageAvatar
-                    name={currentAgent.command}
-                    src={currentAgent.meta?.icon ?? ""}
-                  />
-                )}
               </Message>
             ))}
             {status === "submitted" && <Loader />}
