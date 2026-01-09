@@ -7,6 +7,7 @@ import { useVscodeFocusTracking } from "../hooks/useVscodeFocusTracking";
 import { getVscodeBridge } from "../platform/vscode";
 import { killLayoutSessions } from "../services/sessions";
 import type { RepoInfoDto } from "../types/git";
+import type { WorktreeItem } from "../types/git-ui";
 
 interface AppLayoutProps {
   repos: RepoInfoDto[];
@@ -30,6 +31,7 @@ interface AppLayoutProps {
     worktreePath: string,
     commitIds: string[]
   ) => void;
+  worktreesByRepo?: Record<string, WorktreeItem[]>;
   children?: ReactNode;
 }
 
@@ -43,6 +45,7 @@ export function AppLayout({
   onRebaseBranch,
   onSwitchBranchWithCheck,
   onSquashCommitsWithCheck,
+  worktreesByRepo = {},
   children,
 }: AppLayoutProps) {
   const {
@@ -147,6 +150,8 @@ export function AppLayout({
           updatePaneInTab={updatePaneInTab}
           setActiveTabId={setActiveTabId}
           setActivePaneId={setActivePaneId}
+          repos={repos}
+          worktreesByRepo={worktreesByRepo}
         />
         {children}
       </div>
