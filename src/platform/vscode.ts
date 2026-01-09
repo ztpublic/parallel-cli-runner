@@ -23,7 +23,11 @@ type VscodeEvent = {
   payload: unknown;
 };
 
-type VscodeMessage = VscodeRequest | VscodeResponse | VscodeEvent;
+type ExtensionCommand = {
+  type: "closePane";
+};
+
+type VscodeMessage = VscodeRequest | VscodeResponse | VscodeEvent | ExtensionCommand;
 
 type PendingRequest = {
   resolve: (value: unknown) => void;
@@ -89,6 +93,14 @@ class VscodeBridge {
     };
   }
 
+  sendFocusChange(focused: boolean): void {
+    try {
+      this.api.postMessage({ type: "webviewFocusChange", focused });
+    } catch (error) {
+      console.error("Failed to send focus change:", error);
+    }
+  }
+
   private handleMessage = (event: MessageEvent): void => {
     const message = event.data as VscodeMessage | undefined;
     if (!message || typeof message !== "object") {
@@ -115,6 +127,14 @@ class VscodeBridge {
       const handlers = this.handlers.get(message.event);
       if (!handlers) return;
       handlers.forEach((handler) => handler(message.payload));
+      return;
+    }
+
+    // Handle extension commands
+    if (message.type === "closePane") {
+      const handlers = this.handlers.get("closePane");
+      if (!handlers) return;
+      handlers.forEach((handler) => handler(undefined));
     }
   };
 }

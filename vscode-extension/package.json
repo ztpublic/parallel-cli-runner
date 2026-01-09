@@ -24,6 +24,18 @@
       {
         "command": "parallelCliRunner.open",
         "title": "Parallel CLI Runner: Open"
+      },
+      {
+        "command": "parallelCliRunner.closePane",
+        "title": "Parallel CLI Runner: Close Pane"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "parallelCliRunner.closePane",
+        "key": "ctrl+w",
+        "mac": "cmd+w",
+        "when": "activeWebviewPanelId == 'parallelCliRunner' && parallelCliRunner.webviewFocused"
       }
     ],
     "configuration": {

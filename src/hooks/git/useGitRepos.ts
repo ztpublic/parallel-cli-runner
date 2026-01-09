@@ -618,8 +618,10 @@ export function useGitRepos() {
       }
 
       // First pass: merge each worktree branch INTO active branch (creating merge commits)
+      // Only merge worktrees that have commits ahead of active branch
       for (const worktree of worktrees) {
         if (worktree.branch === activeBranch) continue;
+        if ((worktree.ahead ?? 0) === 0) continue;
 
         // Merge worktree branch into active branch
         await gitMergeIntoBranch({
