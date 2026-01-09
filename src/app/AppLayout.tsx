@@ -3,6 +3,8 @@ import { GitPanelContainer } from "./GitPanelContainer";
 import { TerminalPanelContainer } from "./TerminalPanelContainer";
 import { useLayoutState } from "../hooks/useLayoutState";
 import { useClosePaneHotkey } from "../hooks/useHotkeys";
+import { useVscodeFocusTracking } from "../hooks/useVscodeFocusTracking";
+import { getVscodeBridge } from "../platform/vscode";
 import { killLayoutSessions } from "../services/sessions";
 import type { RepoInfoDto } from "../types/git";
 
@@ -58,6 +60,7 @@ export function AppLayout({
   } = useLayoutState();
 
   useClosePaneHotkey(closeActivePane);
+  useVscodeFocusTracking();
 
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
@@ -99,6 +102,18 @@ export function AppLayout({
       });
     };
   }, [getTabsSnapshot]);
+
+  // Subscribe to VSCode extension closePane command
+  useEffect(() => {
+    const bridge = getVscodeBridge();
+    if (!bridge) return;
+
+    const unsubscribe = bridge.subscribe("closePane", () => {
+      void closeActivePane();
+    });
+
+    return unsubscribe;
+  }, [closeActivePane]);
 
   return (
     <main className="app-shell">

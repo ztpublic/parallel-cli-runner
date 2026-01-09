@@ -57,7 +57,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
     panel.webview.html = buildWebviewHtml(panel.webview, context.extensionUri, backend);
 
+    // Track webview focus state for keybinding override
+    vscode.commands.executeCommand('setContext', 'parallelCliRunner.webviewFocused', false);
+
     const messageDisposable = panel.webview.onDidReceiveMessage(async (message) => {
+      // Handle focus state messages from webview
+      if (message && typeof message === 'object' && 'type' in message) {
+        if (message.type === 'webviewFocusChange') {
+          vscode.commands.executeCommand('setContext', 'parallelCliRunner.webviewFocused', message.focused);
+          return;
+        }
+      }
+
       const request = message as WebviewRequest | undefined;
       if (!request || request.type !== "vscode-request" || !request.id) {
         return;
@@ -85,8 +96,15 @@ export function activate(context: vscode.ExtensionContext): void {
 
     panel.onDidDispose(() => {
       messageDisposable.dispose();
+      vscode.commands.executeCommand('setContext', 'parallelCliRunner.webviewFocused', false);
       panel = null;
     });
+
+    // Register close pane command that sends message to webview
+    const closePaneCommand = vscode.commands.registerCommand("parallelCliRunner.closePane", () => {
+      void panel?.webview.postMessage({ type: "closePane" });
+    });
+    context.subscriptions.push(closePaneCommand);
   });
 
   context.subscriptions.push(openCommand);
