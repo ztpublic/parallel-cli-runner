@@ -4,10 +4,8 @@
     - show conflicts between worktree and main, worktrees
 
 - tests
-  - acp protocol debug infrastructure
 
 - acp
-  - permission dialog not dark
   - read file should show file name
   - remove avatar
   - session status indicator
@@ -22,9 +20,9 @@
   - how to clear???
   - only show one tool call
   - should show thinking
+  - acp protocol debug infrastructure
 
 - extension
-  - try support ctrl + w in webview to close tab
 
 - git
   - commits
@@ -39,5 +37,3 @@
 - utilities
 
 - bugfix
-  - terminal still show
-  - smart update should stash first
