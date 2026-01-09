@@ -49,7 +49,7 @@ export const PermissionDialog: React.FC<PermissionDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => (!nextOpen ? onCancel() : undefined)}>
-      <DialogContent className="sm:max-w-[520px]">
+      <DialogContent className="dark-theme sm:max-w-[520px]">
         <DialogHeader className="space-y-2">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
